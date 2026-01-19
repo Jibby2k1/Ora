@@ -6,7 +6,7 @@ class CommandDispatcher {
 
   final CommandReducer _reducer;
 
-  CommandResult dispatch(Command command) {
+  Future<CommandResult> dispatch(Command command) {
     return _reducer(command);
   }
 }

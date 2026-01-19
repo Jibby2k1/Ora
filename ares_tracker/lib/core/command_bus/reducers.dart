@@ -1,3 +1,3 @@
 import 'command.dart';
 
-typedef CommandReducer = CommandResult Function(Command command);
+typedef CommandReducer = Future<CommandResult> Function(Command command);

@@ -46,6 +46,14 @@ class ExerciseRepo {
     }).toList();
   }
 
+  Future<List<Map<String, Object?>>> search(String query, {int limit = 50}) async {
+    final db = await _db.database;
+    final normalized = query.toLowerCase().trim();
+    if (normalized.isEmpty) return [];
+    final like = '%$normalized%';
+    return db.rawQuery('''\nSELECT DISTINCT e.*\nFROM exercise e\nLEFT JOIN exercise_alias a ON a.exercise_id = e.id\nWHERE lower(e.canonical_name) LIKE ? OR a.alias_normalized LIKE ?\nORDER BY e.canonical_name ASC\nLIMIT ?\n''', [like, like, limit]);
+  }
+
   List<String> decodeSecondaryMuscles(String? json) {
     if (json == null || json.isEmpty) return [];
     try {

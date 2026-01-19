@@ -84,6 +84,38 @@ class WorkoutRepo {
     );
   }
 
+  Future<void> updateSetEntry({required int id, double? weightValue, int? reps, int? partialReps, double? rpe, double? rir}) async {
+    final db = await _db.database;
+    await db.update(
+      'set_entry',
+      {
+        'weight_value': weightValue,
+        'reps': reps,
+        'partial_reps': partialReps ?? 0,
+        'rpe': rpe,
+        'rir': rir,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<Map<String, Object?>?> getSetEntryById(int id) async {
+    final db = await _db.database;
+    final rows = await db.query('set_entry', where: 'id = ?', whereArgs: [id], limit: 1);
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<void> deleteSetEntry(int id) async {
+    final db = await _db.database;
+    await db.delete('set_entry', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> insertSetEntryWithId(Map<String, Object?> row) async {
+    final db = await _db.database;
+    await db.insert('set_entry', row, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   Future<Map<String, Object?>?> getLatestSetForSessionExercise(int sessionExerciseId) async {
     final db = await _db.database;
     final rows = await db.query(
@@ -94,5 +126,31 @@ class WorkoutRepo {
       limit: 1,
     );
     return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<double?> getLatestWeightForSessionExercise(int sessionExerciseId) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'set_entry',
+      columns: ['weight_value'],
+      where: 'session_exercise_id = ? AND weight_value IS NOT NULL',
+      whereArgs: [sessionExerciseId],
+      orderBy: 'created_at DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['weight_value'] as double?;
+  }
+
+  Future<List<Map<String, Object?>>> getSessionExercises(int sessionId) async {
+    final db = await _db.database;
+    return db.rawQuery('''\nSELECT sx.id as session_exercise_id,\n       sx.exercise_id,\n       sx.order_index,\n       e.canonical_name,\n       e.weight_mode_default\nFROM session_exercise sx\nJOIN exercise e ON e.id = sx.exercise_id\nWHERE sx.workout_session_id = ?\nORDER BY sx.order_index ASC\n''', [sessionId]);
+  }
+
+  Future<int?> getLastCompletedDayIndex(int programId) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery('''\nSELECT pd.day_index\nFROM workout_session ws\nJOIN program_day pd ON pd.id = ws.program_day_id\nWHERE ws.program_id = ? AND ws.ended_at IS NOT NULL\nORDER BY ws.started_at DESC\nLIMIT 1\n''', [programId]);
+    if (rows.isEmpty) return null;
+    return rows.first['day_index'] as int?;
   }
 }

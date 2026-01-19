@@ -5,6 +5,10 @@ class SetPlanBlock {
     required this.role,
     required this.setCount,
     required this.amrapLastSet,
+    this.repsMin,
+    this.repsMax,
+    this.restSecMin,
+    this.restSecMax,
   });
 
   final int id;
@@ -12,6 +16,10 @@ class SetPlanBlock {
   final String role;
   final int setCount;
   final bool amrapLastSet;
+  final int? repsMin;
+  final int? repsMax;
+  final int? restSecMin;
+  final int? restSecMax;
 
   factory SetPlanBlock.fromRow(Map<String, Object?> row) {
     return SetPlanBlock(
@@ -20,6 +28,10 @@ class SetPlanBlock {
       role: row['role'] as String,
       setCount: row['set_count'] as int,
       amrapLastSet: (row['amrap_last_set'] as int? ?? 0) == 1,
+      repsMin: row['reps_min'] as int?,
+      repsMax: row['reps_max'] as int?,
+      restSecMin: row['rest_sec_min'] as int?,
+      restSecMax: row['rest_sec_max'] as int?,
     );
   }
 }

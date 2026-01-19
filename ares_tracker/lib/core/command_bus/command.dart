@@ -74,3 +74,99 @@ class CommandResult {
   final List<String> uiEvents;
   final Command? inverse;
 }
+
+class LogSetEntry extends Command {
+  const LogSetEntry({
+    required this.sessionExerciseId,
+    required this.weightUnit,
+    required this.weightMode,
+    this.weight,
+    this.reps,
+    this.partials,
+    this.rpe,
+    this.rir,
+  });
+
+  final int sessionExerciseId;
+  final String weightUnit;
+  final String weightMode;
+  final double? weight;
+  final int? reps;
+  final int? partials;
+  final double? rpe;
+  final double? rir;
+
+  @override
+  String get type => 'LogSetEntry';
+}
+
+class UpdateSetEntry extends Command {
+  const UpdateSetEntry({
+    required this.id,
+    this.weight,
+    this.reps,
+    this.partials,
+    this.rpe,
+    this.rir,
+  });
+
+  final int id;
+  final double? weight;
+  final int? reps;
+  final int? partials;
+  final double? rpe;
+  final double? rir;
+
+  @override
+  String get type => 'UpdateSetEntry';
+}
+
+class DeleteSetEntry extends Command {
+  const DeleteSetEntry(this.id);
+
+  final int id;
+
+  @override
+  String get type => 'DeleteSetEntry';
+}
+
+class InsertSetEntry extends Command {
+  const InsertSetEntry({
+    required this.id,
+    required this.sessionExerciseId,
+    required this.setIndex,
+    required this.setRole,
+    required this.weightUnit,
+    required this.weightMode,
+    required this.createdAt,
+    this.weight,
+    this.reps,
+    this.partials,
+    this.rpe,
+    this.rir,
+    this.flagWarmup = false,
+    this.flagPartials = false,
+    this.isAmrap = false,
+    this.restSecActual,
+  });
+
+  final int id;
+  final int sessionExerciseId;
+  final int setIndex;
+  final String setRole;
+  final String weightUnit;
+  final String weightMode;
+  final String createdAt;
+  final double? weight;
+  final int? reps;
+  final int? partials;
+  final double? rpe;
+  final double? rir;
+  final bool flagWarmup;
+  final bool flagPartials;
+  final bool isAmrap;
+  final int? restSecActual;
+
+  @override
+  String get type => 'InsertSetEntry';
+}

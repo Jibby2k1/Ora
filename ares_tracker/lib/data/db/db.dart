@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -23,6 +25,9 @@ class AppDatabase {
   }
 
   Future<Database> _open() async {
+    if (kIsWeb) {
+      throw Exception('Web is not supported for local SQLite in this demo. Use desktop or mobile.');
+    }
     final Directory dir = await getApplicationDocumentsDirectory();
     final String path = p.join(dir.path, dbName);
 
@@ -56,12 +61,12 @@ class AppDatabase {
     }
   }
 
-  Future<void> seedExercisesIfNeeded(String jsonAssetOrPath) async {
+  Future<void> seedExercisesIfNeeded(String jsonAssetOrPath, {bool fromAsset = true}) async {
     final db = await database;
     final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM exercise;')) ?? 0;
     if (count > 0) return;
 
-    final source = await _loadSeed(jsonAssetOrPath);
+    final source = await _loadSeed(jsonAssetOrPath, fromAsset: fromAsset);
     final List<dynamic> data = jsonDecode(source) as List<dynamic>;
     final batch = db.batch();
     for (final item in data) {
@@ -103,7 +108,10 @@ class AppDatabase {
     }
   }
 
-  Future<String> _loadSeed(String jsonAssetOrPath) async {
+  Future<String> _loadSeed(String jsonAssetOrPath, {required bool fromAsset}) async {
+    if (fromAsset) {
+      return rootBundle.loadString(jsonAssetOrPath);
+    }
     final file = File(jsonAssetOrPath);
     return file.readAsString();
   }
