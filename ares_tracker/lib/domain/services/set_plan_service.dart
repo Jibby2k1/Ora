@@ -9,6 +9,12 @@ class SetPlanBlock {
     this.repsMax,
     this.restSecMin,
     this.restSecMax,
+    this.targetRpeMin,
+    this.targetRpeMax,
+    this.targetRirMin,
+    this.targetRirMax,
+    this.partialsTargetMin,
+    this.partialsTargetMax,
   });
 
   final int id;
@@ -20,6 +26,12 @@ class SetPlanBlock {
   final int? repsMax;
   final int? restSecMin;
   final int? restSecMax;
+  final double? targetRpeMin;
+  final double? targetRpeMax;
+  final double? targetRirMin;
+  final double? targetRirMax;
+  final int? partialsTargetMin;
+  final int? partialsTargetMax;
 
   factory SetPlanBlock.fromRow(Map<String, Object?> row) {
     return SetPlanBlock(
@@ -32,6 +44,12 @@ class SetPlanBlock {
       repsMax: row['reps_max'] as int?,
       restSecMin: row['rest_sec_min'] as int?,
       restSecMax: row['rest_sec_max'] as int?,
+      targetRpeMin: row['target_rpe_min'] as double?,
+      targetRpeMax: row['target_rpe_max'] as double?,
+      targetRirMin: row['target_rir_min'] as double?,
+      targetRirMax: row['target_rir_max'] as double?,
+      partialsTargetMin: row['partials_target_min'] as int?,
+      partialsTargetMax: row['partials_target_max'] as int?,
     );
   }
 }

@@ -153,4 +153,9 @@ class WorkoutRepo {
     if (rows.isEmpty) return null;
     return rows.first['day_index'] as int?;
   }
+
+  Future<List<Map<String, Object?>>> getExerciseSetsSince(int exerciseId, DateTime since) async {
+    final db = await _db.database;
+    return db.rawQuery('''\nSELECT se.*\nFROM set_entry se\nJOIN session_exercise sx ON sx.id = se.session_exercise_id\nWHERE sx.exercise_id = ? AND se.created_at >= ?\nORDER BY se.created_at ASC\n''', [exerciseId, since.toIso8601String()]);
+  }
 }

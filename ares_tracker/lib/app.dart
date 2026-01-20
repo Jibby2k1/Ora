@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'data/db/db.dart';
+import 'data/seed/demo_history_seed.dart';
 import 'ui/screens/programs/programs_screen.dart';
 
 class AresApp extends StatelessWidget {
@@ -12,6 +13,7 @@ class AresApp extends StatelessWidget {
     final db = AppDatabase.instance;
     await db.database;
     await db.seedExercisesIfNeeded('lib/data/seed/exercise_catalog_seed.json', fromAsset: true);
+    await DemoHistorySeed(db).ensureHistorySeed();
   }
 
   @override
@@ -23,6 +25,7 @@ class AresApp extends StatelessWidget {
 
     return MaterialApp(
       title: 'Ares Tracker',
+      debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
       darkTheme: ThemeData(
         useMaterial3: true,

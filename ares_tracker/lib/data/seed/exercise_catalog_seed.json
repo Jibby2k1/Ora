@@ -1,18 +1,5 @@
 [
   {
-    "canonical_name": "Assisted Pullup Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "assisted pullup machine",
-      "assisted pullup"
-    ]
-  },
-  {
     "canonical_name": "Barbell Bench Press",
     "equipment_type": "BARBELL",
     "primary_muscle": "Chest",
@@ -22,8 +9,129 @@
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "bench press",
-      "barbell bench press"
+      "barbell bench press",
+      "bench press"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Incline Bench Press",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell incline bench press",
+      "incline bench press"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Decline Bench Press",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell decline bench press",
+      "decline bench press"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Close-Grip Bench Press",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell close-grip bench press",
+      "close-grip bench press"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Floor Press",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell floor press",
+      "floor press"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Pause Bench Press",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell pause bench press",
+      "pause bench press"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Overhead Press",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell overhead press",
+      "overhead press"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Push Press",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell push press",
+      "push press"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Row",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell row",
+      "row"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Pendlay Row",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell pendlay row",
+      "pendlay row"
     ]
   },
   {
@@ -36,26 +144,68 @@
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "deadlift",
-      "barbell deadlift"
+      "barbell deadlift",
+      "deadlift"
     ]
   },
   {
-    "canonical_name": "Barbell Incline Press",
+    "canonical_name": "Barbell Romanian Deadlift",
     "equipment_type": "BARBELL",
-    "primary_muscle": "Chest",
+    "primary_muscle": "Hamstrings",
     "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
+      "Glutes",
+      "Back"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "incline press",
-      "barbell incline press"
+      "barbell romanian deadlift",
+      "romanian deadlift"
     ]
   },
   {
-    "canonical_name": "Barbell Lunge",
+    "canonical_name": "Barbell Sumo Deadlift",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Hamstrings",
+      "Glutes"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell sumo deadlift",
+      "sumo deadlift"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Deficit Deadlift",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Hamstrings",
+      "Glutes"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell deficit deadlift",
+      "deficit deadlift"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Rack Pull",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Hamstrings",
+      "Glutes"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell rack pull",
+      "rack pull"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Front Squat",
     "equipment_type": "BARBELL",
     "primary_muscle": "Quads",
     "secondary_muscles": [
@@ -64,26 +214,208 @@
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "lunge",
-      "barbell lunge"
+      "barbell front squat",
+      "front squat"
     ]
   },
   {
-    "canonical_name": "Barbell Row",
+    "canonical_name": "Barbell Back Squat",
     "equipment_type": "BARBELL",
-    "primary_muscle": "Back",
+    "primary_muscle": "Quads",
     "secondary_muscles": [
-      "Biceps",
-      "Rear Delts"
+      "Glutes",
+      "Hamstrings"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "row",
-      "barbell row"
+      "barbell back squat",
+      "back squat"
     ]
   },
   {
-    "canonical_name": "Barbell Shoulder Press",
+    "canonical_name": "Barbell Pause Squat",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [
+      "Glutes",
+      "Hamstrings"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell pause squat",
+      "pause squat"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Box Squat",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [
+      "Glutes",
+      "Hamstrings"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell box squat",
+      "box squat"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Hip Thrust",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Glutes",
+    "secondary_muscles": [
+      "Hamstrings"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell hip thrust",
+      "hip thrust"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Good Morning",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Hamstrings",
+    "secondary_muscles": [
+      "Back"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell good morning",
+      "good morning"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Shrug",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Traps",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell shrug",
+      "shrug"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Curl",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell curl",
+      "curl"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Reverse Curl",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell reverse curl",
+      "reverse curl"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Skullcrusher",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Shoulders"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell skullcrusher",
+      "skullcrusher"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Lying Triceps Extension",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Shoulders"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell lying triceps extension",
+      "lying triceps extension"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Split Squat",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [
+      "Glutes"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell split squat",
+      "split squat"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Bulgarian Split Squat",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [
+      "Glutes"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "barbell bulgarian split squat",
+      "bulgarian split squat"
+    ]
+  },
+  {
+    "canonical_name": "EZ Bar Curl",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "ez bar curl",
+      "curl"
+    ]
+  },
+  {
+    "canonical_name": "EZ Bar Preacher Curl",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "ez bar preacher curl",
+      "preacher curl"
+    ]
+  },
+  {
+    "canonical_name": "EZ Bar Skullcrusher",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Shoulders"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "ez bar skullcrusher",
+      "skullcrusher"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Landmine Press",
     "equipment_type": "BARBELL",
     "primary_muscle": "Shoulders",
     "secondary_muscles": [
@@ -91,2180 +423,21 @@
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "shoulder press",
-      "barbell shoulder press"
+      "barbell landmine press",
+      "landmine press"
     ]
   },
   {
-    "canonical_name": "Barbell Squat",
+    "canonical_name": "Barbell Landmine Row",
     "equipment_type": "BARBELL",
-    "primary_muscle": "Quads",
-    "secondary_muscles": [
-      "Glutes",
-      "Hamstrings"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "squat",
-      "barbell squat"
-    ]
-  },
-  {
-    "canonical_name": "Bench Press Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "bench press",
-      "bench press cable"
-    ]
-  },
-  {
-    "canonical_name": "Bench Press Dual Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "bench press",
-      "bench press dual cable"
-    ]
-  },
-  {
-    "canonical_name": "Bench Press High Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "bench press",
-      "bench press high cable"
-    ]
-  },
-  {
-    "canonical_name": "Bench Press Low Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "bench press",
-      "bench press low cable"
-    ]
-  },
-  {
-    "canonical_name": "Bench Press Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "bench press",
-      "bench press machine"
-    ]
-  },
-  {
-    "canonical_name": "Bench Press Plate Loaded",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "bench press",
-      "bench press plate loaded"
-    ]
-  },
-  {
-    "canonical_name": "Bench Press Selectorized",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "bench press",
-      "bench press selectorized"
-    ]
-  },
-  {
-    "canonical_name": "Biceps Curl Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Forearms"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "biceps curl",
-      "biceps curl machine"
-    ]
-  },
-  {
-    "canonical_name": "Cable Biceps Curl",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Forearms"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "biceps curl",
-      "cable biceps curl"
-    ]
-  },
-  {
-    "canonical_name": "Cable Calf Raise",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Calves",
-    "secondary_muscles": [],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "calf raise",
-      "cable calf raise"
-    ]
-  },
-  {
-    "canonical_name": "Cable Chest Fly",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "chest fly",
-      "cable chest fly"
-    ]
-  },
-  {
-    "canonical_name": "Cable Concentration Curl",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Forearms"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "concentration curl",
-      "cable concentration curl"
-    ]
-  },
-  {
-    "canonical_name": "Cable Crunch",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Abs",
-    "secondary_muscles": [],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable crunch",
-      "cable crunch"
-    ]
-  },
-  {
-    "canonical_name": "Cable Face Pull",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Rear Delts",
-      "Upper Back"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "face pull",
-      "cable face pull"
-    ]
-  },
-  {
-    "canonical_name": "Cable Glute Bridge",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Glutes",
-    "secondary_muscles": [
-      "Hamstrings"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "glute bridge",
-      "cable glute bridge"
-    ]
-  },
-  {
-    "canonical_name": "Cable Hammer Curl",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Forearms"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "hammer curl",
-      "cable hammer curl"
-    ]
-  },
-  {
-    "canonical_name": "Cable Hip Abduction",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Glutes",
-    "secondary_muscles": [
-      "Quads"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "hip abduction",
-      "cable hip abduction"
-    ]
-  },
-  {
-    "canonical_name": "Cable Hip Adduction",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Adductors",
-    "secondary_muscles": [
-      "Quads"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "hip adduction",
-      "cable hip adduction"
-    ]
-  },
-  {
-    "canonical_name": "Cable Hip Thrust",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Glutes",
-    "secondary_muscles": [
-      "Hamstrings"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "hip thrust",
-      "cable hip thrust"
-    ]
-  },
-  {
-    "canonical_name": "Cable Lateral Raise",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Shoulders",
-    "secondary_muscles": [],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lateral raise",
-      "cable lateral raise"
-    ]
-  },
-  {
-    "canonical_name": "Cable Leg Curl",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Hamstrings",
-    "secondary_muscles": [],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "leg curl",
-      "cable leg curl"
-    ]
-  },
-  {
-    "canonical_name": "Cable Leg Extension",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Quads",
-    "secondary_muscles": [],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "leg extension",
-      "cable leg extension"
-    ]
-  },
-  {
-    "canonical_name": "Cable Overhead Triceps Extension",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Shoulders"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "overhead triceps extension",
-      "cable overhead triceps extension"
-    ]
-  },
-  {
-    "canonical_name": "Cable Pec Deck",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "pec deck",
-      "cable pec deck"
-    ]
-  },
-  {
-    "canonical_name": "Cable Preacher Curl",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Forearms"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "preacher curl",
-      "cable preacher curl"
-    ]
-  },
-  {
-    "canonical_name": "Cable Pull Over",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Chest"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "pull over",
-      "cable pull over"
-    ]
-  },
-  {
-    "canonical_name": "Cable Rear Delt Fly",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Shoulders",
-    "secondary_muscles": [
-      "Upper Back"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "rear delt fly",
-      "cable rear delt fly"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 1",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 1"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 10",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 10"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 100",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 100"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 101",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 101"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 102",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 102"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 103",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 103"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 104",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 104"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 105",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 105"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 106",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 106"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 107",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 107"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 108",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 108"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 109",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 109"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 11",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 11"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 110",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 110"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 111",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 111"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 112",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 112"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 113",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 113"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 114",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 114"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 115",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 115"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 116",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 116"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 117",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 117"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 118",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 118"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 119",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 119"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 12",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 12"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 13",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 13"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 14",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 14"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 15",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 15"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 16",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 16"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 17",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 17"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 18",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 18"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 19",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 19"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 2",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 2"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 20",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 20"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 21",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 21"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 22",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 22"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 23",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 23"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 24",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 24"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 25",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 25"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 26",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 26"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 27",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 27"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 28",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 28"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 29",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 29"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 3",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 3"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 30",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 30"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 31",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 31"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 32",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 32"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 33",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 33"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 34",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 34"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 35",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 35"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 36",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 36"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 37",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 37"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 38",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 38"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 39",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 39"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 4",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 4"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 40",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 40"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 41",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 41"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 42",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 42"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 43",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 43"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 44",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 44"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 45",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 45"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 46",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 46"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 47",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 47"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 48",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 48"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 49",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 49"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 5",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 5"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 50",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 50"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 51",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 51"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 52",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 52"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 53",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 53"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 54",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 54"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 55",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 55"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 56",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 56"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 57",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 57"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 58",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 58"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 59",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 59"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 6",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 6"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 60",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 60"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 61",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 61"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 62",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 62"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 63",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 63"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 64",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 64"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 65",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 65"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 66",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 66"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 67",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 67"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 68",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 68"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 69",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 69"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 7",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 7"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 70",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 70"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 71",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 71"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 72",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 72"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 73",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 73"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 74",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 74"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 75",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 75"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 76",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 76"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 77",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 77"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 78",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 78"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 79",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 79"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 8",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 8"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 80",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 80"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 81",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 81"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 82",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 82"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 83",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 83"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 84",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 84"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 85",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 85"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 86",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 86"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 87",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 87"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 88",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 88"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 89",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 89"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 9",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 9"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 90",
-    "equipment_type": "CABLE",
     "primary_muscle": "Back",
     "secondary_muscles": [
       "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 90"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 91",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 91"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 92",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 92"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 93",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 93"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 94",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 94"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 95",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 95"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 96",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 96"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 97",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 97"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 98",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 98"
-    ]
-  },
-  {
-    "canonical_name": "Cable Row Variant 99",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable row",
-      "cable row variant 99"
-    ]
-  },
-  {
-    "canonical_name": "Cable Seated Calf Raise",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Calves",
-    "secondary_muscles": [],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "seated calf raise",
-      "cable seated calf raise"
-    ]
-  },
-  {
-    "canonical_name": "Cable Shrug",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Traps",
-    "secondary_muscles": [],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "shrug",
-      "cable shrug"
-    ]
-  },
-  {
-    "canonical_name": "Cable Skullcrusher",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Shoulders"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "skullcrusher",
-      "cable skullcrusher"
-    ]
-  },
-  {
-    "canonical_name": "Cable Triceps Extension",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Shoulders"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "triceps extension",
-      "cable triceps extension"
-    ]
-  },
-  {
-    "canonical_name": "Cable Triceps Pressdown",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Shoulders"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "triceps pressdown",
-      "cable triceps pressdown"
-    ]
-  },
-  {
-    "canonical_name": "Cable Woodchop",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Abs",
-    "secondary_muscles": [
-      "Obliques"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "cable woodchop",
-      "cable woodchop"
-    ]
-  },
-  {
-    "canonical_name": "Cable Wrist Curl",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Forearms",
-    "secondary_muscles": [],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "wrist curl",
-      "cable wrist curl"
-    ]
-  },
-  {
-    "canonical_name": "Calf Raise Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Calves",
-    "secondary_muscles": [],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "calf raise",
-      "calf raise machine"
-    ]
-  },
-  {
-    "canonical_name": "Chest Fly Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "chest fly",
-      "chest fly machine"
-    ]
-  },
-  {
-    "canonical_name": "Chest Press Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "chest press",
-      "chest press cable"
-    ]
-  },
-  {
-    "canonical_name": "Chest Press Dual Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "chest press",
-      "chest press dual cable"
-    ]
-  },
-  {
-    "canonical_name": "Chest Press High Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "chest press",
-      "chest press high cable"
-    ]
-  },
-  {
-    "canonical_name": "Chest Press Low Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "chest press",
-      "chest press low cable"
-    ]
-  },
-  {
-    "canonical_name": "Chest Press Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "chest press",
-      "chest press machine"
-    ]
-  },
-  {
-    "canonical_name": "Chest Press Plate Loaded",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "chest press",
-      "chest press plate loaded"
-    ]
-  },
-  {
-    "canonical_name": "Chest Press Selectorized",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "chest press",
-      "chest press selectorized"
-    ]
-  },
-  {
-    "canonical_name": "Concentration Curl Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Forearms"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "concentration curl",
-      "concentration curl machine"
-    ]
-  },
-  {
-    "canonical_name": "Deadlift Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Hamstrings",
-      "Glutes"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "deadlift",
-      "deadlift machine"
-    ]
-  },
-  {
-    "canonical_name": "Deadlift Plate Loaded",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Hamstrings",
-      "Glutes"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "deadlift",
-      "deadlift plate loaded"
-    ]
-  },
-  {
-    "canonical_name": "Deadlift Selectorized",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Hamstrings",
-      "Glutes"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "deadlift",
-      "deadlift selectorized"
+      "barbell landmine row",
+      "landmine row"
     ]
   },
   {
@@ -2277,38 +450,12 @@
     ],
     "weight_mode_default": "EACH",
     "aliases": [
-      "bench press",
-      "dumbbell bench press"
+      "dumbbell bench press",
+      "bench press"
     ]
   },
   {
-    "canonical_name": "Dumbbell Biceps Curl",
-    "equipment_type": "DUMBBELL",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Forearms"
-    ],
-    "weight_mode_default": "EACH",
-    "aliases": [
-      "biceps curl",
-      "dumbbell biceps curl"
-    ]
-  },
-  {
-    "canonical_name": "Dumbbell Chest Fly",
-    "equipment_type": "DUMBBELL",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Front Delts"
-    ],
-    "weight_mode_default": "EACH",
-    "aliases": [
-      "chest fly",
-      "dumbbell chest fly"
-    ]
-  },
-  {
-    "canonical_name": "Dumbbell Chest Press",
+    "canonical_name": "Dumbbell Incline Bench Press",
     "equipment_type": "DUMBBELL",
     "primary_muscle": "Chest",
     "secondary_muscles": [
@@ -2317,12 +464,218 @@
     ],
     "weight_mode_default": "EACH",
     "aliases": [
-      "chest press",
-      "dumbbell chest press"
+      "dumbbell incline bench press",
+      "incline bench press"
     ]
   },
   {
-    "canonical_name": "Dumbbell Concentration Curl",
+    "canonical_name": "Dumbbell Decline Bench Press",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell decline bench press",
+      "decline bench press"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Floor Press",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell floor press",
+      "floor press"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Fly",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell fly",
+      "fly"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Incline Fly",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell incline fly",
+      "incline fly"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Shoulder Press",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell shoulder press",
+      "shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Arnold Press",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell arnold press",
+      "arnold press"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Z Press",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell z press",
+      "z press"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Lateral Raise",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell lateral raise",
+      "lateral raise"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Front Raise",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell front raise",
+      "front raise"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Rear Delt Fly",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Upper Back"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell rear delt fly",
+      "rear delt fly"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Upright Row",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Traps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell upright row",
+      "upright row"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell High Pull",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Traps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell high pull",
+      "high pull"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Row",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell row",
+      "row"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Chest Supported Row",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell chest supported row",
+      "chest supported row"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Incline Row",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell incline row",
+      "incline row"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Pullover",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Chest"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell pullover",
+      "pullover"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Curl",
     "equipment_type": "DUMBBELL",
     "primary_muscle": "Arms",
     "secondary_muscles": [
@@ -2330,8 +683,8 @@
     ],
     "weight_mode_default": "EACH",
     "aliases": [
-      "concentration curl",
-      "dumbbell concentration curl"
+      "dumbbell curl",
+      "curl"
     ]
   },
   {
@@ -2343,33 +696,136 @@
     ],
     "weight_mode_default": "EACH",
     "aliases": [
-      "hammer curl",
-      "dumbbell hammer curl"
+      "dumbbell hammer curl",
+      "hammer curl"
     ]
   },
   {
-    "canonical_name": "Dumbbell Incline Press",
+    "canonical_name": "Dumbbell Incline Curl",
     "equipment_type": "DUMBBELL",
-    "primary_muscle": "Chest",
+    "primary_muscle": "Arms",
     "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
+      "Forearms"
     ],
     "weight_mode_default": "EACH",
     "aliases": [
-      "incline press",
-      "dumbbell incline press"
+      "dumbbell incline curl",
+      "incline curl"
     ]
   },
   {
-    "canonical_name": "Dumbbell Lateral Raise",
+    "canonical_name": "Dumbbell Concentration Curl",
     "equipment_type": "DUMBBELL",
-    "primary_muscle": "Shoulders",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell concentration curl",
+      "concentration curl"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Spider Curl",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell spider curl",
+      "spider curl"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Preacher Curl",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell preacher curl",
+      "preacher curl"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Cross-Body Hammer Curl",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell cross-body hammer curl",
+      "cross-body hammer curl"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Skullcrusher",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Shoulders"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell skullcrusher",
+      "skullcrusher"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Tate Press",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Shoulders"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell tate press",
+      "tate press"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Overhead Triceps Extension",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Shoulders"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell overhead triceps extension",
+      "overhead triceps extension"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Triceps Kickback",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Shoulders"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "dumbbell triceps kickback",
+      "triceps kickback"
+    ]
+  },
+  {
+    "canonical_name": "Dumbbell Shrug",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Traps",
     "secondary_muscles": [],
     "weight_mode_default": "EACH",
     "aliases": [
-      "lateral raise",
-      "dumbbell lateral raise"
+      "dumbbell shrug",
+      "shrug"
     ]
   },
   {
@@ -2382,98 +838,86 @@
     ],
     "weight_mode_default": "EACH",
     "aliases": [
-      "lunge",
-      "dumbbell lunge"
+      "dumbbell lunge",
+      "lunge"
     ]
   },
   {
-    "canonical_name": "Dumbbell Overhead Triceps Extension",
+    "canonical_name": "Dumbbell Step Up",
     "equipment_type": "DUMBBELL",
-    "primary_muscle": "Arms",
+    "primary_muscle": "Quads",
     "secondary_muscles": [
-      "Shoulders"
+      "Glutes"
     ],
     "weight_mode_default": "EACH",
     "aliases": [
-      "overhead triceps extension",
-      "dumbbell overhead triceps extension"
+      "dumbbell step up",
+      "step up"
     ]
   },
   {
-    "canonical_name": "Dumbbell Pull Over",
+    "canonical_name": "Dumbbell Bulgarian Split Squat",
     "equipment_type": "DUMBBELL",
-    "primary_muscle": "Back",
+    "primary_muscle": "Quads",
     "secondary_muscles": [
-      "Chest"
+      "Glutes"
     ],
     "weight_mode_default": "EACH",
     "aliases": [
-      "pull over",
-      "dumbbell pull over"
+      "dumbbell bulgarian split squat",
+      "bulgarian split squat"
     ]
   },
   {
-    "canonical_name": "Dumbbell Rear Delt Fly",
+    "canonical_name": "Dumbbell Romanian Deadlift",
     "equipment_type": "DUMBBELL",
-    "primary_muscle": "Shoulders",
+    "primary_muscle": "Hamstrings",
     "secondary_muscles": [
-      "Upper Back"
+      "Glutes"
     ],
     "weight_mode_default": "EACH",
     "aliases": [
-      "rear delt fly",
-      "dumbbell rear delt fly"
+      "dumbbell romanian deadlift",
+      "romanian deadlift"
     ]
   },
   {
-    "canonical_name": "Dumbbell Row",
+    "canonical_name": "Dumbbell Sumo Deadlift",
     "equipment_type": "DUMBBELL",
-    "primary_muscle": "Back",
+    "primary_muscle": "Hamstrings",
     "secondary_muscles": [
-      "Biceps",
-      "Rear Delts"
+      "Glutes"
     ],
     "weight_mode_default": "EACH",
     "aliases": [
-      "row",
-      "dumbbell row"
+      "dumbbell sumo deadlift",
+      "sumo deadlift"
     ]
   },
   {
-    "canonical_name": "Dumbbell Shoulder Press",
+    "canonical_name": "Dumbbell Goblet Squat",
     "equipment_type": "DUMBBELL",
-    "primary_muscle": "Shoulders",
+    "primary_muscle": "Quads",
     "secondary_muscles": [
-      "Triceps"
+      "Glutes"
     ],
     "weight_mode_default": "EACH",
     "aliases": [
-      "shoulder press",
-      "dumbbell shoulder press"
+      "dumbbell goblet squat",
+      "goblet squat"
     ]
   },
   {
-    "canonical_name": "Dumbbell Shrug",
+    "canonical_name": "Dumbbell Farmer Carry",
     "equipment_type": "DUMBBELL",
     "primary_muscle": "Traps",
-    "secondary_muscles": [],
-    "weight_mode_default": "EACH",
-    "aliases": [
-      "shrug",
-      "dumbbell shrug"
-    ]
-  },
-  {
-    "canonical_name": "Dumbbell Skullcrusher",
-    "equipment_type": "DUMBBELL",
-    "primary_muscle": "Arms",
     "secondary_muscles": [
-      "Shoulders"
+      "Forearms"
     ],
     "weight_mode_default": "EACH",
     "aliases": [
-      "skullcrusher",
-      "dumbbell skullcrusher"
+      "dumbbell farmer carry",
+      "farmer carry"
     ]
   },
   {
@@ -2483,646 +927,115 @@
     "secondary_muscles": [],
     "weight_mode_default": "EACH",
     "aliases": [
-      "wrist curl",
-      "dumbbell wrist curl"
+      "dumbbell wrist curl",
+      "wrist curl"
     ]
   },
   {
-    "canonical_name": "Face Pull Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Rear Delts",
-      "Upper Back"
-    ],
-    "weight_mode_default": "TOTAL",
+    "canonical_name": "Dumbbell Reverse Wrist Curl",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Forearms",
+    "secondary_muscles": [],
+    "weight_mode_default": "EACH",
     "aliases": [
-      "face pull",
-      "face pull machine"
+      "dumbbell reverse wrist curl",
+      "reverse wrist curl"
     ]
   },
   {
-    "canonical_name": "Glute Bridge Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Glutes",
-    "secondary_muscles": [
-      "Hamstrings"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "glute bridge",
-      "glute bridge machine"
-    ]
-  },
-  {
-    "canonical_name": "Hammer Curl Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Forearms"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "hammer curl",
-      "hammer curl machine"
-    ]
-  },
-  {
-    "canonical_name": "Hip Abduction Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Glutes",
-    "secondary_muscles": [
-      "Quads"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "hip abduction",
-      "hip abduction machine"
-    ]
-  },
-  {
-    "canonical_name": "Hip Adduction Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Adductors",
-    "secondary_muscles": [
-      "Quads"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "hip adduction",
-      "hip adduction machine"
-    ]
-  },
-  {
-    "canonical_name": "Hip Thrust Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Glutes",
-    "secondary_muscles": [
-      "Hamstrings"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "hip thrust",
-      "hip thrust machine"
-    ]
-  },
-  {
-    "canonical_name": "Incline Press Cable",
-    "equipment_type": "CABLE",
+    "canonical_name": "Dumbbell Neutral Grip Bench Press",
+    "equipment_type": "DUMBBELL",
     "primary_muscle": "Chest",
     "secondary_muscles": [
       "Triceps",
       "Front Delts"
     ],
-    "weight_mode_default": "TOTAL",
+    "weight_mode_default": "EACH",
     "aliases": [
-      "incline press",
-      "incline press cable"
+      "dumbbell neutral grip bench press",
+      "neutral grip bench press"
     ]
   },
   {
-    "canonical_name": "Incline Press Dual Cable",
-    "equipment_type": "CABLE",
+    "canonical_name": "Dumbbell Chest Press",
+    "equipment_type": "DUMBBELL",
     "primary_muscle": "Chest",
     "secondary_muscles": [
       "Triceps",
       "Front Delts"
     ],
-    "weight_mode_default": "TOTAL",
+    "weight_mode_default": "EACH",
     "aliases": [
-      "incline press",
-      "incline press dual cable"
+      "dumbbell chest press",
+      "chest press"
     ]
   },
   {
-    "canonical_name": "Incline Press High Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "incline press",
-      "incline press high cable"
-    ]
-  },
-  {
-    "canonical_name": "Incline Press Low Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "incline press",
-      "incline press low cable"
-    ]
-  },
-  {
-    "canonical_name": "Incline Press Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "incline press",
-      "incline press machine"
-    ]
-  },
-  {
-    "canonical_name": "Incline Press Plate Loaded",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "incline press",
-      "incline press plate loaded"
-    ]
-  },
-  {
-    "canonical_name": "Incline Press Selectorized",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Chest",
-    "secondary_muscles": [
-      "Triceps",
-      "Front Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "incline press",
-      "incline press selectorized"
-    ]
-  },
-  {
-    "canonical_name": "Lat Pulldown Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lat pulldown",
-      "lat pulldown cable"
-    ]
-  },
-  {
-    "canonical_name": "Lat Pulldown Dual Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lat pulldown",
-      "lat pulldown dual cable"
-    ]
-  },
-  {
-    "canonical_name": "Lat Pulldown High Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lat pulldown",
-      "lat pulldown high cable"
-    ]
-  },
-  {
-    "canonical_name": "Lat Pulldown Low Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lat pulldown",
-      "lat pulldown low cable"
-    ]
-  },
-  {
-    "canonical_name": "Lat Pulldown Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lat pulldown",
-      "lat pulldown machine"
-    ]
-  },
-  {
-    "canonical_name": "Lat Pulldown Plate Loaded",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lat pulldown",
-      "lat pulldown plate loaded"
-    ]
-  },
-  {
-    "canonical_name": "Lat Pulldown Selectorized",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lat pulldown",
-      "lat pulldown selectorized"
-    ]
-  },
-  {
-    "canonical_name": "Lateral Raise Machine",
-    "equipment_type": "MACHINE",
+    "canonical_name": "Dumbbell Push Press",
+    "equipment_type": "DUMBBELL",
     "primary_muscle": "Shoulders",
-    "secondary_muscles": [],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lateral raise",
-      "lateral raise machine"
-    ]
-  },
-  {
-    "canonical_name": "Leg Curl Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Hamstrings",
-    "secondary_muscles": [],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "leg curl",
-      "leg curl machine"
-    ]
-  },
-  {
-    "canonical_name": "Leg Extension Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Quads",
-    "secondary_muscles": [],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "leg extension",
-      "leg extension machine"
-    ]
-  },
-  {
-    "canonical_name": "Leg Press Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Quads",
     "secondary_muscles": [
-      "Glutes"
+      "Triceps"
     ],
-    "weight_mode_default": "TOTAL",
+    "weight_mode_default": "EACH",
     "aliases": [
-      "leg press machine",
-      "leg press"
+      "dumbbell push press",
+      "push press"
     ]
   },
   {
-    "canonical_name": "Lunge Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Quads",
-    "secondary_muscles": [
-      "Glutes",
-      "Hamstrings"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lunge",
-      "lunge cable"
-    ]
-  },
-  {
-    "canonical_name": "Lunge Dual Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Quads",
-    "secondary_muscles": [
-      "Glutes",
-      "Hamstrings"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lunge",
-      "lunge dual cable"
-    ]
-  },
-  {
-    "canonical_name": "Lunge High Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Quads",
-    "secondary_muscles": [
-      "Glutes",
-      "Hamstrings"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lunge",
-      "lunge high cable"
-    ]
-  },
-  {
-    "canonical_name": "Lunge Low Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Quads",
-    "secondary_muscles": [
-      "Glutes",
-      "Hamstrings"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lunge",
-      "lunge low cable"
-    ]
-  },
-  {
-    "canonical_name": "Lunge Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Quads",
-    "secondary_muscles": [
-      "Glutes",
-      "Hamstrings"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lunge",
-      "lunge machine"
-    ]
-  },
-  {
-    "canonical_name": "Lunge Plate Loaded",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Quads",
-    "secondary_muscles": [
-      "Glutes",
-      "Hamstrings"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lunge",
-      "lunge plate loaded"
-    ]
-  },
-  {
-    "canonical_name": "Lunge Selectorized",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Quads",
-    "secondary_muscles": [
-      "Glutes",
-      "Hamstrings"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "lunge",
-      "lunge selectorized"
-    ]
-  },
-  {
-    "canonical_name": "Machine Hack Squat",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Quads",
-    "secondary_muscles": [
-      "Glutes"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "hack squat",
-      "machine hack squat"
-    ]
-  },
-  {
-    "canonical_name": "Machine Leg Press",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Quads",
-    "secondary_muscles": [
-      "Glutes"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "leg press",
-      "machine leg press"
-    ]
-  },
-  {
-    "canonical_name": "Overhead Triceps Extension Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Shoulders"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "overhead triceps extension",
-      "overhead triceps extension machine"
-    ]
-  },
-  {
-    "canonical_name": "Pec Deck",
+    "canonical_name": "Chest Press Machine",
     "equipment_type": "MACHINE",
     "primary_muscle": "Chest",
     "secondary_muscles": [
+      "Triceps",
       "Front Delts"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "pec deck",
-      "pec deck"
+      "chest press machine",
+      "chest press"
     ]
   },
   {
-    "canonical_name": "Plate Loaded Hack Squat",
+    "canonical_name": "Incline Chest Press Machine",
     "equipment_type": "MACHINE",
-    "primary_muscle": "Quads",
+    "primary_muscle": "Chest",
     "secondary_muscles": [
-      "Glutes"
+      "Triceps",
+      "Front Delts"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "hack squat",
-      "plate loaded hack squat"
+      "incline chest press machine",
+      "incline chest press"
     ]
   },
   {
-    "canonical_name": "Plate Loaded Leg Press",
+    "canonical_name": "Decline Chest Press Machine",
     "equipment_type": "MACHINE",
-    "primary_muscle": "Quads",
+    "primary_muscle": "Chest",
     "secondary_muscles": [
-      "Glutes"
+      "Triceps",
+      "Front Delts"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "leg press",
-      "plate loaded leg press"
+      "decline chest press machine",
+      "decline chest press"
     ]
   },
   {
-    "canonical_name": "Preacher Curl Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Arms",
-    "secondary_muscles": [
-      "Forearms"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "preacher curl",
-      "preacher curl machine"
-    ]
-  },
-  {
-    "canonical_name": "Pull Over Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Chest"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "pull over",
-      "pull over machine"
-    ]
-  },
-  {
-    "canonical_name": "Rear Delt Fly Machine",
+    "canonical_name": "Shoulder Press Machine",
     "equipment_type": "MACHINE",
     "primary_muscle": "Shoulders",
     "secondary_muscles": [
-      "Upper Back"
+      "Triceps"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "rear delt fly",
-      "rear delt fly machine"
-    ]
-  },
-  {
-    "canonical_name": "Row Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps",
-      "Rear Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "row",
-      "row cable"
-    ]
-  },
-  {
-    "canonical_name": "Row Dual Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps",
-      "Rear Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "row",
-      "row dual cable"
-    ]
-  },
-  {
-    "canonical_name": "Row High Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps",
-      "Rear Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "row",
-      "row high cable"
-    ]
-  },
-  {
-    "canonical_name": "Row Low Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps",
-      "Rear Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "row",
-      "row low cable"
-    ]
-  },
-  {
-    "canonical_name": "Row Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps",
-      "Rear Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "row",
-      "row machine"
-    ]
-  },
-  {
-    "canonical_name": "Row Plate Loaded",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps",
-      "Rear Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "row",
-      "row plate loaded"
-    ]
-  },
-  {
-    "canonical_name": "Row Selectorized",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Back",
-    "secondary_muscles": [
-      "Biceps",
-      "Rear Delts"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "row",
-      "row selectorized"
-    ]
-  },
-  {
-    "canonical_name": "Seated Calf Raise Machine",
-    "equipment_type": "MACHINE",
-    "primary_muscle": "Calves",
-    "secondary_muscles": [],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "seated calf raise",
-      "seated calf raise machine"
+      "shoulder press machine",
+      "shoulder press"
     ]
   },
   {
@@ -3139,7 +1052,72 @@
     ]
   },
   {
-    "canonical_name": "Selectorized Hack Squat",
+    "canonical_name": "Chest Supported Row Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "chest supported row machine",
+      "chest supported row"
+    ]
+  },
+  {
+    "canonical_name": "High Row Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "high row machine",
+      "high row"
+    ]
+  },
+  {
+    "canonical_name": "Low Row Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "low row machine",
+      "low row"
+    ]
+  },
+  {
+    "canonical_name": "Lat Pulldown Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "lat pulldown machine",
+      "lat pulldown"
+    ]
+  },
+  {
+    "canonical_name": "Straight-Arm Pulldown Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Chest"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "straight-arm pulldown machine",
+      "straight-arm pulldown"
+    ]
+  },
+  {
+    "canonical_name": "Leg Press Machine",
     "equipment_type": "MACHINE",
     "primary_muscle": "Quads",
     "secondary_muscles": [
@@ -3147,12 +1125,12 @@
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "hack squat",
-      "selectorized hack squat"
+      "leg press machine",
+      "leg press"
     ]
   },
   {
-    "canonical_name": "Selectorized Leg Press",
+    "canonical_name": "Horizontal Leg Press Machine",
     "equipment_type": "MACHINE",
     "primary_muscle": "Quads",
     "secondary_muscles": [
@@ -3160,114 +1138,171 @@
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "leg press",
-      "selectorized leg press"
+      "horizontal leg press machine",
+      "horizontal leg press"
     ]
   },
   {
-    "canonical_name": "Shoulder Press Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Shoulders",
-    "secondary_muscles": [
-      "Triceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "shoulder press",
-      "shoulder press cable"
-    ]
-  },
-  {
-    "canonical_name": "Shoulder Press Dual Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Shoulders",
-    "secondary_muscles": [
-      "Triceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "shoulder press",
-      "shoulder press dual cable"
-    ]
-  },
-  {
-    "canonical_name": "Shoulder Press High Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Shoulders",
-    "secondary_muscles": [
-      "Triceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "shoulder press",
-      "shoulder press high cable"
-    ]
-  },
-  {
-    "canonical_name": "Shoulder Press Low Cable",
-    "equipment_type": "CABLE",
-    "primary_muscle": "Shoulders",
-    "secondary_muscles": [
-      "Triceps"
-    ],
-    "weight_mode_default": "TOTAL",
-    "aliases": [
-      "shoulder press",
-      "shoulder press low cable"
-    ]
-  },
-  {
-    "canonical_name": "Shoulder Press Machine",
+    "canonical_name": "Vertical Leg Press Machine",
     "equipment_type": "MACHINE",
-    "primary_muscle": "Shoulders",
+    "primary_muscle": "Quads",
     "secondary_muscles": [
-      "Triceps"
+      "Glutes"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "shoulder press",
-      "shoulder press machine"
+      "vertical leg press machine",
+      "vertical leg press"
     ]
   },
   {
-    "canonical_name": "Shoulder Press Plate Loaded",
+    "canonical_name": "Hack Squat Machine",
     "equipment_type": "MACHINE",
-    "primary_muscle": "Shoulders",
+    "primary_muscle": "Quads",
     "secondary_muscles": [
-      "Triceps"
+      "Glutes"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "shoulder press",
-      "shoulder press plate loaded"
+      "hack squat machine",
+      "hack squat"
     ]
   },
   {
-    "canonical_name": "Shoulder Press Selectorized",
+    "canonical_name": "Belt Squat Machine",
     "equipment_type": "MACHINE",
-    "primary_muscle": "Shoulders",
+    "primary_muscle": "Quads",
     "secondary_muscles": [
-      "Triceps"
+      "Glutes"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "shoulder press",
-      "shoulder press selectorized"
+      "belt squat machine",
+      "belt squat"
     ]
   },
   {
-    "canonical_name": "Shrug Machine",
+    "canonical_name": "Leg Extension Machine",
     "equipment_type": "MACHINE",
-    "primary_muscle": "Traps",
+    "primary_muscle": "Quads",
     "secondary_muscles": [],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "shrug",
-      "shrug machine"
+      "leg extension machine",
+      "leg extension"
     ]
   },
   {
-    "canonical_name": "Skullcrusher Machine",
+    "canonical_name": "Seated Leg Curl Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Hamstrings",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "seated leg curl machine",
+      "seated leg curl"
+    ]
+  },
+  {
+    "canonical_name": "Lying Leg Curl Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Hamstrings",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "lying leg curl machine",
+      "lying leg curl"
+    ]
+  },
+  {
+    "canonical_name": "Calf Raise Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Calves",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "calf raise machine",
+      "calf raise"
+    ]
+  },
+  {
+    "canonical_name": "Seated Calf Raise Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Calves",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "seated calf raise machine",
+      "seated calf raise"
+    ]
+  },
+  {
+    "canonical_name": "Pec Deck Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "pec deck machine",
+      "pec deck"
+    ]
+  },
+  {
+    "canonical_name": "Rear Delt Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Upper Back"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "rear delt machine",
+      "rear delt"
+    ]
+  },
+  {
+    "canonical_name": "Hip Abduction Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Glutes",
+    "secondary_muscles": [
+      "Quads"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "hip abduction machine",
+      "hip abduction"
+    ]
+  },
+  {
+    "canonical_name": "Hip Adduction Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Adductors",
+    "secondary_muscles": [
+      "Quads"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "hip adduction machine",
+      "hip adduction"
+    ]
+  },
+  {
+    "canonical_name": "Biceps Curl Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "biceps curl machine",
+      "biceps curl"
+    ]
+  },
+  {
+    "canonical_name": "Triceps Extension Machine",
     "equipment_type": "MACHINE",
     "primary_muscle": "Arms",
     "secondary_muscles": [
@@ -3275,8 +1310,97 @@
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "skullcrusher",
-      "skullcrusher machine"
+      "triceps extension machine",
+      "triceps extension"
+    ]
+  },
+  {
+    "canonical_name": "Triceps Pressdown Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Shoulders"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "triceps pressdown machine",
+      "triceps pressdown"
+    ]
+  },
+  {
+    "canonical_name": "Ab Crunch Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Abs",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "ab crunch machine",
+      "ab crunch"
+    ]
+  },
+  {
+    "canonical_name": "Back Extension Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Glutes"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "back extension machine",
+      "back extension"
+    ]
+  },
+  {
+    "canonical_name": "Glute Kickback Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Glutes",
+    "secondary_muscles": [
+      "Hamstrings"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "glute kickback machine",
+      "glute kickback"
+    ]
+  },
+  {
+    "canonical_name": "Hip Thrust Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Glutes",
+    "secondary_muscles": [
+      "Hamstrings"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "hip thrust machine",
+      "hip thrust"
+    ]
+  },
+  {
+    "canonical_name": "Pullover Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Chest"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "pullover machine",
+      "pullover"
+    ]
+  },
+  {
+    "canonical_name": "Chest Fly Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "chest fly machine",
+      "chest fly"
     ]
   },
   {
@@ -3290,21 +1414,23 @@
     "weight_mode_default": "TOTAL",
     "aliases": [
       "smith machine bench press",
-      "smith bench press"
+      "smith bench press",
+      "machine bench press"
     ]
   },
   {
-    "canonical_name": "Smith Machine Deadlift",
+    "canonical_name": "Smith Machine Incline Bench Press",
     "equipment_type": "MACHINE",
-    "primary_muscle": "Back",
+    "primary_muscle": "Chest",
     "secondary_muscles": [
-      "Hamstrings",
-      "Glutes"
+      "Triceps",
+      "Front Delts"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "smith machine deadlift",
-      "smith deadlift"
+      "smith machine incline bench press",
+      "smith incline bench press",
+      "machine incline bench press"
     ]
   },
   {
@@ -3318,86 +1444,1864 @@
     "weight_mode_default": "TOTAL",
     "aliases": [
       "smith machine squat",
-      "smith squat"
+      "smith squat",
+      "machine squat"
     ]
   },
   {
-    "canonical_name": "Squat Machine",
+    "canonical_name": "Smith Machine Deadlift",
     "equipment_type": "MACHINE",
-    "primary_muscle": "Quads",
+    "primary_muscle": "Back",
     "secondary_muscles": [
-      "Glutes",
-      "Hamstrings"
+      "Hamstrings",
+      "Glutes"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "squat",
-      "squat machine"
+      "smith machine deadlift",
+      "smith deadlift",
+      "machine deadlift"
     ]
   },
   {
-    "canonical_name": "Squat Plate Loaded",
+    "canonical_name": "Smith Machine Row",
     "equipment_type": "MACHINE",
-    "primary_muscle": "Quads",
+    "primary_muscle": "Back",
     "secondary_muscles": [
-      "Glutes",
-      "Hamstrings"
+      "Biceps"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "squat",
-      "squat plate loaded"
+      "smith machine row",
+      "smith row",
+      "machine row"
     ]
   },
   {
-    "canonical_name": "Squat Selectorized",
+    "canonical_name": "Smith Machine Shoulder Press",
     "equipment_type": "MACHINE",
-    "primary_muscle": "Quads",
+    "primary_muscle": "Shoulders",
     "secondary_muscles": [
-      "Glutes",
-      "Hamstrings"
+      "Triceps"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "squat",
-      "squat selectorized"
+      "smith machine shoulder press",
+      "smith shoulder press",
+      "machine shoulder press"
     ]
   },
   {
-    "canonical_name": "Triceps Extension Machine",
+    "canonical_name": "Hammer Strength Chest Press",
     "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "hammer strength chest press",
+      "chest press"
+    ]
+  },
+  {
+    "canonical_name": "Hammer Strength Incline Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "hammer strength incline press",
+      "incline press"
+    ]
+  },
+  {
+    "canonical_name": "Hammer Strength Row",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "hammer strength row",
+      "row"
+    ]
+  },
+  {
+    "canonical_name": "Hammer Strength High Row",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "hammer strength high row",
+      "high row"
+    ]
+  },
+  {
+    "canonical_name": "Hammer Strength Pulldown",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "hammer strength pulldown",
+      "pulldown"
+    ]
+  },
+  {
+    "canonical_name": "Cable Chest Fly",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable chest fly",
+      "chest fly"
+    ]
+  },
+  {
+    "canonical_name": "Cable Crossover",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable crossover",
+      "crossover"
+    ]
+  },
+  {
+    "canonical_name": "Cable Chest Press",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable chest press",
+      "chest press"
+    ]
+  },
+  {
+    "canonical_name": "Cable Shoulder Press",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable shoulder press",
+      "shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Cable Row",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable row",
+      "row"
+    ]
+  },
+  {
+    "canonical_name": "Seated Cable Row",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "seated cable row",
+      "seated row"
+    ]
+  },
+  {
+    "canonical_name": "Low Cable Row",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "low cable row",
+      "low row"
+    ]
+  },
+  {
+    "canonical_name": "High Cable Row",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "high cable row",
+      "high row"
+    ]
+  },
+  {
+    "canonical_name": "Cable Lat Pulldown",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable lat pulldown",
+      "lat pulldown"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Cable Lat Pulldown",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-arm cable lat pulldown",
+      "single-arm lat pulldown"
+    ]
+  },
+  {
+    "canonical_name": "Cable Straight-Arm Pulldown",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Chest"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable straight-arm pulldown",
+      "straight-arm pulldown"
+    ]
+  },
+  {
+    "canonical_name": "Cable Face Pull",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Rear Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable face pull",
+      "face pull"
+    ]
+  },
+  {
+    "canonical_name": "Cable Triceps Pushdown",
+    "equipment_type": "CABLE",
     "primary_muscle": "Arms",
     "secondary_muscles": [
       "Shoulders"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "triceps extension",
-      "triceps extension machine"
+      "cable triceps pushdown",
+      "triceps pushdown"
     ]
   },
   {
-    "canonical_name": "Triceps Pressdown Machine",
-    "equipment_type": "MACHINE",
+    "canonical_name": "Cable Rope Pushdown",
+    "equipment_type": "CABLE",
     "primary_muscle": "Arms",
     "secondary_muscles": [
       "Shoulders"
     ],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "triceps pressdown",
-      "triceps pressdown machine"
+      "cable rope pushdown",
+      "rope pushdown"
     ]
   },
   {
-    "canonical_name": "Wrist Curl Machine",
-    "equipment_type": "MACHINE",
+    "canonical_name": "Cable Overhead Triceps Extension",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Shoulders"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable overhead triceps extension",
+      "overhead triceps extension"
+    ]
+  },
+  {
+    "canonical_name": "Cable Curl",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable curl",
+      "curl"
+    ]
+  },
+  {
+    "canonical_name": "Cable Hammer Curl",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable hammer curl",
+      "hammer curl"
+    ]
+  },
+  {
+    "canonical_name": "Cable Reverse Curl",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable reverse curl",
+      "reverse curl"
+    ]
+  },
+  {
+    "canonical_name": "Cable Lateral Raise",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable lateral raise",
+      "lateral raise"
+    ]
+  },
+  {
+    "canonical_name": "Cable Rear Delt Fly",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Upper Back"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable rear delt fly",
+      "rear delt fly"
+    ]
+  },
+  {
+    "canonical_name": "Cable Upright Row",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Traps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable upright row",
+      "upright row"
+    ]
+  },
+  {
+    "canonical_name": "Cable Shrug",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Traps",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable shrug",
+      "shrug"
+    ]
+  },
+  {
+    "canonical_name": "Cable Pull Through",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Glutes",
+    "secondary_muscles": [
+      "Hamstrings"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable pull through",
+      "pull through"
+    ]
+  },
+  {
+    "canonical_name": "Cable Pull Over",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Chest"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable pull over",
+      "pull over"
+    ]
+  },
+  {
+    "canonical_name": "Cable Crunch",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Abs",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable crunch",
+      "crunch"
+    ]
+  },
+  {
+    "canonical_name": "Cable Woodchop",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Abs",
+    "secondary_muscles": [
+      "Obliques"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable woodchop",
+      "woodchop"
+    ]
+  },
+  {
+    "canonical_name": "Cable Pallof Press",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Abs",
+    "secondary_muscles": [
+      "Obliques"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable pallof press",
+      "pallof press"
+    ]
+  },
+  {
+    "canonical_name": "Cable Kickback",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Glutes",
+    "secondary_muscles": [
+      "Hamstrings"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable kickback",
+      "kickback"
+    ]
+  },
+  {
+    "canonical_name": "Cable Front Raise",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable front raise",
+      "front raise"
+    ]
+  },
+  {
+    "canonical_name": "Cable Reverse Fly",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Upper Back"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable reverse fly",
+      "reverse fly"
+    ]
+  },
+  {
+    "canonical_name": "Cable External Rotation",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable external rotation",
+      "external rotation"
+    ]
+  },
+  {
+    "canonical_name": "Cable Internal Rotation",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable internal rotation",
+      "internal rotation"
+    ]
+  },
+  {
+    "canonical_name": "Cable Wrist Curl",
+    "equipment_type": "CABLE",
     "primary_muscle": "Forearms",
     "secondary_muscles": [],
     "weight_mode_default": "TOTAL",
     "aliases": [
-      "wrist curl",
-      "wrist curl machine"
+      "cable wrist curl",
+      "wrist curl"
+    ]
+  },
+  {
+    "canonical_name": "Cable Wrist Extension",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Forearms",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable wrist extension",
+      "wrist extension"
+    ]
+  },
+  {
+    "canonical_name": "High Cable Fly",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "high cable fly",
+      "high fly"
+    ]
+  },
+  {
+    "canonical_name": "Low Cable Fly",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "low cable fly",
+      "low fly"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Cable Fly",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-arm cable fly",
+      "single-arm fly"
+    ]
+  },
+  {
+    "canonical_name": "Seated Dumbbell Row",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "seated dumbbell row",
+      "seated row"
+    ]
+  },
+  {
+    "canonical_name": "Standing Dumbbell Row",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "standing dumbbell row",
+      "standing row"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Dumbbell Row",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "single-arm dumbbell row",
+      "single-arm row"
+    ]
+  },
+  {
+    "canonical_name": "Single-Leg Dumbbell Row",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "single-leg dumbbell row",
+      "single-leg row"
+    ]
+  },
+  {
+    "canonical_name": "Incline Dumbbell Row",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "incline dumbbell row",
+      "incline row"
+    ]
+  },
+  {
+    "canonical_name": "Decline Dumbbell Row",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "decline dumbbell row",
+      "decline row"
+    ]
+  },
+  {
+    "canonical_name": "Seated Dumbbell Curl",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "seated dumbbell curl",
+      "seated curl"
+    ]
+  },
+  {
+    "canonical_name": "Standing Dumbbell Curl",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "standing dumbbell curl",
+      "standing curl"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Dumbbell Curl",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "single-arm dumbbell curl",
+      "single-arm curl"
+    ]
+  },
+  {
+    "canonical_name": "Single-Leg Dumbbell Curl",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "single-leg dumbbell curl",
+      "single-leg curl"
+    ]
+  },
+  {
+    "canonical_name": "Incline Dumbbell Curl",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "incline dumbbell curl",
+      "incline curl"
+    ]
+  },
+  {
+    "canonical_name": "Decline Dumbbell Curl",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "decline dumbbell curl",
+      "decline curl"
+    ]
+  },
+  {
+    "canonical_name": "Seated Dumbbell Shoulder Press",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "seated dumbbell shoulder press",
+      "seated shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Standing Dumbbell Shoulder Press",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "standing dumbbell shoulder press",
+      "standing shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Dumbbell Shoulder Press",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "single-arm dumbbell shoulder press",
+      "single-arm shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Single-Leg Dumbbell Shoulder Press",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "single-leg dumbbell shoulder press",
+      "single-leg shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Incline Dumbbell Shoulder Press",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "incline dumbbell shoulder press",
+      "incline shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Decline Dumbbell Shoulder Press",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "decline dumbbell shoulder press",
+      "decline shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Seated Dumbbell Lateral Raise",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "seated dumbbell lateral raise",
+      "seated lateral raise"
+    ]
+  },
+  {
+    "canonical_name": "Standing Dumbbell Lateral Raise",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "standing dumbbell lateral raise",
+      "standing lateral raise"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Dumbbell Lateral Raise",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "single-arm dumbbell lateral raise",
+      "single-arm lateral raise"
+    ]
+  },
+  {
+    "canonical_name": "Single-Leg Dumbbell Lateral Raise",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "single-leg dumbbell lateral raise",
+      "single-leg lateral raise"
+    ]
+  },
+  {
+    "canonical_name": "Incline Dumbbell Lateral Raise",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "incline dumbbell lateral raise",
+      "incline lateral raise"
+    ]
+  },
+  {
+    "canonical_name": "Decline Dumbbell Lateral Raise",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "decline dumbbell lateral raise",
+      "decline lateral raise"
+    ]
+  },
+  {
+    "canonical_name": "Standing Cable Row",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "standing cable row",
+      "standing row"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Cable Row",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-arm cable row",
+      "single-arm row"
+    ]
+  },
+  {
+    "canonical_name": "Single-Leg Cable Row",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-leg cable row",
+      "single-leg row"
+    ]
+  },
+  {
+    "canonical_name": "Incline Cable Row",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "incline cable row",
+      "incline row"
+    ]
+  },
+  {
+    "canonical_name": "Decline Cable Row",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "decline cable row",
+      "decline row"
+    ]
+  },
+  {
+    "canonical_name": "Seated Cable Curl",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "seated cable curl",
+      "seated curl"
+    ]
+  },
+  {
+    "canonical_name": "Standing Cable Curl",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "standing cable curl",
+      "standing curl"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Cable Curl",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-arm cable curl",
+      "single-arm curl"
+    ]
+  },
+  {
+    "canonical_name": "Single-Leg Cable Curl",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-leg cable curl",
+      "single-leg curl"
+    ]
+  },
+  {
+    "canonical_name": "Incline Cable Curl",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "incline cable curl",
+      "incline curl"
+    ]
+  },
+  {
+    "canonical_name": "Decline Cable Curl",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "decline cable curl",
+      "decline curl"
+    ]
+  },
+  {
+    "canonical_name": "Seated Cable Chest Fly",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "seated cable chest fly",
+      "seated chest fly"
+    ]
+  },
+  {
+    "canonical_name": "Standing Cable Chest Fly",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "standing cable chest fly",
+      "standing chest fly"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Cable Chest Fly",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-arm cable chest fly",
+      "single-arm chest fly"
+    ]
+  },
+  {
+    "canonical_name": "Single-Leg Cable Chest Fly",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-leg cable chest fly",
+      "single-leg chest fly"
+    ]
+  },
+  {
+    "canonical_name": "Incline Cable Chest Fly",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "incline cable chest fly",
+      "incline chest fly"
+    ]
+  },
+  {
+    "canonical_name": "Decline Cable Chest Fly",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "decline cable chest fly",
+      "decline chest fly"
+    ]
+  },
+  {
+    "canonical_name": "Seated Cable Chest Press",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "seated cable chest press",
+      "seated chest press"
+    ]
+  },
+  {
+    "canonical_name": "Standing Cable Chest Press",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "standing cable chest press",
+      "standing chest press"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Cable Chest Press",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-arm cable chest press",
+      "single-arm chest press"
+    ]
+  },
+  {
+    "canonical_name": "Single-Leg Cable Chest Press",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-leg cable chest press",
+      "single-leg chest press"
+    ]
+  },
+  {
+    "canonical_name": "Incline Cable Chest Press",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "incline cable chest press",
+      "incline chest press"
+    ]
+  },
+  {
+    "canonical_name": "Decline Cable Chest Press",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "decline cable chest press",
+      "decline chest press"
+    ]
+  },
+  {
+    "canonical_name": "Machine Chest Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "machine chest press",
+      "chest press"
+    ]
+  },
+  {
+    "canonical_name": "Seated Machine Chest Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "seated machine chest press",
+      "seated chest press"
+    ]
+  },
+  {
+    "canonical_name": "Standing Machine Chest Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "standing machine chest press",
+      "standing chest press"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Machine Chest Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-arm machine chest press",
+      "single-arm chest press"
+    ]
+  },
+  {
+    "canonical_name": "Single-Leg Machine Chest Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-leg machine chest press",
+      "single-leg chest press"
+    ]
+  },
+  {
+    "canonical_name": "Incline Machine Chest Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "incline machine chest press",
+      "incline chest press"
+    ]
+  },
+  {
+    "canonical_name": "Decline Machine Chest Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "decline machine chest press",
+      "decline chest press"
+    ]
+  },
+  {
+    "canonical_name": "Machine Shoulder Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "machine shoulder press",
+      "shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Seated Machine Shoulder Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "seated machine shoulder press",
+      "seated shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Standing Machine Shoulder Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "standing machine shoulder press",
+      "standing shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Machine Shoulder Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-arm machine shoulder press",
+      "single-arm shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Single-Leg Machine Shoulder Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-leg machine shoulder press",
+      "single-leg shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Incline Machine Shoulder Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "incline machine shoulder press",
+      "incline shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Decline Machine Shoulder Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "decline machine shoulder press",
+      "decline shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Seated Seated Leg Curl Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Hamstrings",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "seated seated leg curl machine",
+      "seated seated leg curl"
+    ]
+  },
+  {
+    "canonical_name": "Standing Seated Leg Curl Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Hamstrings",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "standing seated leg curl machine",
+      "standing seated leg curl"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Seated Leg Curl Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Hamstrings",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-arm seated leg curl machine",
+      "single-arm seated leg curl"
+    ]
+  },
+  {
+    "canonical_name": "Single-Leg Seated Leg Curl Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Hamstrings",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-leg seated leg curl machine",
+      "single-leg seated leg curl"
+    ]
+  },
+  {
+    "canonical_name": "Incline Seated Leg Curl Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Hamstrings",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "incline seated leg curl machine",
+      "incline seated leg curl"
+    ]
+  },
+  {
+    "canonical_name": "Decline Seated Leg Curl Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Hamstrings",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "decline seated leg curl machine",
+      "decline seated leg curl"
+    ]
+  },
+  {
+    "canonical_name": "Seated Leg Extension Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "seated leg extension machine",
+      "seated leg extension"
+    ]
+  },
+  {
+    "canonical_name": "Standing Leg Extension Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "standing leg extension machine",
+      "standing leg extension"
+    ]
+  },
+  {
+    "canonical_name": "Single-Arm Leg Extension Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-arm leg extension machine",
+      "single-arm leg extension"
+    ]
+  },
+  {
+    "canonical_name": "Single-Leg Leg Extension Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single-leg leg extension machine",
+      "single-leg leg extension"
+    ]
+  },
+  {
+    "canonical_name": "Incline Leg Extension Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "incline leg extension machine",
+      "incline leg extension"
+    ]
+  },
+  {
+    "canonical_name": "Decline Leg Extension Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "decline leg extension machine",
+      "decline leg extension"
+    ]
+  },
+  {
+    "canonical_name": "Plate Loaded Chest Press Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "plate loaded chest press machine",
+      "plate loaded chest press",
+      "chest press machine"
+    ]
+  },
+  {
+    "canonical_name": "Selectorized Chest Press Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "selectorized chest press machine",
+      "selectorized chest press",
+      "chest press machine"
+    ]
+  },
+  {
+    "canonical_name": "Plate Loaded Shoulder Press Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "plate loaded shoulder press machine",
+      "plate loaded shoulder press",
+      "shoulder press machine"
+    ]
+  },
+  {
+    "canonical_name": "Selectorized Shoulder Press Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "selectorized shoulder press machine",
+      "selectorized shoulder press",
+      "shoulder press machine"
+    ]
+  },
+  {
+    "canonical_name": "Plate Loaded Row Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "plate loaded row machine",
+      "plate loaded row",
+      "row machine"
+    ]
+  },
+  {
+    "canonical_name": "Selectorized Row Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "selectorized row machine",
+      "selectorized row",
+      "row machine"
+    ]
+  },
+  {
+    "canonical_name": "Plate Loaded Lat Pulldown Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "plate loaded lat pulldown machine",
+      "plate loaded lat pulldown",
+      "lat pulldown machine"
+    ]
+  },
+  {
+    "canonical_name": "Selectorized Lat Pulldown Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "selectorized lat pulldown machine",
+      "selectorized lat pulldown",
+      "lat pulldown machine"
+    ]
+  },
+  {
+    "canonical_name": "Plate Loaded Leg Press Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [
+      "Glutes"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "plate loaded leg press machine",
+      "plate loaded leg press",
+      "leg press machine"
+    ]
+  },
+  {
+    "canonical_name": "Selectorized Leg Press Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [
+      "Glutes"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "selectorized leg press machine",
+      "selectorized leg press",
+      "leg press machine"
+    ]
+  },
+  {
+    "canonical_name": "Plate Loaded Hack Squat Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [
+      "Glutes"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "plate loaded hack squat machine",
+      "plate loaded hack squat",
+      "hack squat machine"
+    ]
+  },
+  {
+    "canonical_name": "Selectorized Hack Squat Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [
+      "Glutes"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "selectorized hack squat machine",
+      "selectorized hack squat",
+      "hack squat machine"
+    ]
+  },
+  {
+    "canonical_name": "Plate Loaded Biceps Curl Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "plate loaded biceps curl machine",
+      "plate loaded biceps curl",
+      "biceps curl machine"
+    ]
+  },
+  {
+    "canonical_name": "Selectorized Biceps Curl Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "selectorized biceps curl machine",
+      "selectorized biceps curl",
+      "biceps curl machine"
+    ]
+  },
+  {
+    "canonical_name": "Plate Loaded Triceps Extension Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Shoulders"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "plate loaded triceps extension machine",
+      "plate loaded triceps extension",
+      "triceps extension machine"
+    ]
+  },
+  {
+    "canonical_name": "Selectorized Triceps Extension Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Arms",
+    "secondary_muscles": [
+      "Shoulders"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "selectorized triceps extension machine",
+      "selectorized triceps extension",
+      "triceps extension machine"
+    ]
+  },
+  {
+    "canonical_name": "Plate Loaded Leg Extension Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "plate loaded leg extension machine",
+      "plate loaded leg extension",
+      "leg extension machine"
+    ]
+  },
+  {
+    "canonical_name": "Selectorized Leg Extension Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "selectorized leg extension machine",
+      "selectorized leg extension",
+      "leg extension machine"
+    ]
+  },
+  {
+    "canonical_name": "Plate Loaded Leg Curl Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Hamstrings",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "plate loaded leg curl machine",
+      "plate loaded leg curl",
+      "leg curl machine"
+    ]
+  },
+  {
+    "canonical_name": "Selectorized Leg Curl Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Hamstrings",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "selectorized leg curl machine",
+      "selectorized leg curl",
+      "leg curl machine"
+    ]
+  },
+  {
+    "canonical_name": "Plate Loaded Calf Raise Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Calves",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "plate loaded calf raise machine",
+      "plate loaded calf raise",
+      "calf raise machine"
+    ]
+  },
+  {
+    "canonical_name": "Selectorized Calf Raise Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Calves",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "selectorized calf raise machine",
+      "selectorized calf raise",
+      "calf raise machine"
+    ]
+  },
+  {
+    "canonical_name": "Plate Loaded Hip Abduction Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Glutes",
+    "secondary_muscles": [
+      "Quads"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "plate loaded hip abduction machine",
+      "plate loaded hip abduction",
+      "hip abduction machine"
+    ]
+  },
+  {
+    "canonical_name": "Selectorized Hip Abduction Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Glutes",
+    "secondary_muscles": [
+      "Quads"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "selectorized hip abduction machine",
+      "selectorized hip abduction",
+      "hip abduction machine"
+    ]
+  },
+  {
+    "canonical_name": "Plate Loaded Hip Adduction Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Adductors",
+    "secondary_muscles": [
+      "Quads"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "plate loaded hip adduction machine",
+      "plate loaded hip adduction",
+      "hip adduction machine"
+    ]
+  },
+  {
+    "canonical_name": "Selectorized Hip Adduction Machine",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Adductors",
+    "secondary_muscles": [
+      "Quads"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "selectorized hip adduction machine",
+      "selectorized hip adduction",
+      "hip adduction machine"
     ]
   }
 ]

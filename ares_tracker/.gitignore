@@ -32,6 +32,9 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+linux/lib/libvosk.so
+assets/models/llm/*.gguf
+third_party/llama.cpp/
 
 # Symbolication related
 app.*.symbols

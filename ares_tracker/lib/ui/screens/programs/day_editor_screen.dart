@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../data/db/db.dart';
 import '../../../data/repositories/exercise_repo.dart';
 import '../../../data/repositories/program_repo.dart';
+import '../history/history_screen.dart';
 
 class DayEditorScreen extends StatefulWidget {
   const DayEditorScreen({super.key, required this.programDayId, required this.programId});
@@ -191,7 +192,7 @@ class _DayEditorScreenState extends State<DayEditorScreen> {
                     return ListTile(
                       tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                       title: Text(name),
-                      subtitle: const Text('Tap to edit set blocks'),
+                      subtitle: const Text('Edit blocks or view stats'),
                       onTap: () async {
                         await showModalBottomSheet<void>(
                           context: context,
@@ -204,12 +205,24 @@ class _DayEditorScreenState extends State<DayEditorScreen> {
                         );
                         setState(() {});
                       },
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () async {
-                          await _programRepo.deleteProgramDayExercise(programDayExerciseId);
-                          setState(() {});
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (value) async {
+                          if (value == 'stats') {
+                            if (!mounted) return;
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => HistoryScreen(initialExerciseId: row['exercise_id'] as int),
+                              ),
+                            );
+                          } else if (value == 'delete') {
+                            await _programRepo.deleteProgramDayExercise(programDayExerciseId);
+                            setState(() {});
+                          }
                         },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'stats', child: Text('View stats')),
+                          PopupMenuItem(value: 'delete', child: Text('Remove')),
+                        ],
                       ),
                     );
                   },
@@ -300,6 +313,17 @@ class _ExerciseSearchSheetState extends State<_ExerciseSearchSheet> {
                 return ListTile(
                   title: Text(item['canonical_name'] as String),
                   subtitle: Text(item['equipment_type'] as String),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.show_chart),
+                    onPressed: () async {
+                      if (!mounted) return;
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => HistoryScreen(initialExerciseId: item['id'] as int),
+                        ),
+                      );
+                    },
+                  ),
                   onTap: () => Navigator.of(context).pop(item),
                 );
               },
@@ -361,6 +385,12 @@ class _SetPlanEditorSheetState extends State<_SetPlanEditorSheet> {
         loadRuleMin: null,
         loadRuleMax: null,
         amrapLastSet: false,
+        targetRpeMin: null,
+        targetRpeMax: null,
+        targetRirMin: null,
+        targetRirMax: null,
+        partialsTargetMin: null,
+        partialsTargetMax: null,
       ));
     });
   }
@@ -506,6 +536,66 @@ class _SetPlanEditorSheetState extends State<_SetPlanEditorSheet> {
                             ],
                           ),
                           const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: block.targetRpeMinController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(labelText: 'RPE min'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: block.targetRpeMaxController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(labelText: 'RPE max'),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: block.targetRirMinController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(labelText: 'RIR min'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: block.targetRirMaxController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(labelText: 'RIR max'),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: block.partialsTargetMinController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(labelText: 'Partials min'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: block.partialsTargetMaxController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(labelText: 'Partials max'),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
                           SwitchListTile(
                             contentPadding: EdgeInsets.zero,
                             title: const Text('AMRAP last set'),
@@ -554,13 +644,25 @@ class _BlockModel {
     required this.loadRuleMin,
     required this.loadRuleMax,
     required this.amrapLastSet,
+    required this.targetRpeMin,
+    required this.targetRpeMax,
+    required this.targetRirMin,
+    required this.targetRirMax,
+    required this.partialsTargetMin,
+    required this.partialsTargetMax,
   })  : setCountController = TextEditingController(text: setCount.toString()),
         repsMinController = TextEditingController(text: repsMin?.toString() ?? ''),
         repsMaxController = TextEditingController(text: repsMax?.toString() ?? ''),
         restMinController = TextEditingController(text: restMin?.toString() ?? ''),
         restMaxController = TextEditingController(text: restMax?.toString() ?? ''),
         loadRuleMinController = TextEditingController(text: loadRuleMin?.toString() ?? ''),
-        loadRuleMaxController = TextEditingController(text: loadRuleMax?.toString() ?? '');
+        loadRuleMaxController = TextEditingController(text: loadRuleMax?.toString() ?? ''),
+        targetRpeMinController = TextEditingController(text: targetRpeMin?.toString() ?? ''),
+        targetRpeMaxController = TextEditingController(text: targetRpeMax?.toString() ?? ''),
+        targetRirMinController = TextEditingController(text: targetRirMin?.toString() ?? ''),
+        targetRirMaxController = TextEditingController(text: targetRirMax?.toString() ?? ''),
+        partialsTargetMinController = TextEditingController(text: partialsTargetMin?.toString() ?? ''),
+        partialsTargetMaxController = TextEditingController(text: partialsTargetMax?.toString() ?? '');
 
   int orderIndex;
   String role;
@@ -573,6 +675,12 @@ class _BlockModel {
   double? loadRuleMin;
   double? loadRuleMax;
   bool amrapLastSet;
+  double? targetRpeMin;
+  double? targetRpeMax;
+  double? targetRirMin;
+  double? targetRirMax;
+  int? partialsTargetMin;
+  int? partialsTargetMax;
 
   final TextEditingController setCountController;
   final TextEditingController repsMinController;
@@ -581,6 +689,12 @@ class _BlockModel {
   final TextEditingController restMaxController;
   final TextEditingController loadRuleMinController;
   final TextEditingController loadRuleMaxController;
+  final TextEditingController targetRpeMinController;
+  final TextEditingController targetRpeMaxController;
+  final TextEditingController targetRirMinController;
+  final TextEditingController targetRirMaxController;
+  final TextEditingController partialsTargetMinController;
+  final TextEditingController partialsTargetMaxController;
 
   factory _BlockModel.fromRow(Map<String, Object?> row) {
     return _BlockModel(
@@ -595,6 +709,12 @@ class _BlockModel {
       loadRuleMin: row['load_rule_min'] as double?,
       loadRuleMax: row['load_rule_max'] as double?,
       amrapLastSet: (row['amrap_last_set'] as int? ?? 0) == 1,
+      targetRpeMin: row['target_rpe_min'] as double?,
+      targetRpeMax: row['target_rpe_max'] as double?,
+      targetRirMin: row['target_rir_min'] as double?,
+      targetRirMax: row['target_rir_max'] as double?,
+      partialsTargetMin: row['partials_target_min'] as int?,
+      partialsTargetMax: row['partials_target_max'] as int?,
     );
   }
 
@@ -608,16 +728,16 @@ class _BlockModel {
       'reps_max': int.tryParse(repsMaxController.text.trim()),
       'rest_sec_min': int.tryParse(restMinController.text.trim()),
       'rest_sec_max': int.tryParse(restMaxController.text.trim()),
-      'target_rpe_min': null,
-      'target_rpe_max': null,
-      'target_rir_min': null,
-      'target_rir_max': null,
+      'target_rpe_min': double.tryParse(targetRpeMinController.text.trim()),
+      'target_rpe_max': double.tryParse(targetRpeMaxController.text.trim()),
+      'target_rir_min': double.tryParse(targetRirMinController.text.trim()),
+      'target_rir_max': double.tryParse(targetRirMaxController.text.trim()),
       'load_rule_type': loadRuleType,
       'load_rule_min': double.tryParse(loadRuleMinController.text.trim()),
       'load_rule_max': double.tryParse(loadRuleMaxController.text.trim()),
       'amrap_last_set': amrapLastSet ? 1 : 0,
-      'partials_target_min': null,
-      'partials_target_max': null,
+      'partials_target_min': int.tryParse(partialsTargetMinController.text.trim()),
+      'partials_target_max': int.tryParse(partialsTargetMaxController.text.trim()),
       'notes': null,
     };
   }

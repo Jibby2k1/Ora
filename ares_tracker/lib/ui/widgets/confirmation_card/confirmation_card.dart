@@ -8,6 +8,7 @@ class ConfirmationCard extends StatelessWidget {
     required this.lastLogged,
     required this.onUndo,
     required this.onRedo,
+    required this.onStartRest,
     required this.undoCount,
     required this.redoCount,
   });
@@ -15,6 +16,7 @@ class ConfirmationCard extends StatelessWidget {
   final LastLoggedSet lastLogged;
   final VoidCallback onUndo;
   final VoidCallback onRedo;
+  final VoidCallback onStartRest;
   final int undoCount;
   final int redoCount;
 
@@ -37,6 +39,10 @@ class ConfirmationCard extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
+                TextButton(
+                  onPressed: onStartRest,
+                  child: const Text('Start Timer'),
+                ),
                 IconButton(
                   onPressed: undoCount > 0 ? onUndo : null,
                   icon: const Icon(Icons.undo),

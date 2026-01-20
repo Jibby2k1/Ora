@@ -21,6 +21,34 @@ class ProgramRepo {
     return db.query('program', orderBy: 'created_at DESC');
   }
 
+  Future<void> deleteProgram(int programId) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      await txn.update('workout_session', {
+        'program_id': null,
+        'program_day_id': null,
+      }, where: 'program_id = ?', whereArgs: [programId]);
+
+      final days = await txn.query('program_day', columns: ['id'], where: 'program_id = ?', whereArgs: [programId]);
+      for (final day in days) {
+        final dayId = day['id'] as int;
+        final exercises = await txn.query(
+          'program_day_exercise',
+          columns: ['id'],
+          where: 'program_day_id = ?',
+          whereArgs: [dayId],
+        );
+        for (final ex in exercises) {
+          final dayExerciseId = ex['id'] as int;
+          await txn.delete('set_plan_block', where: 'program_day_exercise_id = ?', whereArgs: [dayExerciseId]);
+        }
+        await txn.delete('program_day_exercise', where: 'program_day_id = ?', whereArgs: [dayId]);
+      }
+      await txn.delete('program_day', where: 'program_id = ?', whereArgs: [programId]);
+      await txn.delete('program', where: 'id = ?', whereArgs: [programId]);
+    });
+  }
+
   Future<void> updateProgram({required int id, required String name, String? notes}) async {
     final db = await _db.database;
     await db.update(

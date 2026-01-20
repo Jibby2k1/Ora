@@ -46,6 +46,26 @@ class ExerciseRepo {
     }).toList();
   }
 
+  Future<int> createExercise({
+    required String canonicalName,
+    required String equipmentType,
+    required String weightModeDefault,
+    String? primaryMuscle,
+    List<String>? secondaryMuscles,
+    bool isBuiltin = false,
+  }) async {
+    final db = await _db.database;
+    return db.insert('exercise', {
+      'canonical_name': canonicalName,
+      'equipment_type': equipmentType,
+      'primary_muscle': primaryMuscle,
+      'secondary_muscles_json': jsonEncode(secondaryMuscles ?? []),
+      'is_builtin': isBuiltin ? 1 : 0,
+      'weight_mode_default': weightModeDefault,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
   Future<List<Map<String, Object?>>> search(String query, {int limit = 50}) async {
     final db = await _db.database;
     final normalized = query.toLowerCase().trim();

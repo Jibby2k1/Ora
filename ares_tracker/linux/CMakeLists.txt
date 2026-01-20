@@ -2,6 +2,24 @@
 cmake_minimum_required(VERSION 3.13)
 project(runner LANGUAGES CXX)
 
+# Ensure the Vosk native library is present for desktop voice.
+set(VOSK_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/libvosk.so")
+if(NOT EXISTS "${VOSK_LIB_PATH}")
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_FOUND)
+    execute_process(
+      COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../tool/fetch_vosk_linux.py"
+      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+      RESULT_VARIABLE VOSK_FETCH_RESULT
+    )
+    if(NOT VOSK_FETCH_RESULT EQUAL 0)
+      message(WARNING "Vosk lib download failed (exit ${VOSK_FETCH_RESULT}). Voice may be unavailable. Run tool/fetch_vosk_linux.py manually.")
+    endif()
+  else()
+    message(WARNING "Python3 not found. Skipping Vosk lib download. Run tool/fetch_vosk_linux.py manually.")
+  endif()
+endif()
+
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
 set(BINARY_NAME "ares_tracker_tmp")
@@ -93,6 +111,11 @@ set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
+
+if(EXISTS "${VOSK_LIB_PATH}")
+  install(FILES "${VOSK_LIB_PATH}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
