@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../../data/db/db.dart';
 import '../../../data/repositories/exercise_repo.dart';
 import '../../../data/repositories/workout_repo.dart';
+import '../../widgets/glass/glass_background.dart';
+import '../../widgets/glass/glass_card.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key, this.initialExerciseId});
@@ -133,120 +135,130 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            FutureBuilder<List<Map<String, Object?>>>(
-              future: _exerciseFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const SizedBox(height: 0);
-                }
-                final exercises = snapshot.data ?? [];
-                if (exercises.isEmpty) return const SizedBox(height: 0);
-                if (_selectedExercise == null) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    final initial = widget.initialExerciseId == null
-                        ? exercises.first
-                        : exercises.firstWhere(
-                            (ex) => ex['id'] == widget.initialExerciseId,
-                            orElse: () => exercises.first,
-                          );
-                    setState(() {
-                      _selectedExercise = initial;
-                    });
-                  });
-                }
-                return const SizedBox(height: 0);
-              },
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: FutureBuilder<_HistoryData>(
-                future: _loadData(),
-                builder: (context, snapshot) {
-                  final data = snapshot.data;
-                  if (_selectedExercise == null) {
-                    return const Center(child: Text('Select an exercise to view history.'));
-                  }
-                  if (snapshot.connectionState != ConnectionState.done) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (data == null || data.sets.isEmpty) {
-                    return const Center(child: Text('No sets in this range.'));
-                  }
+      body: Stack(
+        children: [
+          const GlassBackground(),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                FutureBuilder<List<Map<String, Object?>>>(
+                  future: _exerciseFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState != ConnectionState.done) {
+                      return const SizedBox(height: 0);
+                    }
+                    final exercises = snapshot.data ?? [];
+                    if (exercises.isEmpty) return const SizedBox(height: 0);
+                    if (_selectedExercise == null) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        final initial = widget.initialExerciseId == null
+                            ? exercises.first
+                            : exercises.firstWhere(
+                                (ex) => ex['id'] == widget.initialExerciseId,
+                                orElse: () => exercises.first,
+                              );
+                        setState(() {
+                          _selectedExercise = initial;
+                        });
+                      });
+                    }
+                    return const SizedBox(height: 0);
+                  },
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: FutureBuilder<_HistoryData>(
+                    future: _loadData(),
+                    builder: (context, snapshot) {
+                      final data = snapshot.data;
+                      if (_selectedExercise == null) {
+                        return const Center(child: Text('Select an exercise to view history.'));
+                      }
+                      if (snapshot.connectionState != ConnectionState.done) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (data == null || data.sets.isEmpty) {
+                        return const Center(child: Text('No sets in this range.'));
+                      }
 
-                  final series = _buildSeries(data.sets, metric: _metric);
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        data.exerciseName,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        height: 180,
-                        child: LineChart(
-                          LineChartData(
-                            gridData: const FlGridData(show: true),
-                            titlesData: FlTitlesData(
-                              leftTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                  showTitles: true,
-                                  reservedSize: 40,
-                                  getTitlesWidget: (value, meta) {
-                                    if (value == series.minY || value == series.maxY) {
-                                      return Text(value.toStringAsFixed(0));
-                                    }
-                                    return const SizedBox.shrink();
-                                  },
-                                ),
-                              ),
-                              bottomTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                  showTitles: true,
-                                  reservedSize: 28,
-                                  getTitlesWidget: (value, meta) {
-                                    final idx = value.toInt();
-                                    if (idx == 0 || idx == series.labels.length ~/ 2 || idx == series.labels.length - 1) {
-                                      return Text(series.labels[idx], style: const TextStyle(fontSize: 10));
-                                    }
-                                    return const SizedBox.shrink();
-                                  },
-                                ),
-                              ),
-                              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      final series = _buildSeries(data.sets, metric: _metric);
+                      return GlassCard(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              data.exerciseName,
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                             ),
-                            borderData: FlBorderData(show: false),
-                            lineBarsData: [
-                              LineChartBarData(
-                                spots: series.spots,
-                                isCurved: true,
-                                color: Theme.of(context).colorScheme.primary,
-                                dotData: const FlDotData(show: false),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              height: 180,
+                              child: LineChart(
+                                LineChartData(
+                                  gridData: const FlGridData(show: true),
+                                  titlesData: FlTitlesData(
+                                    leftTitles: AxisTitles(
+                                      sideTitles: SideTitles(
+                                        showTitles: true,
+                                        reservedSize: 40,
+                                        getTitlesWidget: (value, meta) {
+                                          if (value == series.minY || value == series.maxY) {
+                                            return Text(value.toStringAsFixed(0));
+                                          }
+                                          return const SizedBox.shrink();
+                                        },
+                                      ),
+                                    ),
+                                    bottomTitles: AxisTitles(
+                                      sideTitles: SideTitles(
+                                        showTitles: true,
+                                        reservedSize: 28,
+                                        getTitlesWidget: (value, meta) {
+                                          final idx = value.toInt();
+                                          if (idx == 0 ||
+                                              idx == series.labels.length ~/ 2 ||
+                                              idx == series.labels.length - 1) {
+                                            return Text(series.labels[idx], style: const TextStyle(fontSize: 10));
+                                          }
+                                          return const SizedBox.shrink();
+                                        },
+                                      ),
+                                    ),
+                                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                  ),
+                                  borderData: FlBorderData(show: false),
+                                  lineBarsData: [
+                                    LineChartBarData(
+                                      spots: series.spots,
+                                      isCurved: true,
+                                      color: Theme.of(context).colorScheme.primary,
+                                      dotData: const FlDotData(show: false),
+                                    ),
+                                  ],
+                                  minY: series.minY,
+                                  maxY: series.maxY,
+                                ),
                               ),
-                            ],
-                            minY: series.minY,
-                            maxY: series.maxY,
-                          ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text('Total sets: ${data.sets.length}'),
+                            if (series.latestWeight != null)
+                              Text('Latest: ${series.latestWeight} lb x ${series.latestReps ?? '-'}'),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text('Total sets: ${data.sets.length}'),
-                      if (series.latestWeight != null)
-                        Text('Latest: ${series.latestWeight} lb x ${series.latestReps ?? '-'}'),
-                    ],
-                  );
-                },
-              ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

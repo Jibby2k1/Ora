@@ -4,6 +4,8 @@ import '../../../data/db/db.dart';
 import '../../../data/repositories/exercise_repo.dart';
 import '../../../data/repositories/program_repo.dart';
 import '../history/history_screen.dart';
+import '../../widgets/glass/glass_background.dart';
+import '../../widgets/glass/glass_card.dart';
 
 class DayEditorScreen extends StatefulWidget {
   const DayEditorScreen({super.key, required this.programDayId, required this.programId});
@@ -161,17 +163,20 @@ class _DayEditorScreenState extends State<DayEditorScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _dayNameController,
-              decoration: const InputDecoration(labelText: 'Day name'),
-            ),
-          ),
-          Expanded(
-            child: FutureBuilder<List<Map<String, Object?>>>(
+          const GlassBackground(),
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: TextField(
+                  controller: _dayNameController,
+                  decoration: const InputDecoration(labelText: 'Day name'),
+                ),
+              ),
+              Expanded(
+                child: FutureBuilder<List<Map<String, Object?>>>(
               future: _programRepo.getProgramDayExerciseDetails(widget.programDayId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState != ConnectionState.done) {
@@ -189,40 +194,42 @@ class _DayEditorScreenState extends State<DayEditorScreen> {
                     final row = exercises[index];
                     final name = row['canonical_name'] as String;
                     final programDayExerciseId = row['program_day_exercise_id'] as int;
-                    return ListTile(
-                      tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      title: Text(name),
-                      subtitle: const Text('Edit blocks or view stats'),
-                      onTap: () async {
-                        await showModalBottomSheet<void>(
-                          context: context,
-                          isScrollControlled: true,
-                          builder: (_) => _SetPlanEditorSheet(
-                            programRepo: _programRepo,
-                            programDayExerciseId: programDayExerciseId,
-                            exerciseName: name,
-                          ),
-                        );
-                        setState(() {});
-                      },
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (value) async {
-                          if (value == 'stats') {
-                            if (!mounted) return;
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => HistoryScreen(initialExerciseId: row['exercise_id'] as int),
-                              ),
-                            );
-                          } else if (value == 'delete') {
-                            await _programRepo.deleteProgramDayExercise(programDayExerciseId);
-                            setState(() {});
-                          }
+                    return GlassCard(
+                      padding: EdgeInsets.zero,
+                      child: ListTile(
+                        title: Text(name),
+                        subtitle: const Text('Edit blocks or view stats'),
+                        onTap: () async {
+                          await showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            builder: (_) => _SetPlanEditorSheet(
+                              programRepo: _programRepo,
+                              programDayExerciseId: programDayExerciseId,
+                              exerciseName: name,
+                            ),
+                          );
+                          setState(() {});
                         },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(value: 'stats', child: Text('View stats')),
-                          PopupMenuItem(value: 'delete', child: Text('Remove')),
-                        ],
+                        trailing: PopupMenuButton<String>(
+                          onSelected: (value) async {
+                            if (value == 'stats') {
+                              if (!mounted) return;
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => HistoryScreen(initialExerciseId: row['exercise_id'] as int),
+                                ),
+                              );
+                            } else if (value == 'delete') {
+                              await _programRepo.deleteProgramDayExercise(programDayExerciseId);
+                              setState(() {});
+                            }
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(value: 'stats', child: Text('View stats')),
+                            PopupMenuItem(value: 'delete', child: Text('Remove')),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -230,12 +237,21 @@ class _DayEditorScreenState extends State<DayEditorScreen> {
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: ElevatedButton(
-              onPressed: _addExercise,
-              child: const Text('Add Exercise'),
-            ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: GlassCard(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.add_circle_outline),
+                      const SizedBox(width: 12),
+                      const Expanded(child: Text('Add Exercise')),
+                      TextButton(onPressed: _addExercise, child: const Text('Add')),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

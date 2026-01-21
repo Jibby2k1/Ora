@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'core/theme/app_theme.dart';
 import 'data/db/db.dart';
 import 'data/seed/demo_history_seed.dart';
 import 'ui/screens/programs/programs_screen.dart';
@@ -18,20 +19,11 @@ class AresApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final darkScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF4F6D7A),
-      brightness: Brightness.dark,
-    );
-
     return MaterialApp(
       title: 'Ares Tracker',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: darkScheme,
-        scaffoldBackgroundColor: darkScheme.surface,
-      ),
+      darkTheme: AppTheme.dark(),
       home: FutureBuilder<void>(
         future: _initFuture,
         builder: (context, snapshot) {

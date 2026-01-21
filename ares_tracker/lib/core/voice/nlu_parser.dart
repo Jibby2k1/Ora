@@ -134,25 +134,10 @@ class NluParser {
   NluLogParts parseLogParts(String input) {
     final text = normalize(input);
     final tail = _parseLogTail(text);
-    var reps = tail.reps;
-    var weight = tail.weight;
-
-    if (reps == null || weight == null) {
-      final numbers = _extractNumbers(text);
-      if (numbers.isNotEmpty) {
-        if (reps == null) {
-          reps = numbers.last.toInt();
-        }
-        if (weight == null && numbers.length >= 2) {
-          weight = numbers[numbers.length - 2];
-        }
-      }
-    }
-
     return NluLogParts(
-      weight: weight,
+      weight: tail.weight,
       weightUnit: tail.weightUnit,
-      reps: reps,
+      reps: tail.reps,
       partials: tail.partials,
       rpe: tail.rpe,
       rir: tail.rir,
@@ -176,6 +161,11 @@ class NluParser {
       rpe: base.rpe,
       rir: base.rir,
     );
+  }
+
+  List<double> extractNumbers(String input) {
+    final text = normalize(input);
+    return _extractNumbers(text);
   }
 
   NluCommand? _parseLogCommand(String text) {

@@ -5,6 +5,8 @@ import '../../../data/repositories/program_repo.dart';
 import '../../../data/repositories/workout_repo.dart';
 import '../../../domain/services/session_service.dart';
 import '../session/session_screen.dart';
+import '../../widgets/glass/glass_background.dart';
+import '../../widgets/glass/glass_card.dart';
 
 class DayPickerScreen extends StatefulWidget {
   const DayPickerScreen({super.key, required this.programId});
@@ -54,44 +56,62 @@ class _DayPickerScreenState extends State<DayPickerScreen> {
       appBar: AppBar(
         title: const Text('Pick Day'),
       ),
-      body: FutureBuilder<List<Map<String, Object?>>>(
-        future: _programRepo.getProgramDays(widget.programId),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final days = snapshot.data ?? [];
-          if (days.isEmpty) {
-            return const Center(child: Text('No days yet. Add one in the program editor.'));
-          }
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: ElevatedButton(
-                  onPressed: () => _startSmartDay(days),
-                  child: const Text('Start Smart Day'),
-                ),
-              ),
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  itemCount: days.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final day = days[index];
-                    return ListTile(
-                      tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      title: Text(day['day_name'] as String),
-                      subtitle: Text("Day ${(day['day_index'] as int) + 1}"),
-                      onTap: () => _startSession(day['id'] as int),
-                    );
-                  },
-                ),
-              ),
-            ],
-          );
-        },
+      body: Stack(
+        children: [
+          const GlassBackground(),
+          FutureBuilder<List<Map<String, Object?>>>(
+            future: _programRepo.getProgramDays(widget.programId),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final days = snapshot.data ?? [];
+              if (days.isEmpty) {
+                return const Center(child: Text('No days yet. Add one in the program editor.'));
+              }
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: GlassCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.auto_awesome),
+                          const SizedBox(width: 12),
+                          const Expanded(child: Text('Start Smart Day')),
+                          TextButton(
+                            onPressed: () => _startSmartDay(days),
+                            child: const Text('Start'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      itemCount: days.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final day = days[index];
+                        return GlassCard(
+                          padding: EdgeInsets.zero,
+                          child: ListTile(
+                            title: Text(day['day_name'] as String),
+                            subtitle: Text("Day ${(day['day_index'] as int) + 1}"),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => _startSession(day['id'] as int),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }

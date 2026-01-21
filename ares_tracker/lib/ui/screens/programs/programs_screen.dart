@@ -5,7 +5,10 @@ import '../../../data/repositories/program_repo.dart';
 import '../day_picker/day_picker_screen.dart';
 import '../history/exercise_catalog_screen.dart';
 import '../history/history_screen.dart';
+import '../settings/settings_screen.dart';
 import '../../../domain/services/import_service.dart';
+import '../../widgets/glass/glass_background.dart';
+import '../../widgets/glass/glass_card.dart';
 import 'program_editor_screen.dart';
 
 class ProgramsScreen extends StatefulWidget {
@@ -104,71 +107,86 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
             icon: const Icon(Icons.add),
             onPressed: _createProgram,
           ),
-        ],
-      ),
-      body: FutureBuilder<List<Map<String, Object?>>>(
-        future: _programRepo.getPrograms(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final programs = snapshot.data ?? [];
-          if (programs.isEmpty) {
-            return const Center(child: Text('Create your first program.'));
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: programs.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final program = programs[index];
-              final id = program['id'] as int;
-              return ListTile(
-                tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                title: Text(program['name'] as String),
-                subtitle: const Text('Tap to start or edit days'),
-                onTap: () async {
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => DayPickerScreen(programId: id)),
-                  );
-                  setState(() {});
-                },
-                trailing: PopupMenuButton<String>(
-                  onSelected: (value) async {
-                    if (value == 'edit') {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => ProgramEditorScreen(programId: id)),
-                      );
-                      setState(() {});
-                    } else if (value == 'delete') {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (context) {
-                          return AlertDialog(
-                            title: const Text('Delete program?'),
-                            content: const Text('This removes the program and its days. Sessions remain in history.'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-                              ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
-                            ],
-                          );
-                        },
-                      );
-                      if (confirm == true) {
-                        await _programRepo.deleteProgram(id);
-                        setState(() {});
-                      }
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    PopupMenuItem(value: 'delete', child: Text('Delete')),
-                  ],
-                ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
               );
             },
-          );
-        },
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          const GlassBackground(),
+          FutureBuilder<List<Map<String, Object?>>>(
+            future: _programRepo.getPrograms(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final programs = snapshot.data ?? [];
+              if (programs.isEmpty) {
+                return const Center(child: Text('Create your first program.'));
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: programs.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final program = programs[index];
+                  final id = program['id'] as int;
+                  return GlassCard(
+                    padding: EdgeInsets.zero,
+                    child: ListTile(
+                      title: Text(program['name'] as String),
+                      subtitle: const Text('Tap to start or edit days'),
+                      onTap: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => DayPickerScreen(programId: id)),
+                        );
+                        setState(() {});
+                      },
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (value) async {
+                          if (value == 'edit') {
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => ProgramEditorScreen(programId: id)),
+                            );
+                            setState(() {});
+                          } else if (value == 'delete') {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (context) {
+                                return AlertDialog(
+                                  title: const Text('Delete program?'),
+                                  content: const Text('This removes the program and its days. Sessions remain in history.'),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+                                    ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+                                  ],
+                                );
+                              },
+                            );
+                            if (confirm == true) {
+                              await _programRepo.deleteProgram(id);
+                              setState(() {});
+                            }
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'edit', child: Text('Edit')),
+                          PopupMenuItem(value: 'delete', child: Text('Delete')),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ],
       ),
     );
   }

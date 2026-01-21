@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../data/db/db.dart';
 import '../../../data/repositories/exercise_repo.dart';
 import 'history_screen.dart';
+import '../../widgets/glass/glass_background.dart';
+import '../../widgets/glass/glass_card.dart';
 
 class ExerciseCatalogScreen extends StatefulWidget {
   const ExerciseCatalogScreen({super.key});
@@ -53,42 +55,50 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
       appBar: AppBar(
         title: const Text('Exercise Catalog'),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _controller,
-              decoration: const InputDecoration(
-                labelText: 'Search exercises',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: _search,
-            ),
-          ),
-          Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _results.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final item = _results[index];
-                return ListTile(
-                  title: Text(item['canonical_name'] as String),
-                  subtitle: Text(item['equipment_type'] as String),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.show_chart),
-                    onPressed: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => HistoryScreen(initialExerciseId: item['id'] as int),
-                        ),
-                      );
-                    },
+          const GlassBackground(),
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: TextField(
+                  controller: _controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Search exercises',
+                    border: OutlineInputBorder(),
                   ),
-                );
-              },
-            ),
+                  onChanged: _search,
+                ),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _results.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final item = _results[index];
+                    return GlassCard(
+                      padding: EdgeInsets.zero,
+                      child: ListTile(
+                        title: Text(item['canonical_name'] as String),
+                        subtitle: Text(item['equipment_type'] as String),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.show_chart),
+                          onPressed: () async {
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => HistoryScreen(initialExerciseId: item['id'] as int),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ],
       ),

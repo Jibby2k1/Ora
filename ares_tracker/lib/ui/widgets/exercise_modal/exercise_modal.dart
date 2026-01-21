@@ -6,6 +6,7 @@ import '../../../data/repositories/pr_repo.dart';
 import '../../../data/repositories/workout_repo.dart';
 import '../../../domain/models/session_exercise_info.dart';
 import '../../../domain/services/set_plan_service.dart';
+import '../glass/glass_card.dart';
 
 class ExerciseModal extends StatefulWidget {
   const ExerciseModal({
@@ -282,9 +283,11 @@ class _ExerciseModalState extends State<ExerciseModal> {
           final nextLabel = planResult == null ? 'TOP' : planResult.nextRole;
 
           return SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+            child: GlassCard(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                 Text(
                   widget.info.exerciseName,
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
@@ -325,7 +328,8 @@ class _ExerciseModalState extends State<ExerciseModal> {
                       final partials = (set['partial_reps'] as int? ?? 0) > 0;
                       final rpe = set['rpe'];
                       final rir = set['rir'];
-                      return Card(
+                      return GlassCard(
+                        padding: EdgeInsets.zero,
                         child: ListTile(
                           onTap: () => _editSet(set),
                           title: Wrap(
@@ -485,7 +489,8 @@ class _ExerciseModalState extends State<ExerciseModal> {
                   ],
                 ),
                 const SizedBox(height: 16),
-              ],
+                ],
+              ),
             ),
           );
         },

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../data/db/db.dart';
 import '../../../data/repositories/program_repo.dart';
+import '../../widgets/glass/glass_background.dart';
+import '../../widgets/glass/glass_card.dart';
 import 'day_editor_screen.dart';
 
 class ProgramEditorScreen extends StatefulWidget {
@@ -107,60 +109,75 @@ class _ProgramEditorScreenState extends State<ProgramEditorScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Program name'),
-            ),
-          ),
-          Expanded(
-            child: FutureBuilder<List<Map<String, Object?>>>(
-              future: _programRepo.getProgramDays(widget.programId),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final days = snapshot.data ?? [];
-                if (days.isEmpty) {
-                  return const Center(child: Text('Add your first day.'));
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  itemCount: days.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final day = days[index];
-                    final dayId = day['id'] as int;
-                    return ListTile(
-                      tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      title: Text(day['day_name'] as String),
-                      subtitle: Text("Day ${(day['day_index'] as int) + 1}"),
-                      onTap: () async {
-                        await Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => DayEditorScreen(
-                              programDayId: dayId,
-                              programId: widget.programId,
-                            ),
+          const GlassBackground(),
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: TextField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(labelText: 'Program name'),
+                ),
+              ),
+              Expanded(
+                child: FutureBuilder<List<Map<String, Object?>>>(
+                  future: _programRepo.getProgramDays(widget.programId),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState != ConnectionState.done) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final days = snapshot.data ?? [];
+                    if (days.isEmpty) {
+                      return const Center(child: Text('Add your first day.'));
+                    }
+                    return ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      itemCount: days.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final day = days[index];
+                        final dayId = day['id'] as int;
+                        return GlassCard(
+                          padding: EdgeInsets.zero,
+                          child: ListTile(
+                            title: Text(day['day_name'] as String),
+                            subtitle: Text("Day ${(day['day_index'] as int) + 1}"),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => DayEditorScreen(
+                                    programDayId: dayId,
+                                    programId: widget.programId,
+                                  ),
+                                ),
+                              );
+                              setState(() {});
+                            },
                           ),
                         );
-                        setState(() {});
                       },
                     );
                   },
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: ElevatedButton(
-              onPressed: _addDay,
-              child: const Text('Add Day'),
-            ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: GlassCard(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.add_circle_outline),
+                      const SizedBox(width: 12),
+                      const Expanded(child: Text('Add Day')),
+                      TextButton(onPressed: _addDay, child: const Text('Add')),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

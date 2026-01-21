@@ -6,12 +6,16 @@ import '../../../core/command_bus/command.dart';
 import '../../../core/command_bus/dispatcher.dart';
 import '../../../core/command_bus/session_command_reducer.dart';
 import '../../../core/command_bus/undo_redo.dart';
+import '../../../core/voice/gemini_parser.dart';
 import '../../../core/voice/llm_parser.dart';
+import '../../../core/voice/openai_parser.dart';
+import '../../../core/voice/wake_word.dart';
 import '../../../core/voice/voice_models.dart';
 import '../../../core/voice/nlu_parser.dart';
 import '../../../core/voice/stt.dart';
 import '../../../data/db/db.dart';
 import '../../../data/repositories/exercise_repo.dart';
+import '../../../data/repositories/settings_repo.dart';
 import '../../../data/repositories/workout_repo.dart';
 import '../../../domain/models/last_logged_set.dart';
 import '../../../domain/models/session_context.dart';
@@ -19,6 +23,8 @@ import '../../../domain/models/session_exercise_info.dart';
 import '../../../domain/services/exercise_matcher.dart';
 import '../../widgets/confirmation_card/confirmation_card.dart';
 import '../../widgets/exercise_modal/exercise_modal.dart';
+import '../../widgets/glass/glass_background.dart';
+import '../../widgets/glass/glass_card.dart';
 import '../../widgets/timer_bar/timer_bar.dart';
 
 class SessionScreen extends StatefulWidget {
@@ -30,24 +36,51 @@ class SessionScreen extends StatefulWidget {
   State<SessionScreen> createState() => _SessionScreenState();
 }
 
+enum _PendingField { weight, reps }
+
 class _PendingLogSet {
-  _PendingLogSet({required this.exerciseInfo, required this.reps, this.partials, this.rpe, this.rir});
+  _PendingLogSet({
+    required this.exerciseInfo,
+    required this.missingField,
+    this.reps,
+    this.weight,
+    this.weightUnit,
+    this.partials,
+    this.rpe,
+    this.rir,
+  });
 
   final SessionExerciseInfo exerciseInfo;
-  final int reps;
+  final _PendingField missingField;
+  final int? reps;
+  final double? weight;
+  final String? weightUnit;
   final int? partials;
   final double? rpe;
   final double? rir;
 }
 
+const double _sessionMatchThreshold = 0.4;
+const double _sessionGuessThreshold = 0.4;
+
+class _SessionMatchScore {
+  _SessionMatchScore(this.info, this.score);
+
+  final SessionExerciseInfo info;
+  final double score;
+}
 
 class _SessionScreenState extends State<SessionScreen> {
   final _voiceController = TextEditingController();
   final _parser = NluParser();
   final _llmParser = LlmParser();
+  final _geminiParser = GeminiParser();
+  final _openAiParser = OpenAiParser();
+  final _wakeWordEngine = WakeWordEngine();
   late final WorkoutRepo _workoutRepo;
   late final ExerciseMatcher _matcher;
   late final ExerciseRepo _exerciseRepo;
+  late final SettingsRepo _settingsRepo;
   late final Map<int, SessionExerciseInfo> _exerciseById;
   late final Map<int, SessionExerciseInfo> _sessionExerciseById;
   late final Map<String, int> _cacheRefToExerciseId;
@@ -67,9 +100,20 @@ class _SessionScreenState extends State<SessionScreen> {
   String? _debugTranscript;
   String? _debugRule;
   String? _debugLlm;
+  String? _debugGemini;
+  String? _debugOpenAi;
   String? _debugDecision;
   String? _debugParts;
   String? _debugLlmRaw;
+  String? _debugGeminiRaw;
+  String? _debugOpenAiRaw;
+  String? _debugResolved;
+
+  bool _cloudEnabled = false;
+  String? _cloudApiKey;
+  String _cloudModel = 'gemini-2.5-pro';
+  String _cloudProvider = 'gemini';
+  bool _wakeWordEnabled = false;
 
   @override
   void initState() {
@@ -77,6 +121,7 @@ class _SessionScreenState extends State<SessionScreen> {
     final db = AppDatabase.instance;
     _workoutRepo = WorkoutRepo(db);
     _exerciseRepo = ExerciseRepo(db);
+    _settingsRepo = SettingsRepo(db);
     _matcher = ExerciseMatcher(_exerciseRepo);
     _sessionExercises = List<SessionExerciseInfo>.from(widget.contextData.exercises);
     _exerciseById = {for (final info in _sessionExercises) info.exerciseId: info};
@@ -89,6 +134,7 @@ class _SessionScreenState extends State<SessionScreen> {
       ).call,
     );
     Future.microtask(() => _llmParser.initialize());
+    Future.microtask(_loadCloudSettings);
   }
 
   @override
@@ -98,140 +144,119 @@ class _SessionScreenState extends State<SessionScreen> {
     super.dispose();
   }
 
+  Future<void> _loadCloudSettings() async {
+    final enabled = await _settingsRepo.getCloudEnabled();
+    final apiKey = await _settingsRepo.getCloudApiKey();
+    final model = await _settingsRepo.getCloudModel();
+    final provider = await _settingsRepo.getCloudProvider();
+    final wakeWordEnabled = await _settingsRepo.getWakeWordEnabled();
+    if (!mounted) return;
+    setState(() {
+      _cloudEnabled = enabled;
+      _cloudApiKey = apiKey;
+      _cloudModel = model;
+      _cloudProvider = provider;
+      _wakeWordEnabled = wakeWordEnabled;
+    });
+    _wakeWordEngine.enabled = wakeWordEnabled;
+    if (wakeWordEnabled) {
+      await _wakeWordEngine.start();
+    } else {
+      await _wakeWordEngine.stop();
+    }
+  }
+
   Future<void> _handleVoiceInput(String input) async {
     final trimmed = input.trim();
     if (trimmed.isEmpty) return;
-    _setVoiceDebug(transcript: trimmed);
+    _setVoiceDebug(
+      transcript: trimmed,
+      rule: '-',
+      llm: '-',
+      gemini: '-',
+      openai: '-',
+      decision: 'Listening...',
+      parts: null,
+      llmRaw: null,
+      geminiRaw: null,
+      openaiRaw: null,
+      resolved: null,
+    );
 
-    final pending = _pending;
-    if (pending != null) {
-      final weight = double.tryParse(trimmed) ?? _parser.parseWeightOnly(trimmed);
-      if (weight != null) {
-        await _logSet(pending.exerciseInfo, reps: pending.reps, weight: weight, partials: pending.partials, rpe: pending.rpe, rir: pending.rir);
-        setState(() {
-          _pending = null;
-          _prompt = null;
-        });
-        return;
-      }
-    }
+    if (await _handlePendingVoice(trimmed)) return;
 
-    final parsed = _parser.parse(trimmed);
-    if (parsed != null) {
-      if (_shouldTryLlm(parsed)) {
-        final llmCommand = await _runLlmParse(trimmed);
-        if (llmCommand != null) {
-          final normalized = _normalizeLogSetFromTranscript(llmCommand, trimmed);
-          if (_preferLlm(parsed, normalized)) {
-            _setVoiceDebug(
-              rule: _describeCommand(parsed),
-              llm: _describeCommand(normalized),
-              decision: 'LLM preferred over rule',
-            );
-            await _handleParsedCommand(normalized);
-            return;
-          }
+    if (_cloudEnabled && _cloudApiKey != null && _cloudApiKey!.isNotEmpty) {
+      if (_cloudProvider == 'openai') {
+        final openAiCommand = await _runOpenAiParse(trimmed);
+        if (openAiCommand != null) {
+          final normalized = _normalizeLogSetFromTranscript(openAiCommand, trimmed);
+          _setVoiceDebug(
+            openai: _describeCommand(normalized),
+            decision: 'OpenAI primary',
+          );
+          await _handleParsedCommand(
+            normalized,
+            transcript: trimmed,
+            source: 'openai',
+          );
+          return;
+        }
+        if (_openAiParser.lastError != null) {
+          _setVoiceDebug(
+            decision: 'OpenAI failed: ${_openAiParser.lastError}',
+          );
+        }
+      } else {
+        final geminiCommand = await _runGeminiParse(trimmed);
+        if (geminiCommand != null) {
+          final normalized = _normalizeLogSetFromTranscript(geminiCommand, trimmed);
+          _setVoiceDebug(
+            gemini: _describeCommand(normalized),
+            decision: 'Gemini primary',
+          );
+          await _handleParsedCommand(
+            normalized,
+            transcript: trimmed,
+            source: 'gemini',
+          );
+          return;
+        }
+        if (_geminiParser.lastError != null) {
+          _setVoiceDebug(
+            decision: 'Gemini failed: ${_geminiParser.lastError}',
+          );
         }
       }
-      _setVoiceDebug(
-        rule: _describeCommand(parsed),
-        decision: 'Rule-based used',
-      );
-      await _handleParsedCommand(_normalizeLogSetFromTranscript(parsed, trimmed));
-      return;
+    } else if (_cloudEnabled) {
+      _setVoiceDebug(decision: 'Cloud enabled but missing API key');
     }
 
     final llmCommand = await _runLlmParse(trimmed);
     if (llmCommand != null) {
+      final normalized = _normalizeLogSetFromTranscript(llmCommand, trimmed);
       _setVoiceDebug(
-        llm: _describeCommand(llmCommand),
-        decision: 'LLM used',
+        llm: _describeCommand(normalized),
+        decision: 'Local LLM',
       );
-      await _handleParsedCommand(_normalizeLogSetFromTranscript(llmCommand, trimmed));
-      return;
-    }
-
-    final partsOnly = _parser.parseLogPartsWithOrderHints(trimmed);
-    if (_lastExerciseInfo != null && partsOnly.reps != null) {
-      final weight = partsOnly.weight;
-      if (weight == null) {
-        final lastWeight = await _workoutRepo.getLatestWeightForSessionExercise(
-            _lastExerciseInfo!.sessionExerciseId);
-        if (lastWeight == null) {
-          setState(() {
-            _pending = _PendingLogSet(
-              exerciseInfo: _lastExerciseInfo!,
-              reps: partsOnly.reps!,
-              partials: partsOnly.partials,
-              rpe: partsOnly.rpe,
-              rir: partsOnly.rir,
-            );
-            _prompt = 'What weight?';
-          });
-          return;
-        }
-        await _logSet(
-          _lastExerciseInfo!,
-          reps: partsOnly.reps!,
-          weight: lastWeight,
-          partials: partsOnly.partials,
-          rpe: partsOnly.rpe,
-          rir: partsOnly.rir,
-        );
-        return;
-      }
-      await _logSet(
-        _lastExerciseInfo!,
-        reps: partsOnly.reps!,
-        weight: weight,
-        partials: partsOnly.partials,
-        rpe: partsOnly.rpe,
-        rir: partsOnly.rir,
+      await _handleParsedCommand(
+        normalized,
+        transcript: trimmed,
+        source: 'local_llm',
       );
       return;
     }
 
-    final fallbackInfo = _guessSessionExercise(trimmed);
-    if (fallbackInfo != null) {
-      final parts = _parser.parseLogPartsWithOrderHints(trimmed);
-      if (parts.reps == null) {
-        _showMessage('Need reps for "${fallbackInfo.exerciseName}".');
-        return;
-      }
-      final weight = parts.weight;
-      if (weight == null) {
-        final lastWeight = await _workoutRepo.getLatestWeightForSessionExercise(
-            fallbackInfo.sessionExerciseId);
-        if (lastWeight == null) {
-          setState(() {
-            _pending = _PendingLogSet(
-              exerciseInfo: fallbackInfo,
-              reps: parts.reps!,
-              partials: parts.partials,
-              rpe: parts.rpe,
-              rir: parts.rir,
-            );
-            _prompt = 'What weight?';
-          });
-          return;
-        }
-        await _logSet(
-          fallbackInfo,
-          reps: parts.reps!,
-          weight: lastWeight,
-          partials: parts.partials,
-          rpe: parts.rpe,
-          rir: parts.rir,
-        );
-        return;
-      }
-      await _logSet(
-        fallbackInfo,
-        reps: parts.reps!,
-        weight: weight,
-        partials: parts.partials,
-        rpe: parts.rpe,
-        rir: parts.rir,
+    final ruleCommand = _parser.parse(trimmed);
+    if (ruleCommand != null) {
+      final normalized = _normalizeLogSetFromTranscript(ruleCommand, trimmed);
+      _setVoiceDebug(
+        rule: _describeCommand(normalized),
+        decision: 'Rule fallback',
+      );
+      await _handleParsedCommand(
+        normalized,
+        transcript: trimmed,
+        source: 'rule',
       );
       return;
     }
@@ -244,60 +269,296 @@ class _SessionScreenState extends State<SessionScreen> {
       return;
     }
 
+    final fallbackParts = _parser.parseLogPartsWithOrderHints(trimmed);
+    if (fallbackParts.reps != null || fallbackParts.weight != null) {
+      final exerciseInfo = await _resolveExercise(trimmed);
+      if (exerciseInfo != null) {
+        await _logSetWithFill(
+          exerciseInfo,
+          reps: fallbackParts.reps,
+          weight: fallbackParts.weight,
+          weightUnit: fallbackParts.weightUnit,
+          partials: fallbackParts.partials,
+          rpe: fallbackParts.rpe,
+          rir: fallbackParts.rir,
+          source: 'fallback',
+          transcript: trimmed,
+        );
+        return;
+      }
+    }
+
     _setVoiceDebug(decision: 'No parse matched');
     _showMessage('Could not parse command: "$trimmed"');
   }
 
-  Future<void> _handleParsedCommand(NluCommand parsed) async {
+  Future<bool> _handlePendingVoice(String input) async {
+    final pending = _pending;
+    if (pending == null) return false;
+    final wantsSame = _wantsSameAsLast(input);
+    final latest = await _workoutRepo.getLatestSetForSessionExercise(pending.exerciseInfo.sessionExerciseId);
+    final lastReps = latest?['reps'] as int?;
+    final lastWeight = latest?['weight_value'] as double?;
+    final lastUnit = latest?['weight_unit'] as String?;
+
+    if (wantsSame && latest != null) {
+      if (lastReps != null && lastWeight != null) {
+        await _logSet(
+          pending.exerciseInfo,
+          reps: lastReps,
+          weight: lastWeight,
+          weightUnit: lastUnit ?? 'lb',
+          partials: pending.partials,
+          rpe: pending.rpe,
+          rir: pending.rir,
+        );
+        setState(() {
+          _pending = null;
+          _prompt = null;
+        });
+        _setVoiceDebug(decision: 'Pending resolved via last set');
+        return true;
+      }
+    }
+
+    final parts = _parser.parseLogPartsWithOrderHints(input);
+    if (pending.missingField == _PendingField.weight) {
+      final weight = parts.weight ?? _parser.parseWeightOnly(input);
+      if (weight == null) {
+        _showMessage('Need weight.');
+        return true;
+      }
+      final reps = pending.reps ?? lastReps;
+      if (reps == null) {
+        _showMessage('Need reps.');
+        return true;
+      }
+      await _logSet(
+        pending.exerciseInfo,
+        reps: reps,
+        weight: weight,
+        weightUnit: parts.weightUnit ?? pending.weightUnit ?? lastUnit ?? 'lb',
+        partials: pending.partials,
+        rpe: pending.rpe,
+        rir: pending.rir,
+      );
+    } else {
+      final reps = parts.reps;
+      if (reps == null) {
+        _showMessage('Need reps.');
+        return true;
+      }
+      final weight = pending.weight ?? lastWeight;
+      if (weight == null) {
+        _showMessage('Need weight.');
+        return true;
+      }
+      await _logSet(
+        pending.exerciseInfo,
+        reps: reps,
+        weight: weight,
+        weightUnit: pending.weightUnit ?? parts.weightUnit ?? lastUnit ?? 'lb',
+        partials: pending.partials,
+        rpe: pending.rpe,
+        rir: pending.rir,
+      );
+    }
+    setState(() {
+      _pending = null;
+      _prompt = null;
+    });
+    _setVoiceDebug(decision: 'Pending resolved');
+    return true;
+  }
+
+  bool _wantsSameAsLast(String input) {
+    final normalized = _parser.normalize(input);
+    return normalized.contains('same as last') ||
+        normalized.contains('same as previous') ||
+        normalized.contains('repeat last') ||
+        normalized.contains('same as before') ||
+        normalized.contains('copy last') ||
+        normalized == 'same set';
+  }
+
+  Future<void> _handleParsedCommand(
+    NluCommand parsed, {
+    String? transcript,
+    String source = 'rule',
+  }) async {
     switch (parsed.type) {
       case 'undo':
         await _undo();
+        _setVoiceDebug(decision: 'Undo ($source)');
         return;
       case 'redo':
         await _redo();
+        _setVoiceDebug(decision: 'Redo ($source)');
         return;
       case 'switch':
         if (parsed.exerciseRef == null) return;
         final exerciseInfo = await _resolveExercise(parsed.exerciseRef!);
         if (exerciseInfo != null) {
           _openExerciseModal(exerciseInfo);
+          _setVoiceDebug(
+            decision: 'Switch ($source)',
+            resolved: 'exercise=${exerciseInfo.exerciseName}',
+          );
         }
         return;
       case 'show_stats':
         _showMessage('Stats view not in demo.');
+        _setVoiceDebug(decision: 'Show stats ($source)');
         return;
       case 'log_set':
-        final ref = parsed.exerciseRef;
-        final exerciseInfo = (ref == null || ref.trim().isEmpty)
-            ? _lastExerciseInfo
-            : await _resolveExercise(ref);
-        if (exerciseInfo == null || parsed.reps == null) {
-          _showMessage('Need exercise and reps.');
-          return;
-        }
-
-        final weight = parsed.weight;
-        if (weight == null) {
-          final lastWeight = await _workoutRepo.getLatestWeightForSessionExercise(exerciseInfo.sessionExerciseId);
-          if (lastWeight == null) {
-            setState(() {
-              _pending = _PendingLogSet(
-                exerciseInfo: exerciseInfo,
-                reps: parsed.reps!,
-                partials: parsed.partials,
-                rpe: parsed.rpe,
-                rir: parsed.rir,
-              );
-              _prompt = 'What weight?';
-            });
-            return;
-          }
-          await _logSet(exerciseInfo, reps: parsed.reps!, weight: lastWeight, partials: parsed.partials, rpe: parsed.rpe, rir: parsed.rir);
-          return;
-        }
-        await _logSet(exerciseInfo, reps: parsed.reps!, weight: weight, partials: parsed.partials, rpe: parsed.rpe, rir: parsed.rir);
+        await _handleLogSetCommand(
+          parsed,
+          transcript ?? '',
+          source: source,
+        );
         return;
     }
+  }
+
+  Future<void> _handleLogSetCommand(
+    NluCommand command,
+    String transcript, {
+    required String source,
+  }) async {
+    final normalized = _normalizeLogSetFromTranscript(command, transcript);
+    final wantsSame = _wantsSameAsLast(transcript);
+    final exerciseInfo = await _resolveExerciseForLogSet(normalized, transcript, wantsSame: wantsSame);
+    if (exerciseInfo == null) {
+      _setVoiceDebug(decision: 'No exercise match ($source)');
+      _prompt = 'Which exercise?';
+      _showMessage('No exercise match.');
+      return;
+    }
+
+    await _logSetWithFill(
+      exerciseInfo,
+      reps: normalized.reps,
+      weight: normalized.weight,
+      weightUnit: normalized.weightUnit,
+      partials: normalized.partials,
+      rpe: normalized.rpe,
+      rir: normalized.rir,
+      source: source,
+      transcript: transcript,
+      wantsSame: wantsSame,
+    );
+  }
+
+  Future<SessionExerciseInfo?> _resolveExerciseForLogSet(
+    NluCommand command,
+    String transcript, {
+    required bool wantsSame,
+  }) async {
+    final ref = command.exerciseRef?.trim();
+    if (ref != null && ref.isNotEmpty) {
+      return _resolveExercise(ref);
+    }
+    if (wantsSame && _lastExerciseInfo != null) {
+      return _lastExerciseInfo;
+    }
+    final inferred = await _resolveExercise(transcript);
+    return inferred ?? _lastExerciseInfo;
+  }
+
+  Future<void> _logSetWithFill(
+    SessionExerciseInfo exerciseInfo, {
+    required int? reps,
+    required double? weight,
+    required String? weightUnit,
+    required int? partials,
+    required double? rpe,
+    required double? rir,
+    required String source,
+    required String transcript,
+    bool wantsSame = false,
+  }) async {
+    final latest = await _workoutRepo.getLatestSetForSessionExercise(exerciseInfo.sessionExerciseId);
+    final lastReps = latest?['reps'] as int?;
+    final lastWeight = latest?['weight_value'] as double?;
+    final lastUnit = latest?['weight_unit'] as String?;
+
+    var resolvedReps = reps;
+    var resolvedWeight = weight;
+    var resolvedUnit = weightUnit ?? lastUnit ?? 'lb';
+
+    if (wantsSame && latest != null) {
+      resolvedReps ??= lastReps;
+      resolvedWeight ??= lastWeight;
+      resolvedUnit = weightUnit ?? lastUnit ?? resolvedUnit;
+    }
+
+    if (latest != null) {
+      if (resolvedWeight == null && resolvedReps != null) {
+        resolvedWeight = lastWeight;
+        resolvedUnit = weightUnit ?? lastUnit ?? resolvedUnit;
+      }
+      if (resolvedReps == null && resolvedWeight != null) {
+        resolvedReps = lastReps;
+      }
+    }
+
+    if (resolvedReps == null && resolvedWeight == null && latest == null) {
+      final numbers = _parser.extractNumbers(transcript);
+      if (numbers.length >= 2) {
+        final sorted = List<double>.from(numbers)..sort();
+        resolvedReps = sorted.first.round();
+        resolvedWeight = sorted.last;
+        resolvedUnit = weightUnit ?? resolvedUnit;
+        _setVoiceDebug(decision: 'Assumed larger=weight ($source)');
+      }
+    }
+
+    if (resolvedReps == null) {
+      setState(() {
+        _pending = _PendingLogSet(
+          exerciseInfo: exerciseInfo,
+          missingField: _PendingField.reps,
+          weight: resolvedWeight,
+          weightUnit: resolvedUnit,
+          partials: partials,
+          rpe: rpe,
+          rir: rir,
+        );
+        _prompt = 'What reps?';
+      });
+      _setVoiceDebug(decision: 'Awaiting reps ($source)');
+      return;
+    }
+
+    if (resolvedWeight == null) {
+      setState(() {
+        _pending = _PendingLogSet(
+          exerciseInfo: exerciseInfo,
+          missingField: _PendingField.weight,
+          reps: resolvedReps,
+          partials: partials,
+          rpe: rpe,
+          rir: rir,
+        );
+        _prompt = 'What weight?';
+      });
+      _setVoiceDebug(decision: 'Awaiting weight ($source)');
+      return;
+    }
+
+    await _logSet(
+      exerciseInfo,
+      reps: resolvedReps,
+      weight: resolvedWeight,
+      weightUnit: resolvedUnit,
+      partials: partials,
+      rpe: rpe,
+      rir: rir,
+    );
+    _setVoiceDebug(
+      decision: 'Logged ($source)',
+      resolved: 'exercise=${exerciseInfo.exerciseName} reps=$resolvedReps weight=$resolvedWeight unit=$resolvedUnit',
+    );
   }
 
   Future<NluCommand?> _runLlmParse(String transcript) async {
@@ -310,6 +571,56 @@ class _SessionScreenState extends State<SessionScreen> {
     });
     if (_llmParser.lastRawOutput != null) {
       _setVoiceDebug(llmRaw: _llmParser.lastRawOutput);
+    }
+    return result;
+  }
+
+  Future<NluCommand?> _runGeminiParse(String transcript) async {
+    setState(() {
+      _prompt = 'Thinking (cloud)...';
+    });
+    final apiKey = _cloudApiKey;
+    if (apiKey == null || apiKey.isEmpty) {
+      setState(() {
+        _prompt = null;
+      });
+      return null;
+    }
+    final result = await _geminiParser.parse(
+      transcript: transcript,
+      apiKey: apiKey,
+      model: _cloudModel,
+    );
+    setState(() {
+      _prompt = null;
+    });
+    if (_geminiParser.lastRawOutput != null) {
+      _setVoiceDebug(geminiRaw: _geminiParser.lastRawOutput);
+    }
+    return result;
+  }
+
+  Future<NluCommand?> _runOpenAiParse(String transcript) async {
+    setState(() {
+      _prompt = 'Thinking (cloud)...';
+    });
+    final apiKey = _cloudApiKey;
+    if (apiKey == null || apiKey.isEmpty) {
+      setState(() {
+        _prompt = null;
+      });
+      return null;
+    }
+    final result = await _openAiParser.parse(
+      transcript: transcript,
+      apiKey: apiKey,
+      model: _cloudModel,
+    );
+    setState(() {
+      _prompt = null;
+    });
+    if (_openAiParser.lastRawOutput != null) {
+      _setVoiceDebug(openaiRaw: _openAiParser.lastRawOutput);
     }
     return result;
   }
@@ -364,19 +675,29 @@ class _SessionScreenState extends State<SessionScreen> {
     String? transcript,
     String? rule,
     String? llm,
+    String? gemini,
+    String? openai,
     String? decision,
     String? parts,
     String? llmRaw,
+    String? geminiRaw,
+    String? openaiRaw,
+    String? resolved,
   }) {
     final hints = _parser.parseLogPartsWithOrderHints(_debugTranscript ?? transcript ?? '');
     setState(() {
       _debugTranscript = transcript ?? _debugTranscript;
       _debugRule = rule ?? _debugRule;
       _debugLlm = llm ?? _debugLlm;
+      _debugGemini = gemini ?? _debugGemini;
+      _debugOpenAi = openai ?? _debugOpenAi;
       _debugDecision = decision ?? _debugDecision;
       _debugParts = parts ??
           'hints: weight=${hints.weight}, reps=${hints.reps}, unit=${hints.weightUnit}, partials=${hints.partials}';
       _debugLlmRaw = llmRaw ?? _debugLlmRaw;
+      _debugGeminiRaw = geminiRaw ?? _debugGeminiRaw;
+      _debugOpenAiRaw = openaiRaw ?? _debugOpenAiRaw;
+      _debugResolved = resolved ?? _debugResolved;
     });
   }
 
@@ -426,7 +747,7 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   Future<SessionExerciseInfo?> _resolveExercise(String exerciseRef) async {
-    final normalized = _matcher.normalize(exerciseRef);
+    final normalized = _matcher.normalizeForCache(exerciseRef);
     final cached = _cacheRefToExerciseId[normalized];
     if (cached != null) {
       final info = _exerciseById[cached];
@@ -473,6 +794,7 @@ class _SessionScreenState extends State<SessionScreen> {
     SessionExerciseInfo info, {
     required int reps,
     double? weight,
+    String weightUnit = 'lb',
     int? partials,
     double? rpe,
     double? rir,
@@ -480,7 +802,7 @@ class _SessionScreenState extends State<SessionScreen> {
     final result = await _dispatcher.dispatch(
       LogSetEntry(
         sessionExerciseId: info.sessionExerciseId,
-        weightUnit: 'lb',
+        weightUnit: weightUnit,
         weightMode: info.weightModeDefault,
         weight: weight,
         reps: reps,
@@ -737,46 +1059,30 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   List<SessionExerciseInfo> _matchSessionExercises(String exerciseRef) {
-    final normalized = _matcher.normalize(exerciseRef);
-    if (normalized.isEmpty) return [];
-    final refTokens = _tokenize(normalized);
-    final matches = <SessionExerciseInfo>[];
+    final refTokens = _matcher.tokenize(exerciseRef);
+    if (refTokens.isEmpty) return [];
+    final scored = <_SessionMatchScore>[];
     for (final info in _sessionExercises) {
-      final nameTokens = _tokenize(_matcher.normalize(info.exerciseName));
-      final refInName = refTokens.every(nameTokens.contains);
-      final nameInRef = nameTokens.every(refTokens.contains);
-      if (refInName || nameInRef) {
-        matches.add(info);
+      final score = _matcher.scoreName(exerciseRef, info.exerciseName);
+      if (score >= _sessionMatchThreshold) {
+        scored.add(_SessionMatchScore(info, score));
       }
     }
-    return matches;
+    scored.sort((a, b) => b.score.compareTo(a.score));
+    return scored.map((entry) => entry.info).toList();
   }
 
   SessionExerciseInfo? _guessSessionExercise(String utterance) {
-    final normalized = _matcher.normalize(utterance);
-    if (normalized.isEmpty) return null;
-    final refTokens = _tokenize(normalized);
     SessionExerciseInfo? best;
     double bestScore = 0.0;
     for (final info in _sessionExercises) {
-      final nameTokens = _tokenize(_matcher.normalize(info.exerciseName));
-      if (nameTokens.isEmpty) continue;
-      final overlap = nameTokens.where(refTokens.contains).length;
-      if (overlap == 0) continue;
-      final coverage = overlap / nameTokens.length;
-      final strictOk = nameTokens.length <= 2 ? overlap == nameTokens.length : coverage >= 0.6;
-      if (!strictOk) continue;
-      final score = coverage + (overlap / 10.0);
+      final score = _matcher.scoreName(utterance, info.exerciseName);
       if (score > bestScore) {
         bestScore = score;
         best = info;
       }
     }
-    return best;
-  }
-
-  Set<String> _tokenize(String value) {
-    return value.split(' ').where((t) => t.isNotEmpty).toSet();
+    return bestScore >= _sessionGuessThreshold ? best : null;
   }
 
   void _showMessage(String message) {
@@ -790,6 +1096,8 @@ class _SessionScreenState extends State<SessionScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.4),
       builder: (_) {
         return ExerciseModal(
           info: info,
@@ -829,121 +1137,146 @@ class _SessionScreenState extends State<SessionScreen> {
           child: Icon(_listening ? Icons.mic : Icons.mic_none),
         ),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: _sessionExercises.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final info = _sessionExercises[index];
-                return ListTile(
-                  tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  title: Text(info.exerciseName),
-                  subtitle: Text('Tap to log sets'),
-                  onTap: () => _openExerciseModal(info),
-                );
-              },
-            ),
-          ),
-          if (_lastLogged != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: ConfirmationCard(
-                lastLogged: _lastLogged!,
-                onUndo: _undo,
-                onRedo: _redo,
-                onStartRest: _startRestTimer,
-                undoCount: _undoRedo.undoCount,
-                redoCount: _undoRedo.redoCount,
-              ),
-            ),
-          TimerBar(
-            remainingSeconds: _restRemaining,
-            onStop: _stopRestTimer,
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_voicePartial != null)
-                  Text(
-                    'Listening: $_voicePartial',
-                    style: TextStyle(color: Theme.of(context).colorScheme.primary),
-                  ),
-                if (_prompt != null)
-                  Text(
-                    _prompt!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.primary),
-                  ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _voiceController,
-                        decoration: const InputDecoration(
-                          labelText: 'Voice command (type to simulate)',
-                          border: OutlineInputBorder(),
-                        ),
-                        onSubmitted: (value) {
-                          _handleVoiceInput(value);
-                          _voiceController.clear();
-                        },
+          const GlassBackground(),
+          Column(
+            children: [
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _sessionExercises.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final info = _sessionExercises[index];
+                    return GlassCard(
+                      padding: EdgeInsets.zero,
+                      child: ListTile(
+                        title: Text(info.exerciseName),
+                        subtitle: const Text('Tap to log sets'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _openExerciseModal(info),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        final text = _voiceController.text;
-                        _voiceController.clear();
-                        _handleVoiceInput(text);
-                      },
-                      child: const Text('Send'),
-                    )
-                  ],
+                    );
+                  },
                 ),
-                const SizedBox(height: 8),
-                Row(
+              ),
+              if (_lastLogged != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: ConfirmationCard(
+                    lastLogged: _lastLogged!,
+                    onUndo: _undo,
+                    onRedo: _redo,
+                    onStartRest: _startRestTimer,
+                    undoCount: _undoRedo.undoCount,
+                    redoCount: _undoRedo.redoCount,
+                  ),
+                ),
+              TimerBar(
+                remainingSeconds: _restRemaining,
+                onStop: _stopRestTimer,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _showVoiceDebug = !_showVoiceDebug;
-                        });
-                      },
-                      child: Text(_showVoiceDebug ? 'Hide voice debug' : 'Show voice debug'),
-                    ),
-                  ],
-                ),
-                if (_showVoiceDebug)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    if (_wakeWordEnabled)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: const [
+                            Icon(Icons.hearing, size: 16),
+                            SizedBox(width: 6),
+                            Text('Listening for “Hey Ares”'),
+                          ],
+                        ),
+                      ),
+                    if (_voicePartial != null)
+                      Text(
+                        'Listening: $_voicePartial',
+                        style: TextStyle(color: Theme.of(context).colorScheme.primary),
+                      ),
+                    if (_prompt != null)
+                      Text(
+                        _prompt!,
+                        style: TextStyle(color: Theme.of(context).colorScheme.primary),
+                      ),
+                    const SizedBox(height: 8),
+                    Row(
                       children: [
-                        Text('Transcript: ${_debugTranscript ?? '-'}'),
-                        const SizedBox(height: 6),
-                        Text('Rule: ${_debugRule ?? '-'}'),
-                        const SizedBox(height: 6),
-                        Text('LLM: ${_debugLlm ?? '-'}'),
-                        const SizedBox(height: 6),
-                        Text('Hints: ${_debugParts ?? '-'}'),
-                        const SizedBox(height: 6),
-                        Text('Decision: ${_debugDecision ?? '-'}'),
-                        const SizedBox(height: 6),
-                        Text('LLM raw: ${_debugLlmRaw ?? '-'}'),
+                        Expanded(
+                          child: TextField(
+                            controller: _voiceController,
+                            decoration: const InputDecoration(
+                              labelText: 'Voice command (type to simulate)',
+                              border: OutlineInputBorder(),
+                            ),
+                            onSubmitted: (value) {
+                              _handleVoiceInput(value);
+                              _voiceController.clear();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            final text = _voiceController.text;
+                            _voiceController.clear();
+                            _handleVoiceInput(text);
+                          },
+                          child: const Text('Send'),
+                        )
                       ],
                     ),
-                  ),
-              ],
-            ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _showVoiceDebug = !_showVoiceDebug;
+                            });
+                          },
+                          child: Text(_showVoiceDebug ? 'Hide voice debug' : 'Show voice debug'),
+                        ),
+                      ],
+                    ),
+                    if (_showVoiceDebug)
+                      GlassCard(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Transcript: ${_debugTranscript ?? '-'}'),
+                            const SizedBox(height: 6),
+                            Text('Rule: ${_debugRule ?? '-'}'),
+                            const SizedBox(height: 6),
+                            Text('LLM: ${_debugLlm ?? '-'}'),
+                            const SizedBox(height: 6),
+                            Text('Gemini: ${_debugGemini ?? '-'}'),
+                            const SizedBox(height: 6),
+                            Text('OpenAI: ${_debugOpenAi ?? '-'}'),
+                            const SizedBox(height: 6),
+                            Text('Hints: ${_debugParts ?? '-'}'),
+                            const SizedBox(height: 6),
+                            Text('Decision: ${_debugDecision ?? '-'}'),
+                            const SizedBox(height: 6),
+                            Text('Resolved: ${_debugResolved ?? '-'}'),
+                            const SizedBox(height: 6),
+                            Text('LLM raw: ${_debugLlmRaw ?? '-'}'),
+                            const SizedBox(height: 6),
+                            Text('Gemini raw: ${_debugGeminiRaw ?? '-'}'),
+                            const SizedBox(height: 6),
+                            Text('OpenAI raw: ${_debugOpenAiRaw ?? '-'}'),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),

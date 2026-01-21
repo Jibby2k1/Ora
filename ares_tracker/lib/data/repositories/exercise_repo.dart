@@ -46,6 +46,14 @@ class ExerciseRepo {
     }).toList();
   }
 
+  Future<List<Map<String, Object?>>> getAllAliases() async {
+    final db = await _db.database;
+    return db.query(
+      'exercise_alias',
+      columns: ['exercise_id', 'alias_normalized'],
+    );
+  }
+
   Future<int> createExercise({
     required String canonicalName,
     required String equipmentType,

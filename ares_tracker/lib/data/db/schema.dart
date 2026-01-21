@@ -1,5 +1,5 @@
 const dbName = 'ares_tracker.db';
-const dbVersion = 2;
+const dbVersion = 3;
 
 const createTableExercise = '''
 CREATE TABLE exercise(
@@ -126,6 +126,26 @@ CREATE TABLE set_entry(
   rest_sec_actual INTEGER,
   created_at TEXT NOT NULL,
   FOREIGN KEY(session_exercise_id) REFERENCES session_exercise(id)
+);
+''';
+
+const createTableUserProfile = '''
+CREATE TABLE user_profile(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  display_name TEXT,
+  age INTEGER,
+  height_cm REAL,
+  weight_kg REAL,
+  notes TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+''';
+
+const createTableAppSettings = '''
+CREATE TABLE app_setting(
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );
 ''';
 

@@ -9,6 +9,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'migrations/m0001_init.dart';
 import 'migrations/m0002_set_blocks.dart';
+import 'migrations/m0003_profile_settings.dart';
 import 'schema.dart';
 
 class AppDatabase {
@@ -50,6 +51,9 @@ class AppDatabase {
     }
     if (from < 2 && to >= 2) {
       batches.add(migration0002());
+    }
+    if (from < 3 && to >= 3) {
+      batches.add(migration0003());
     }
 
     for (final statements in batches) {
