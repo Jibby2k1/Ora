@@ -1,5 +1,5 @@
 const dbName = 'ares_tracker.db';
-const dbVersion = 3;
+const dbVersion = 6;
 
 const createTableExercise = '''
 CREATE TABLE exercise(
@@ -146,6 +146,31 @@ const createTableAppSettings = '''
 CREATE TABLE app_setting(
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+''';
+
+const createTableDietEntry = '''
+CREATE TABLE diet_entry(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  meal_name TEXT NOT NULL,
+  logged_at TEXT NOT NULL,
+  calories REAL,
+  protein_g REAL,
+  carbs_g REAL,
+  fat_g REAL,
+  fiber_g REAL,
+  sodium_mg REAL,
+  micros_json TEXT,
+  notes TEXT
+);
+''';
+
+const createTableAppearanceEntry = '''
+CREATE TABLE appearance_entry(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  measurements TEXT,
+  notes TEXT
 );
 ''';
 

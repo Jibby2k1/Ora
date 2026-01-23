@@ -16,10 +16,18 @@ class GeminiParser {
     required String transcript,
     required String apiKey,
     required String model,
+    List<String>? currentDayExercises,
+    List<String>? otherDayExercises,
+    List<String>? catalogExercises,
   }) async {
     lastError = null;
     lastRawOutput = null;
-    final prompt = _buildPrompt(transcript);
+    final prompt = _buildPrompt(
+      transcript,
+      currentDayExercises: currentDayExercises,
+      otherDayExercises: otherDayExercises,
+      catalogExercises: catalogExercises,
+    );
     lastPrompt = prompt;
 
     final uri = Uri.https(
@@ -91,7 +99,15 @@ class GeminiParser {
     }
   }
 
-  String _buildPrompt(String input) {
+  String _buildPrompt(
+    String input, {
+    List<String>? currentDayExercises,
+    List<String>? otherDayExercises,
+    List<String>? catalogExercises,
+  }) {
+    final currentList = _formatList(currentDayExercises);
+    final otherList = _formatList(otherDayExercises);
+    final catalogList = _formatList(catalogExercises);
     return '''
 You are a strict JSON command parser for a workout app.
 Return ONLY a single JSON object. No markdown. No extra text.
@@ -112,10 +128,29 @@ Rules:
 - If no exercise is mentioned, set exercise_ref to null.
 - Use lb or kg only; otherwise null.
 - Output integers for reps/partials.
+- Exercise selection priority:
+  1) Current day exercises (highest)
+  2) Other days in the same program
+  3) Full catalog (lowest)
+- If the exercise is not in any list, set exercise_ref to null.
+
+Current day exercises:
+$currentList
+
+Other day exercises:
+$otherList
+
+Catalog exercises:
+$catalogList
 
 Input: "$input"
 JSON:
 ''';
+  }
+
+  String _formatList(List<String>? values) {
+    if (values == null || values.isEmpty) return '-';
+    return values.map((e) => '- $e').join('\n');
   }
 
   NluCommand? _commandFromJson(Map<String, dynamic> json) {

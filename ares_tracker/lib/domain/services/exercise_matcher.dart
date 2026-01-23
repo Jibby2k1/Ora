@@ -348,8 +348,10 @@ const Map<String, String> _phraseFixups = {
   'bar bell': 'barbell',
   'pec deck': 'pec deck',
   'peck deck': 'pec deck',
+  'face pause': 'face pulls',
   'when she': 'machine',
   'when shee': 'machine',
+  'she just': 'machine',
 };
 
 const Map<String, String> _compoundFixups = {
@@ -361,6 +363,7 @@ const Map<String, String> _compoundFixups = {
 const Map<String, String> _tokenFixups = {
   'machines': 'machine',
   'machined': 'machine',
+  'cd': 'seated',
   'peck': 'pec',
   'pecs': 'pec',
   'pec\'s': 'pec',

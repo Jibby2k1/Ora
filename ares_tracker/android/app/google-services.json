@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "692440678172",
+    "project_id": "dawn-969ae",
+    "storage_bucket": "dawn-969ae.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:692440678172:android:946d507f6816ec04bf44d9",
+        "android_client_info": {
+          "package_name": "com.SPS.Dawn.And"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "692440678172-m2posut9p5422ldkibh10p75irbgmkbp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.SPS.Dawn.And",
+            "certificate_hash": "c51975f50cf7b145b76b3cb5b8aa99261c89bc96"
+          }
+        },
+        {
+          "client_id": "692440678172-f48lrstem0j11bbofng9fm79gs9onur2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhjmXa7o6iAIVPEo02JQCZJgklYC2FPsQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "692440678172-f48lrstem0j11bbofng9fm79gs9onur2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "692440678172-6muocopgd4eeu53ct8r691mv48eabp0s.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.SPS.Dawn.iOS"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,9 +1,13 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'dart:convert';
 
 import '../../../data/db/db.dart';
+import '../../../data/repositories/exercise_repo.dart';
 import '../../../data/repositories/pr_repo.dart';
+import '../../../data/repositories/settings_repo.dart';
 import '../../../data/repositories/workout_repo.dart';
+import '../../../core/voice/muscle_enricher.dart';
 import '../../../domain/models/session_exercise_info.dart';
 import '../../../domain/services/set_plan_service.dart';
 import '../glass/glass_card.dart';
@@ -18,6 +22,7 @@ class ExerciseModal extends StatefulWidget {
     required this.onUndo,
     required this.onRedo,
     required this.onStartRest,
+    required this.onClose,
   });
 
   final SessionExerciseInfo info;
@@ -27,6 +32,7 @@ class ExerciseModal extends StatefulWidget {
   final VoidCallback onUndo;
   final VoidCallback onRedo;
   final VoidCallback onStartRest;
+  final VoidCallback onClose;
 
   @override
   State<ExerciseModal> createState() => _ExerciseModalState();
@@ -50,11 +56,15 @@ class _ExerciseModalState extends State<ExerciseModal> {
   bool _showPartials = false;
   bool _showRpeRir = false;
   String _chartMetric = 'Weight';
+  String? _primaryMuscle;
+  List<String> _secondaryMuscles = [];
+  bool _loadingMuscles = false;
 
   @override
   void initState() {
     super.initState();
     _activeController = _weightController;
+    Future.microtask(_loadMuscles);
   }
 
   @override
@@ -96,6 +106,100 @@ class _ExerciseModalState extends State<ExerciseModal> {
       return;
     }
     controller.text = '$text$key';
+  }
+
+  Widget _buildMuscleChips() {
+    if (_loadingMuscles && (_primaryMuscle == null || _primaryMuscle!.isEmpty)) {
+      return const Text('Muscles: loading...');
+    }
+    final primary = _primaryMuscle?.trim();
+    if (primary == null || primary.isEmpty) {
+      return const Text('Muscles: unknown');
+    }
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final secondaryColor = Theme.of(context).colorScheme.secondary;
+    final chips = <Widget>[
+      Chip(
+        label: Text(primary),
+        backgroundColor: primaryColor.withOpacity(0.22),
+        labelStyle: TextStyle(color: primaryColor, fontWeight: FontWeight.w600),
+        side: BorderSide(color: primaryColor.withOpacity(0.6)),
+      ),
+    ];
+    for (final secondary in _secondaryMuscles) {
+      chips.add(
+        Chip(
+          label: Text(secondary),
+          backgroundColor: secondaryColor.withOpacity(0.18),
+          labelStyle: TextStyle(color: secondaryColor, fontWeight: FontWeight.w500),
+          side: BorderSide(color: secondaryColor.withOpacity(0.5)),
+        ),
+      );
+    }
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: chips,
+    );
+  }
+
+  Future<void> _loadMuscles() async {
+    if (_loadingMuscles) return;
+    setState(() => _loadingMuscles = true);
+    try {
+      final db = AppDatabase.instance;
+      final repo = ExerciseRepo(db);
+      final row = await repo.getById(widget.info.exerciseId);
+      final primary = row?['primary_muscle'] as String?;
+      final secondaryJson = row?['secondary_muscles_json'] as String?;
+      final secondary = <String>[];
+      if (secondaryJson != null && secondaryJson.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(secondaryJson);
+          if (decoded is List) {
+            secondary.addAll(decoded.map((e) => e.toString()).where((e) => e.trim().isNotEmpty));
+          }
+        } catch (_) {}
+      }
+      if (mounted) {
+        setState(() {
+          _primaryMuscle = primary;
+          _secondaryMuscles = secondary;
+        });
+      }
+
+      if (primary == null || primary.trim().isEmpty) {
+        final settings = SettingsRepo(db);
+        final cloudEnabled = await settings.getCloudEnabled();
+        final apiKey = await settings.getCloudApiKey();
+        final provider = await settings.getCloudProvider();
+        final model = await settings.getCloudModel();
+        if (cloudEnabled && apiKey != null && apiKey.trim().isNotEmpty) {
+          final enricher = MuscleEnricher();
+          final info = await enricher.enrich(
+            exerciseName: widget.info.exerciseName,
+            provider: provider,
+            apiKey: apiKey.trim(),
+            model: model,
+          );
+          if (info != null) {
+            await repo.updateMuscles(
+              exerciseId: widget.info.exerciseId,
+              primaryMuscle: info.primary,
+              secondaryMuscles: info.secondary,
+            );
+            if (mounted) {
+              setState(() {
+                _primaryMuscle = info.primary;
+                _secondaryMuscles = info.secondary;
+              });
+            }
+          }
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _loadingMuscles = false);
+    }
   }
 
   Future<void> _handleAddSet() async {
@@ -266,234 +370,253 @@ class _ExerciseModalState extends State<ExerciseModal> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 16,
-        right: 16,
-        top: 16,
-      ),
-      child: FutureBuilder<_ExerciseModalData>(
-        future: _loadData(),
-        key: ValueKey(_reloadTick),
-        builder: (context, snapshot) {
-          final data = snapshot.data;
-          final sets = data?.sets ?? [];
-          final planResult = SetPlanService().nextExpected(blocks: widget.info.planBlocks, existingSets: sets);
-          final nextLabel = planResult == null ? 'TOP' : planResult.nextRole;
+    final maxHeight = MediaQuery.of(context).size.height * 0.9;
+    return SafeArea(
+      top: true,
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 16,
+          right: 16,
+          top: 12,
+        ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: FutureBuilder<_ExerciseModalData>(
+            future: _loadData(),
+            key: ValueKey(_reloadTick),
+            builder: (context, snapshot) {
+              final data = snapshot.data;
+              final sets = data?.sets ?? [];
+              final planResult = SetPlanService().nextExpected(blocks: widget.info.planBlocks, existingSets: sets);
+              final nextLabel = planResult == null ? 'TOP' : planResult.nextRole;
 
-          return SingleChildScrollView(
-            child: GlassCard(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                Text(
-                  widget.info.exerciseName,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                Text('Next: $nextLabel${planResult?.isAmrap == true ? ' (AMRAP)' : ''}'),
-                const SizedBox(height: 12),
-                const Text('Prescription', style: TextStyle(fontWeight: FontWeight.w600)),
-                _buildPrescription(),
-                const SizedBox(height: 12),
-                const Text('Recent History', style: TextStyle(fontWeight: FontWeight.w600)),
-                if (data != null) _buildChart(data.history) else const SizedBox(height: 160),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    ChoiceChip(
-                      label: const Text('Weight'),
-                      selected: _chartMetric == 'Weight',
-                      onSelected: (_) => setState(() => _chartMetric = 'Weight'),
-                    ),
-                    const SizedBox(width: 8),
-                    ChoiceChip(
-                      label: const Text('Weight × Reps'),
-                      selected: _chartMetric == 'Volume',
-                      onSelected: (_) => setState(() => _chartMetric = 'Volume'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const Text('Sets', style: TextStyle(fontWeight: FontWeight.w600)),
-                if (sets.isEmpty)
-                  const Text('No sets yet.')
-                else
-                  Column(
-                    children: sets.map((set) {
-                      final role = set['set_role'] as String;
-                      final amrap = (set['is_amrap'] as int? ?? 0) == 1;
-                      final partials = (set['partial_reps'] as int? ?? 0) > 0;
-                      final rpe = set['rpe'];
-                      final rir = set['rir'];
-                      return GlassCard(
-                        padding: EdgeInsets.zero,
-                        child: ListTile(
-                          onTap: () => _editSet(set),
-                          title: Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: [
-                              Chip(label: Text(role)),
-                              if (amrap) const Chip(label: Text('AMRAP')),
-                              if (partials) const Chip(label: Text('Partials')),
-                              if (rpe != null) Chip(label: Text('RPE $rpe')),
-                              if (rir != null) Chip(label: Text('RIR $rir')),
-                            ],
-                          ),
-                          subtitle: Text(
-                            'Wt ${set['weight_value'] ?? '-'} • Reps ${set['reps'] ?? '-'} • P ${set['partial_reps'] ?? 0} • RPE ${set['rpe'] ?? '-'} • RIR ${set['rir'] ?? '-'}',
-                          ),
-                          trailing: const Icon(Icons.edit),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _weightController,
-                        focusNode: _weightFocus,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Weight (lb)',
-                          border: OutlineInputBorder(),
-                        ),
-                        onTap: () => _setActive(_weightController),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _repsController,
-                        focusNode: _repsFocus,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Reps',
-                          border: OutlineInputBorder(),
-                        ),
-                        onTap: () => _setActive(_repsController),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    FilterChip(
-                      label: const Text('Partials'),
-                      selected: _showPartials,
-                      onSelected: (value) {
-                        setState(() {
-                          _showPartials = value;
-                          if (!value) {
-                            _partialsController.text = '0';
-                          }
-                        });
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    FilterChip(
-                      label: const Text('RPE/RIR'),
-                      selected: _showRpeRir,
-                      onSelected: (value) {
-                        setState(() {
-                          _showRpeRir = value;
-                          if (!value) {
-                            _rpeController.clear();
-                            _rirController.clear();
-                          }
-                        });
-                      },
-                    ),
-                  ],
-                ),
-                if (_showPartials) ...[
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _partialsController,
-                    focusNode: _partialsFocus,
-                    readOnly: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Partials',
-                      border: OutlineInputBorder(),
-                    ),
-                    onTap: () => _setActive(_partialsController),
-                  ),
-                ],
-                if (_showRpeRir) ...[
-                  const SizedBox(height: 8),
-                  Row(
+              return SingleChildScrollView(
+                child: GlassCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _rpeController,
-                          focusNode: _rpeFocus,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              widget.info.exerciseName,
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: widget.onClose,
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildMuscleChips(),
+                      const SizedBox(height: 8),
+                      Text('Next: $nextLabel${planResult?.isAmrap == true ? ' (AMRAP)' : ''}'),
+                      const SizedBox(height: 12),
+                      const Text('Prescription', style: TextStyle(fontWeight: FontWeight.w600)),
+                      _buildPrescription(),
+                      const SizedBox(height: 12),
+                      const Text('Recent History', style: TextStyle(fontWeight: FontWeight.w600)),
+                      if (data != null) _buildChart(data.history) else const SizedBox(height: 160),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Weight'),
+                            selected: _chartMetric == 'Weight',
+                            onSelected: (_) => setState(() => _chartMetric = 'Weight'),
+                          ),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('Weight × Reps'),
+                            selected: _chartMetric == 'Volume',
+                            onSelected: (_) => setState(() => _chartMetric = 'Volume'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('Sets', style: TextStyle(fontWeight: FontWeight.w600)),
+                      if (sets.isEmpty)
+                        const Text('No sets yet.')
+                      else
+                        Column(
+                          children: sets.map((set) {
+                            final role = set['set_role'] as String;
+                            final amrap = (set['is_amrap'] as int? ?? 0) == 1;
+                            final partials = (set['partial_reps'] as int? ?? 0) > 0;
+                            final rpe = set['rpe'];
+                            final rir = set['rir'];
+                            return GlassCard(
+                              padding: EdgeInsets.zero,
+                              child: ListTile(
+                                onTap: () => _editSet(set),
+                                title: Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    Chip(label: Text(role)),
+                                    if (amrap) const Chip(label: Text('AMRAP')),
+                                    if (partials) const Chip(label: Text('Partials')),
+                                    if (rpe != null) Chip(label: Text('RPE $rpe')),
+                                    if (rir != null) Chip(label: Text('RIR $rir')),
+                                  ],
+                                ),
+                                subtitle: Text(
+                                  'Wt ${set['weight_value'] ?? '-'} • Reps ${set['reps'] ?? '-'} • P ${set['partial_reps'] ?? 0} • RPE ${set['rpe'] ?? '-'} • RIR ${set['rir'] ?? '-'}',
+                                ),
+                                trailing: const Icon(Icons.edit),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _weightController,
+                              focusNode: _weightFocus,
+                              readOnly: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Weight (lb)',
+                                border: OutlineInputBorder(),
+                              ),
+                              onTap: () => _setActive(_weightController),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: _repsController,
+                              focusNode: _repsFocus,
+                              readOnly: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Reps',
+                                border: OutlineInputBorder(),
+                              ),
+                              onTap: () => _setActive(_repsController),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          FilterChip(
+                            label: const Text('Partials'),
+                            selected: _showPartials,
+                            onSelected: (value) {
+                              setState(() {
+                                _showPartials = value;
+                                if (!value) {
+                                  _partialsController.text = '0';
+                                }
+                              });
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          FilterChip(
+                            label: const Text('RPE/RIR'),
+                            selected: _showRpeRir,
+                            onSelected: (value) {
+                              setState(() {
+                                _showRpeRir = value;
+                                if (!value) {
+                                  _rpeController.clear();
+                                  _rirController.clear();
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      if (_showPartials) ...[
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _partialsController,
+                          focusNode: _partialsFocus,
                           readOnly: true,
                           decoration: const InputDecoration(
-                            labelText: 'RPE',
+                            labelText: 'Partials',
                             border: OutlineInputBorder(),
                           ),
-                          onTap: () => _setActive(_rpeController),
+                          onTap: () => _setActive(_partialsController),
                         ),
+                      ],
+                      if (_showRpeRir) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _rpeController,
+                                focusNode: _rpeFocus,
+                                readOnly: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'RPE',
+                                  border: OutlineInputBorder(),
+                                ),
+                                onTap: () => _setActive(_rpeController),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _rirController,
+                                focusNode: _rirFocus,
+                                readOnly: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'RIR',
+                                  border: OutlineInputBorder(),
+                                ),
+                                onTap: () => _setActive(_rirController),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      _NumericKeypad(onKey: _appendKey),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _handleAddSet,
+                        child: const Text('Add Set'),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: _rirController,
-                          focusNode: _rirFocus,
-                          readOnly: true,
-                          decoration: const InputDecoration(
-                            labelText: 'RIR',
-                            border: OutlineInputBorder(),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: widget.onStartRest,
+                              child: const Text('Start Rest (120s)'),
+                            ),
                           ),
-                          onTap: () => _setActive(_rirController),
-                        ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: widget.onClose,
+                            child: const Text('End Exercise'),
+                          ),
+                          IconButton(
+                            onPressed: widget.onUndo,
+                            icon: const Icon(Icons.undo),
+                          ),
+                          IconButton(
+                            onPressed: widget.onRedo,
+                            icon: const Icon(Icons.redo),
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 16),
                     ],
                   ),
-                ],
-                const SizedBox(height: 8),
-                _NumericKeypad(onKey: _appendKey),
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: _handleAddSet,
-                  child: const Text('Add Set'),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: widget.onStartRest,
-                        child: const Text('Start Rest (120s)'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('End Exercise'),
-                    ),
-                    IconButton(
-                      onPressed: widget.onUndo,
-                      icon: const Icon(Icons.undo),
-                    ),
-                    IconButton(
-                      onPressed: widget.onRedo,
-                      icon: const Icon(Icons.redo),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                ],
-              ),
-            ),
-          );
-        },
+              );
+            },
+          ),
+        ),
       ),
     );
   }

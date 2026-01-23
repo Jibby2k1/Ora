@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../db/db.dart';
@@ -17,6 +20,11 @@ class SettingsRepo {
   static const String keyCloudApiKey = 'cloud_api_key';
   static const String keyCloudModel = 'cloud_model';
   static const String keyCloudProvider = 'cloud_provider';
+  static const String keyCloudConsentDiet = 'cloud_consent_diet';
+  static const String keyCloudConsentAppearance = 'cloud_consent_appearance';
+  static const String keyCloudConsentLeaderboard = 'cloud_consent_leaderboard';
+  static const String keyAppearanceProfileEnabled = 'appearance_profile_enabled';
+  static const String keyAppearanceProfileSex = 'appearance_profile_sex';
 
   Future<String> getUnit() async {
     return (await _get(keyUnit)) ?? 'lb';
@@ -80,15 +88,37 @@ class SettingsRepo {
   }
 
   Future<String?> getCloudApiKey() async {
+    if (_supportsSecureStorage()) {
+      final secure = await _secureStorage.read(key: keyCloudApiKey);
+      if (secure != null && secure.trim().isNotEmpty) {
+        return secure.trim();
+      }
+      final legacy = await _get(keyCloudApiKey);
+      if (legacy != null && legacy.trim().isNotEmpty) {
+        await _secureStorage.write(key: keyCloudApiKey, value: legacy.trim());
+        await _delete(keyCloudApiKey);
+        return legacy.trim();
+      }
+      return null;
+    }
     return _get(keyCloudApiKey);
   }
 
   Future<void> setCloudApiKey(String? apiKey) async {
     if (apiKey == null || apiKey.trim().isEmpty) {
-      await _delete(keyCloudApiKey);
+      if (_supportsSecureStorage()) {
+        await _secureStorage.delete(key: keyCloudApiKey);
+      } else {
+        await _delete(keyCloudApiKey);
+      }
       return;
     }
-    await _set(keyCloudApiKey, apiKey.trim());
+    if (_supportsSecureStorage()) {
+      await _secureStorage.write(key: keyCloudApiKey, value: apiKey.trim());
+      await _delete(keyCloudApiKey);
+    } else {
+      await _set(keyCloudApiKey, apiKey.trim());
+    }
   }
 
   Future<String> getCloudModel() async {
@@ -105,6 +135,58 @@ class SettingsRepo {
 
   Future<void> setCloudProvider(String provider) async {
     await _set(keyCloudProvider, provider.trim());
+  }
+
+  Future<bool> getCloudConsentDiet() async {
+    final raw = await _get(keyCloudConsentDiet);
+    return raw == '1';
+  }
+
+  Future<void> setCloudConsentDiet(bool value) async {
+    await _set(keyCloudConsentDiet, value ? '1' : '0');
+  }
+
+  Future<bool> getCloudConsentAppearance() async {
+    final raw = await _get(keyCloudConsentAppearance);
+    return raw == '1';
+  }
+
+  Future<void> setCloudConsentAppearance(bool value) async {
+    await _set(keyCloudConsentAppearance, value ? '1' : '0');
+  }
+
+  Future<bool> getCloudConsentLeaderboard() async {
+    final raw = await _get(keyCloudConsentLeaderboard);
+    return raw == '1';
+  }
+
+  Future<void> setCloudConsentLeaderboard(bool value) async {
+    await _set(keyCloudConsentLeaderboard, value ? '1' : '0');
+  }
+
+  Future<bool> getAppearanceProfileEnabled() async {
+    final raw = await _get(keyAppearanceProfileEnabled);
+    return raw == '1';
+  }
+
+  Future<void> setAppearanceProfileEnabled(bool value) async {
+    await _set(keyAppearanceProfileEnabled, value ? '1' : '0');
+  }
+
+  Future<String> getAppearanceProfileSex() async {
+    return (await _get(keyAppearanceProfileSex)) ?? 'neutral';
+  }
+
+  Future<void> setAppearanceProfileSex(String value) async {
+    await _set(keyAppearanceProfileSex, value.trim());
+  }
+
+  Future<String?> getValue(String key) async {
+    return _get(key);
+  }
+
+  Future<void> setValue(String key, String value) async {
+    await _set(key, value);
   }
 
   Future<String?> _get(String key) async {
@@ -133,4 +215,10 @@ class SettingsRepo {
     final db = await _db.database;
     await db.delete('app_setting', where: 'key = ?', whereArgs: [key]);
   }
+
+  bool _supportsSecureStorage() {
+    return Platform.isAndroid || Platform.isIOS;
+  }
+
+  FlutterSecureStorage get _secureStorage => const FlutterSecureStorage();
 }

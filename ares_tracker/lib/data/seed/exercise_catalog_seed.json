@@ -1130,6 +1130,19 @@
     ]
   },
   {
+    "canonical_name": "Toe Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Calves",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "toe press",
+      "leg press calf raise",
+      "calf press on leg press",
+      "calf press"
+    ]
+  },
+  {
     "canonical_name": "Horizontal Leg Press Machine",
     "equipment_type": "MACHINE",
     "primary_muscle": "Quads",
@@ -1876,6 +1889,18 @@
     "aliases": [
       "cable crunch",
       "crunch"
+    ]
+  },
+  {
+    "canonical_name": "Cable Kneeling Crunch",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Abs",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "cable kneeling crunch",
+      "kneeling cable crunch",
+      "kneeling crunch"
     ]
   },
   {
@@ -3302,6 +3327,252 @@
       "selectorized hip adduction machine",
       "selectorized hip adduction",
       "hip adduction machine"
+    ]
+  },
+  {
+    "canonical_name": "Barbell Wrist Curl",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Forearms",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "wrist curl barbell",
+      "barbell wrist curls"
+    ]
+  },
+  {
+    "canonical_name": "Cable Archer Pull",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Lats",
+    "secondary_muscles": [
+      "Rear Delts",
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "archer pull",
+      "cable archer row",
+      "archer pulldown"
+    ]
+  },
+  {
+    "canonical_name": "Cable Overhead Press",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": [
+      "Triceps",
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "overhead cable press",
+      "cable shoulder press"
+    ]
+  },
+  {
+    "canonical_name": "Cable V-Bar Pushdown",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Triceps",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "v bar pushdown",
+      "v-bar pushdown",
+      "cable v bar pushdown",
+      "tricep v bar pushdown"
+    ]
+  },
+  {
+    "canonical_name": "Close-Grip Cable Lat Pulldown",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Lats",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "close grip cable pulldown",
+      "close grip lat pulldown",
+      "close-grip pulldown"
+    ]
+  },
+  {
+    "canonical_name": "Face Pulls",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Rear Delts",
+    "secondary_muscles": [
+      "Upper Back"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "face pull",
+      "cable face pulls",
+      "facepulls"
+    ]
+  },
+  {
+    "canonical_name": "Flat Dragonfly",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "flat dumbbell fly",
+      "flat fly",
+      "dragonfly"
+    ]
+  },
+  {
+    "canonical_name": "Incline DB Curl",
+    "equipment_type": "DUMBBELL",
+    "primary_muscle": "Biceps",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "EACH",
+    "aliases": [
+      "incline dumbbell curl",
+      "incline db curls",
+      "incline curls"
+    ]
+  },
+  {
+    "canonical_name": "Kelso Shrug",
+    "equipment_type": "BARBELL",
+    "primary_muscle": "Traps",
+    "secondary_muscles": [
+      "Upper Back"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "kelso shrug barbell",
+      "kelso shrugs"
+    ]
+  },
+  {
+    "canonical_name": "Machine Hammer Curl",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Biceps",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "hammer curl machine",
+      "machine hammer curls"
+    ]
+  },
+  {
+    "canonical_name": "Machine Incline Press",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts",
+      "Triceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "incline press machine",
+      "machine incline chest press",
+      "incline machine press"
+    ]
+  },
+  {
+    "canonical_name": "Machine Pec Deck",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Chest",
+    "secondary_muscles": [
+      "Front Delts"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "pec deck",
+      "machine pec fly",
+      "pec deck machine",
+      "pec fly machine"
+    ]
+  },
+  {
+    "canonical_name": "Machine Preacher Curl",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Biceps",
+    "secondary_muscles": [
+      "Forearms"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "preacher curl machine",
+      "machine preacher curls"
+    ]
+  },
+  {
+    "canonical_name": "Machine Reverse Pec Deck",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Rear Delts",
+    "secondary_muscles": [
+      "Upper Back"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "reverse pec deck",
+      "reverse pec deck machine",
+      "reverse fly machine"
+    ]
+  },
+  {
+    "canonical_name": "Seated Close-Grip Cable Row",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "close grip cable row",
+      "seated close grip row",
+      "close-grip seated row"
+    ]
+  },
+  {
+    "canonical_name": "Single Arm Overhead Cable Extension",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Triceps",
+    "secondary_muscles": [],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "single arm overhead cable tricep extension",
+      "one arm overhead cable extension"
+    ]
+  },
+  {
+    "canonical_name": "Wide-Grip Cable Lat Pulldown",
+    "equipment_type": "CABLE",
+    "primary_muscle": "Lats",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "wide grip lat pulldown",
+      "wide-grip pulldown",
+      "wide cable pulldown"
+    ]
+  },
+  {
+    "canonical_name": "Wide-Grip Machine Row",
+    "equipment_type": "MACHINE",
+    "primary_muscle": "Back",
+    "secondary_muscles": [
+      "Biceps"
+    ],
+    "weight_mode_default": "TOTAL",
+    "aliases": [
+      "wide grip machine row",
+      "wide machine row"
     ]
   }
 ]

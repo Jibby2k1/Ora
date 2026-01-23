@@ -3,17 +3,21 @@ import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
 import 'data/db/db.dart';
 import 'data/seed/demo_history_seed.dart';
-import 'ui/screens/programs/programs_screen.dart';
+import 'ui/screens/shell/app_shell.dart';
 
 class AresApp extends StatelessWidget {
   AresApp({super.key});
 
   final Future<void> _initFuture = _initialize();
+  static final GlobalKey<ScaffoldMessengerState> messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
   static Future<void> _initialize() async {
     final db = AppDatabase.instance;
     await db.database;
     await db.seedExercisesIfNeeded('lib/data/seed/exercise_catalog_seed.json', fromAsset: true);
+    await db.ensureExercisesFromSeed('lib/data/seed/exercise_catalog_seed.json', fromAsset: true);
+    await db.applyMuscleMapSeed('lib/data/seed/muscle_map_seed.json', fromAsset: true);
     await DemoHistorySeed(db).ensureHistorySeed();
   }
 
@@ -24,6 +28,7 @@ class AresApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
       darkTheme: AppTheme.dark(),
+      scaffoldMessengerKey: messengerKey,
       home: FutureBuilder<void>(
         future: _initFuture,
         builder: (context, snapshot) {
@@ -39,7 +44,7 @@ class AresApp extends StatelessWidget {
               ),
             );
           }
-          return const ProgramsScreen();
+          return const AppShell();
         },
       ),
     );

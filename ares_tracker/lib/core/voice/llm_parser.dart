@@ -14,8 +14,10 @@ class LlmParser {
 
   static const _modelAsset =
       'assets/models/llm/qwen2.5-0.5b-instruct-q4_k_m.gguf';
+  static const bool _enableLocalLlm = false;
 
   LlamaParent? _parent;
+  Llama? _direct;
   bool _initialized = false;
   bool _initializing = false;
   String? lastError;
@@ -23,10 +25,16 @@ class LlmParser {
   String? lastPrompt;
 
   bool get isReady => _initialized;
+  bool get enabled => _enableLocalLlm;
 
   Future<void> initialize() async {
     if (_initialized || _initializing) return;
     _initializing = true;
+    if (!_enableLocalLlm) {
+      lastError = 'Local LLM disabled.';
+      _initializing = false;
+      return;
+    }
     if (!(Platform.isAndroid || Platform.isIOS || Platform.isLinux)) {
       lastError = 'LLM parsing not supported on this platform.';
       _initializing = false;
@@ -45,27 +53,33 @@ class LlmParser {
       }
 
       final modelParams = ModelParams()..nGpuLayers = 0;
+      final isMobile = Platform.isAndroid || Platform.isIOS;
       final contextParams = ContextParams()
-        ..nCtx = 1024
+        ..nCtx = isMobile ? 768 : 1024
         ..nPredict = 128
-        ..nBatch = 256
-        ..nThreads = 4
-        ..nThreadsBatch = 4;
+        ..nBatch = isMobile ? 128 : 256
+        ..nThreads = isMobile ? 2 : 4
+        ..nThreadsBatch = isMobile ? 2 : 4;
       final samplerParams = SamplerParams()
         ..temp = 0.1
         ..topP = 0.9
         ..topK = 40;
 
-      final load = LlamaLoad(
-        path: modelPath,
-        modelParams: modelParams,
-        contextParams: contextParams,
-        samplingParams: samplerParams,
-        format: ChatMLFormat(),
-      );
-      _parent = LlamaParent(load, ChatMLFormat());
-      await _parent!.init();
-      _initialized = true;
+      if (isMobile) {
+        _direct = Llama(modelPath, modelParams, contextParams, samplerParams, false);
+        _initialized = true;
+      } else {
+        final load = LlamaLoad(
+          path: modelPath,
+          modelParams: modelParams,
+          contextParams: contextParams,
+          samplingParams: samplerParams,
+          format: ChatMLFormat(),
+        );
+        _parent = LlamaParent(load, ChatMLFormat());
+        await _parent!.init();
+        _initialized = true;
+      }
     } catch (e) {
       lastError = e.toString();
     } finally {
@@ -75,34 +89,40 @@ class LlmParser {
 
   Future<NluCommand?> parse(String input) async {
     await initialize();
-    if (!_initialized || _parent == null) {
+    if (!_initialized) {
       return null;
     }
 
     final prompt = _buildPrompt(input);
     lastPrompt = prompt;
-    final scope = _parent!.getScope() as LlamaScope;
-    final buffer = StringBuffer();
-    StreamSubscription<String>? sub;
-    try {
-      sub = scope.stream.listen(buffer.write);
-      final promptId = await scope.sendPrompt(prompt);
-      final completion = await scope.completions
-          .firstWhere((event) => event.promptId == promptId)
-          .timeout(const Duration(seconds: 8));
-      if (!completion.success) {
-        lastError = completion.errorDetails ?? 'LLM completion failed.';
+    if (_direct != null) {
+      final result = await _runDirect(prompt);
+      if (result == null) return null;
+      lastRawOutput = result;
+    } else {
+      final scope = _parent!.getScope() as LlamaScope;
+      final buffer = StringBuffer();
+      StreamSubscription<String>? sub;
+      try {
+        sub = scope.stream.listen(buffer.write);
+        final promptId = await scope.sendPrompt(prompt);
+        final completion = await scope.completions
+            .firstWhere((event) => event.promptId == promptId)
+            .timeout(const Duration(seconds: 8));
+        if (!completion.success) {
+          lastError = completion.errorDetails ?? 'LLM completion failed.';
+          return null;
+        }
+      } catch (e) {
+        lastError = e.toString();
         return null;
+      } finally {
+        await sub?.cancel();
+        await scope.dispose();
       }
-    } catch (e) {
-      lastError = e.toString();
-      return null;
-    } finally {
-      await sub?.cancel();
-      await scope.dispose();
-    }
 
-    lastRawOutput = buffer.toString();
+      lastRawOutput = buffer.toString();
+    }
     final jsonText = _extractJson(lastRawOutput ?? '');
     if (jsonText == null) {
       lastError = 'LLM output did not contain JSON.';
@@ -114,6 +134,32 @@ class LlmParser {
       return _commandFromJson(map);
     } catch (e) {
       lastError = 'Failed to parse LLM JSON: $e';
+      return null;
+    }
+  }
+
+  Future<String?> _runDirect(String prompt) async {
+    final llama = _direct;
+    if (llama == null) return null;
+    try {
+      llama.clear();
+      llama.setPrompt(prompt);
+      final buffer = StringBuffer();
+      final deadline = DateTime.now().add(const Duration(seconds: 8));
+      while (DateTime.now().isBefore(deadline)) {
+        final (token, done) = llama.getNext();
+        if (token.isNotEmpty) {
+          buffer.write(token);
+          final json = _extractJson(buffer.toString());
+          if (json != null) {
+            return buffer.toString();
+          }
+        }
+        if (done) break;
+      }
+      return buffer.toString();
+    } catch (e) {
+      lastError = e.toString();
       return null;
     }
   }

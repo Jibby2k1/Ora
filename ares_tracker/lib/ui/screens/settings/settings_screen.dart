@@ -4,6 +4,7 @@ import '../../../data/db/db.dart';
 import '../../../data/repositories/settings_repo.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
+import 'account_screen.dart';
 import 'profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -29,6 +30,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _restController = TextEditingController();
   final _cloudKeyController = TextEditingController();
   final _cloudModelController = TextEditingController();
+  bool _showCloudKey = false;
 
   @override
   void initState() {
@@ -111,6 +113,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                GlassCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Account'),
+                      const SizedBox(height: 8),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Sign in'),
+                        subtitle: const Text('Apple, Google, Microsoft, Email'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const AccountScreen()),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
                 GlassCard(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -208,6 +232,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ],
                       ),
                       const SizedBox(height: 8),
+                      const Text(
+                        'API keys are stored securely on-device (Keychain/Keystore) and never uploaded.',
+                      ),
+                      const SizedBox(height: 8),
                       SwitchListTile(
                         value: _cloudEnabled,
                         contentPadding: EdgeInsets.zero,
@@ -221,36 +249,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 8),
                       TextField(
                         controller: _cloudKeyController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'API Key',
+                          suffixIcon: IconButton(
+                            icon: Icon(_showCloudKey ? Icons.visibility_off : Icons.visibility),
+                            onPressed: () => setState(() => _showCloudKey = !_showCloudKey),
+                          ),
                         ),
-                        obscureText: true,
+                        obscureText: !_showCloudKey,
                         onSubmitted: (_) => _settingsRepo.setCloudApiKey(_cloudKeyController.text),
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () async {
+                            _cloudKeyController.clear();
+                            await _settingsRepo.setCloudApiKey(null);
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('API key cleared.')),
+                            );
+                          },
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Clear API key'),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Row(
                         children: [
                           const Expanded(child: Text('Model')),
-                          DropdownButton<String>(
-                            value: _cloudModelController.text.trim().isEmpty
-                                ? (_cloudProvider == 'openai' ? 'gpt-5-nano' : 'gemini-2.5-pro')
-                                : _cloudModelController.text.trim(),
-                            items: _cloudProvider == 'openai'
-                                ? const [
-                                    DropdownMenuItem(value: 'gpt-5-nano', child: Text('gpt-5-nano')),
-                                    DropdownMenuItem(value: 'gpt-4o', child: Text('gpt-4o')),
-                                    DropdownMenuItem(value: 'gpt-4o-mini', child: Text('gpt-4o-mini')),
-                                  ]
-                                : const [
-                                    DropdownMenuItem(value: 'gemini-2.5-pro', child: Text('gemini-2.5-pro')),
-                                    DropdownMenuItem(value: 'gemini-2.0-flash', child: Text('gemini-2.0-flash')),
-                                    DropdownMenuItem(value: 'gemini-1.5-flash', child: Text('gemini-1.5-flash')),
-                                  ],
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setState(() {
-                                _cloudModelController.text = value;
-                              });
+                          Builder(
+                            builder: (context) {
+                              final models = _cloudProvider == 'openai'
+                                  ? const ['gpt-5-nano', 'gpt-4o', 'gpt-4o-mini']
+                                  : const ['gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+                              var current = _cloudModelController.text.trim();
+                              if (current.isEmpty || !models.contains(current)) {
+                                current = models.first;
+                                _cloudModelController.text = current;
+                              }
+                              return DropdownButton<String>(
+                                value: current,
+                                items: models
+                                    .map((model) => DropdownMenuItem(value: model, child: Text(model)))
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value == null) return;
+                                  setState(() {
+                                    _cloudModelController.text = value;
+                                  });
+                                },
+                              );
                             },
                           ),
                         ],

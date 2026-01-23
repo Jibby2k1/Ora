@@ -1,4 +1,5 @@
 import 'package:sqflite/sqflite.dart';
+import 'dart:convert';
 
 import '../db/db.dart';
 
@@ -223,5 +224,57 @@ class ProgramRepo {
       whereArgs: [programDayId],
       orderBy: 'order_index ASC',
     );
+  }
+
+  Future<Map<int, List<String>>> getExerciseNamesByDayForProgram(int programId) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery('''
+SELECT pd.id as day_id,
+       e.canonical_name as name
+FROM program_day pd
+JOIN program_day_exercise pde ON pde.program_day_id = pd.id
+JOIN exercise e ON e.id = pde.exercise_id
+WHERE pd.program_id = ?
+ORDER BY pd.day_index ASC, pde.order_index ASC
+''', [programId]);
+    final map = <int, List<String>>{};
+    for (final row in rows) {
+      final dayId = row['day_id'] as int?;
+      final name = row['name'] as String?;
+      if (dayId == null || name == null || name.trim().isEmpty) continue;
+      map.putIfAbsent(dayId, () => []).add(name.trim());
+    }
+    return map;
+  }
+
+  Future<List<String>> getMusclesForProgramDay(int programDayId) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery('''
+SELECT e.primary_muscle, e.secondary_muscles_json
+FROM program_day_exercise pde
+JOIN exercise e ON e.id = pde.exercise_id
+WHERE pde.program_day_id = ?
+''', [programDayId]);
+    final muscles = <String>{};
+    for (final row in rows) {
+      final primary = row['primary_muscle'] as String?;
+      if (primary != null && primary.trim().isNotEmpty) {
+        muscles.add(primary.trim());
+      }
+      final secondaryJson = row['secondary_muscles_json'] as String?;
+      if (secondaryJson != null && secondaryJson.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(secondaryJson);
+          if (decoded is List) {
+            for (final item in decoded) {
+              if (item is String && item.trim().isNotEmpty) {
+                muscles.add(item.trim());
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    return muscles.toList()..sort();
   }
 }

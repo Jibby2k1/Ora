@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 
 import 'dart:async';
 
@@ -13,8 +14,10 @@ import '../../../core/voice/wake_word.dart';
 import '../../../core/voice/voice_models.dart';
 import '../../../core/voice/nlu_parser.dart';
 import '../../../core/voice/stt.dart';
+import '../../../core/voice/muscle_enricher.dart';
 import '../../../data/db/db.dart';
 import '../../../data/repositories/exercise_repo.dart';
+import '../../../data/repositories/program_repo.dart';
 import '../../../data/repositories/settings_repo.dart';
 import '../../../data/repositories/workout_repo.dart';
 import '../../../domain/models/last_logged_set.dart';
@@ -70,6 +73,13 @@ class _SessionMatchScore {
   final double score;
 }
 
+class _ExerciseMuscles {
+  _ExerciseMuscles({required this.primary, required this.secondary});
+
+  final String? primary;
+  final List<String> secondary;
+}
+
 class _SessionScreenState extends State<SessionScreen> {
   final _voiceController = TextEditingController();
   final _parser = NluParser();
@@ -80,12 +90,17 @@ class _SessionScreenState extends State<SessionScreen> {
   late final WorkoutRepo _workoutRepo;
   late final ExerciseMatcher _matcher;
   late final ExerciseRepo _exerciseRepo;
+  late final ProgramRepo _programRepo;
   late final SettingsRepo _settingsRepo;
   late final Map<int, SessionExerciseInfo> _exerciseById;
   late final Map<int, SessionExerciseInfo> _sessionExerciseById;
   late final Map<String, int> _cacheRefToExerciseId;
   late final CommandDispatcher _dispatcher;
   late final List<SessionExerciseInfo> _sessionExercises;
+  final Map<int, _ExerciseMuscles> _musclesByExerciseId = {};
+  List<String> _currentDayExerciseNames = [];
+  List<String> _otherDayExerciseNames = [];
+  List<String> _catalogExerciseNames = [];
   final UndoRedoStack _undoRedo = UndoRedoStack();
   Timer? _restTimer;
   int _restRemaining = 0;
@@ -102,6 +117,7 @@ class _SessionScreenState extends State<SessionScreen> {
   String? _debugLlm;
   String? _debugGemini;
   String? _debugOpenAi;
+  String? _debugCloud;
   String? _debugDecision;
   String? _debugParts;
   String? _debugLlmRaw;
@@ -121,6 +137,7 @@ class _SessionScreenState extends State<SessionScreen> {
     final db = AppDatabase.instance;
     _workoutRepo = WorkoutRepo(db);
     _exerciseRepo = ExerciseRepo(db);
+    _programRepo = ProgramRepo(db);
     _settingsRepo = SettingsRepo(db);
     _matcher = ExerciseMatcher(_exerciseRepo);
     _sessionExercises = List<SessionExerciseInfo>.from(widget.contextData.exercises);
@@ -133,8 +150,11 @@ class _SessionScreenState extends State<SessionScreen> {
         sessionExerciseById: _sessionExerciseById,
       ).call,
     );
-    Future.microtask(() => _llmParser.initialize());
+    _currentDayExerciseNames = _sessionExercises.map((e) => e.exerciseName).toList();
+    // Defer local LLM initialization until it is actually needed.
     Future.microtask(_loadCloudSettings);
+    Future.microtask(_loadExerciseHints);
+    Future.microtask(_loadSessionMuscles);
   }
 
   @override
@@ -166,15 +186,137 @@ class _SessionScreenState extends State<SessionScreen> {
     }
   }
 
+  Future<void> _loadExerciseHints() async {
+    try {
+      final programId = widget.contextData.programId;
+      final programDayId = widget.contextData.programDayId;
+      final byDay = await _programRepo.getExerciseNamesByDayForProgram(programId);
+      final other = <String>[];
+      byDay.forEach((dayId, names) {
+        if (dayId != programDayId) {
+          other.addAll(names);
+        }
+      });
+      final catalogRows = await _exerciseRepo.getAll();
+      final catalog = catalogRows
+          .map((row) => row['canonical_name'] as String?)
+          .whereType<String>()
+          .where((name) => name.trim().isNotEmpty)
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _otherDayExerciseNames = _limitList(_dedupeList(other), 120);
+        _catalogExerciseNames = _limitList(_dedupeList(catalog), 200);
+      });
+    } catch (_) {
+      // ignore hint failures
+    }
+  }
+
+  Future<void> _loadSessionMuscles() async {
+    try {
+      final cloudEnabled = await _settingsRepo.getCloudEnabled();
+      final apiKey = await _settingsRepo.getCloudApiKey();
+      final provider = await _settingsRepo.getCloudProvider();
+      final model = await _settingsRepo.getCloudModel();
+      final canEnrich = cloudEnabled && apiKey != null && apiKey.trim().isNotEmpty;
+      final enricher = canEnrich ? MuscleEnricher() : null;
+      for (final info in _sessionExercises) {
+        final row = await _exerciseRepo.getById(info.exerciseId);
+        if (row == null) continue;
+        final primary = (row['primary_muscle'] as String?)?.trim();
+        final secondaryJson = row['secondary_muscles_json'] as String?;
+        final secondary = <String>[];
+        if (secondaryJson != null && secondaryJson.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(secondaryJson);
+            if (decoded is List) {
+              secondary.addAll(
+                decoded.map((e) => e.toString()).where((e) => e.trim().isNotEmpty),
+              );
+            }
+          } catch (_) {}
+        }
+        _musclesByExerciseId[info.exerciseId] = _ExerciseMuscles(
+          primary: primary,
+          secondary: secondary,
+        );
+        if ((primary == null || primary.isEmpty) && enricher != null) {
+          final result = await enricher.enrich(
+            exerciseName: info.exerciseName,
+            provider: provider,
+            apiKey: apiKey!.trim(),
+            model: model,
+          );
+          if (result != null) {
+            await _exerciseRepo.updateMuscles(
+              exerciseId: info.exerciseId,
+              primaryMuscle: result.primary,
+              secondaryMuscles: result.secondary,
+            );
+            _musclesByExerciseId[info.exerciseId] = _ExerciseMuscles(
+              primary: result.primary,
+              secondary: result.secondary,
+            );
+          }
+        }
+      }
+      if (mounted) setState(() {});
+    } catch (_) {}
+  }
+
+  List<String> _dedupeList(List<String> values) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final value in values) {
+      final trimmed = value.trim();
+      final key = trimmed.toLowerCase();
+      if (trimmed.isEmpty || seen.contains(key)) continue;
+      seen.add(key);
+      result.add(trimmed);
+    }
+    return result;
+  }
+
+  List<String> _limitList(List<String> values, int max) {
+    if (values.length <= max) return values;
+    return values.sublist(0, max);
+  }
+
+  Future<void> _refreshCloudSettingsForVoice() async {
+    final enabled = await _settingsRepo.getCloudEnabled();
+    final apiKey = await _settingsRepo.getCloudApiKey();
+    final model = await _settingsRepo.getCloudModel();
+    final provider = await _settingsRepo.getCloudProvider();
+    if (!mounted) return;
+    if (enabled != _cloudEnabled ||
+        apiKey != _cloudApiKey ||
+        model != _cloudModel ||
+        provider != _cloudProvider) {
+      setState(() {
+        _cloudEnabled = enabled;
+        _cloudApiKey = apiKey;
+        _cloudModel = model;
+        _cloudProvider = provider;
+      });
+    }
+  }
+
   Future<void> _handleVoiceInput(String input) async {
     final trimmed = input.trim();
     if (trimmed.isEmpty) return;
+    await _refreshCloudSettingsForVoice();
+    final cloudKeyPresent = _cloudApiKey != null && _cloudApiKey!.trim().isNotEmpty;
+    final cloudStatus = _cloudEnabled
+        ? (cloudKeyPresent ? 'On (${_cloudProvider}/${_cloudModel})' : 'On (missing key)')
+        : 'Off';
     _setVoiceDebug(
       transcript: trimmed,
       rule: '-',
       llm: '-',
       gemini: '-',
       openai: '-',
+      cloud: cloudStatus,
       decision: 'Listening...',
       parts: null,
       llmRaw: null,
@@ -185,7 +327,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
     if (await _handlePendingVoice(trimmed)) return;
 
-    if (_cloudEnabled && _cloudApiKey != null && _cloudApiKey!.isNotEmpty) {
+    if (_cloudEnabled && cloudKeyPresent) {
       if (_cloudProvider == 'openai') {
         final openAiCommand = await _runOpenAiParse(trimmed);
         if (openAiCommand != null) {
@@ -231,7 +373,7 @@ class _SessionScreenState extends State<SessionScreen> {
       _setVoiceDebug(decision: 'Cloud enabled but missing API key');
     }
 
-    final llmCommand = await _runLlmParse(trimmed);
+    final llmCommand = _llmParser.enabled ? await _runLlmParse(trimmed) : null;
     if (llmCommand != null) {
       final normalized = _normalizeLogSetFromTranscript(llmCommand, trimmed);
       _setVoiceDebug(
@@ -261,7 +403,7 @@ class _SessionScreenState extends State<SessionScreen> {
       return;
     }
 
-    if (_llmParser.lastError != null) {
+    if (_llmParser.enabled && _llmParser.lastError != null) {
       _setVoiceDebug(
         decision: 'LLM failed: ${_llmParser.lastError}',
       );
@@ -590,6 +732,9 @@ class _SessionScreenState extends State<SessionScreen> {
       transcript: transcript,
       apiKey: apiKey,
       model: _cloudModel,
+      currentDayExercises: _currentDayExerciseNames,
+      otherDayExercises: _otherDayExerciseNames,
+      catalogExercises: _catalogExerciseNames,
     );
     setState(() {
       _prompt = null;
@@ -615,6 +760,9 @@ class _SessionScreenState extends State<SessionScreen> {
       transcript: transcript,
       apiKey: apiKey,
       model: _cloudModel,
+      currentDayExercises: _currentDayExerciseNames,
+      otherDayExercises: _otherDayExerciseNames,
+      catalogExercises: _catalogExerciseNames,
     );
     setState(() {
       _prompt = null;
@@ -677,6 +825,7 @@ class _SessionScreenState extends State<SessionScreen> {
     String? llm,
     String? gemini,
     String? openai,
+    String? cloud,
     String? decision,
     String? parts,
     String? llmRaw,
@@ -691,6 +840,7 @@ class _SessionScreenState extends State<SessionScreen> {
       _debugLlm = llm ?? _debugLlm;
       _debugGemini = gemini ?? _debugGemini;
       _debugOpenAi = openai ?? _debugOpenAi;
+      _debugCloud = cloud ?? _debugCloud;
       _debugDecision = decision ?? _debugDecision;
       _debugParts = parts ??
           'hints: weight=${hints.weight}, reps=${hints.reps}, unit=${hints.weightUnit}, partials=${hints.partials}';
@@ -1096,6 +1246,7 @@ class _SessionScreenState extends State<SessionScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withOpacity(0.4),
       builder: (_) {
@@ -1108,6 +1259,7 @@ class _SessionScreenState extends State<SessionScreen> {
           onUndo: _undo,
           onRedo: _redo,
           onStartRest: _startRestTimer,
+          onClose: () => Navigator.of(context).pop(),
         );
       },
     );
@@ -1149,11 +1301,60 @@ class _SessionScreenState extends State<SessionScreen> {
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final info = _sessionExercises[index];
+                    final muscles = _musclesByExerciseId[info.exerciseId];
+                    final tags = <String>[];
+                    if (info.planBlocks.any((b) => b.amrapLastSet)) {
+                      tags.add('AMRAP');
+                    }
+                    final muscleChips = <Widget>[];
+                    final primary = muscles?.primary;
+                    final primaryColor = Theme.of(context).colorScheme.primary;
+                    final secondaryColor = Theme.of(context).colorScheme.secondary;
+                    if (primary != null && primary.isNotEmpty) {
+                      muscleChips.add(
+                        Chip(
+                          label: Text(primary),
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor: primaryColor.withOpacity(0.22),
+                          labelStyle: TextStyle(color: primaryColor, fontWeight: FontWeight.w600),
+                          side: BorderSide(color: primaryColor.withOpacity(0.6)),
+                        ),
+                      );
+                    }
+                    for (final secondary in muscles?.secondary ?? const []) {
+                      muscleChips.add(
+                        Chip(
+                          label: Text(secondary),
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor: secondaryColor.withOpacity(0.18),
+                          labelStyle: TextStyle(color: secondaryColor, fontWeight: FontWeight.w500),
+                          side: BorderSide(color: secondaryColor.withOpacity(0.5)),
+                        ),
+                      );
+                    }
+                    for (final tag in tags) {
+                      muscleChips.add(
+                        Chip(
+                          label: Text(tag),
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                        ),
+                      );
+                    }
                     return GlassCard(
                       padding: EdgeInsets.zero,
                       child: ListTile(
                         title: Text(info.exerciseName),
-                        subtitle: const Text('Tap to log sets'),
+                        subtitle: muscleChips.isEmpty
+                            ? const Text('Tap to log sets')
+                            : Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: muscleChips,
+                                ),
+                              ),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => _openExerciseModal(info),
                       ),
@@ -1258,6 +1459,8 @@ class _SessionScreenState extends State<SessionScreen> {
                             Text('Gemini: ${_debugGemini ?? '-'}'),
                             const SizedBox(height: 6),
                             Text('OpenAI: ${_debugOpenAi ?? '-'}'),
+                            const SizedBox(height: 6),
+                            Text('Cloud: ${_debugCloud ?? '-'}'),
                             const SizedBox(height: 6),
                             Text('Hints: ${_debugParts ?? '-'}'),
                             const SizedBox(height: 6),

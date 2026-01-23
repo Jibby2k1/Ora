@@ -50,6 +50,11 @@ class SessionService {
       ));
     }
 
-    return SessionContext(sessionId: sessionId, exercises: exerciseInfos);
+    return SessionContext(
+      sessionId: sessionId,
+      exercises: exerciseInfos,
+      programId: programId,
+      programDayId: programDayId,
+    );
   }
 }

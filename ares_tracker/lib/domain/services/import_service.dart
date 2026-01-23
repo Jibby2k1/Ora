@@ -1,23 +1,43 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
 
 import '../../data/db/db.dart';
 import '../../data/repositories/exercise_repo.dart';
 import '../../data/repositories/program_repo.dart';
+import '../../data/repositories/settings_repo.dart';
+import '../../core/voice/muscle_enricher.dart';
 
 class ImportResult {
-  ImportResult({required this.programId, required this.dayCount, required this.exerciseCount});
+  ImportResult({
+    required this.programId,
+    required this.dayCount,
+    required this.exerciseCount,
+    required this.missingExercises,
+  });
 
   final int programId;
   final int dayCount;
   final int exerciseCount;
+  final List<String> missingExercises;
+}
+
+class ExerciseScanResult {
+  ExerciseScanResult({
+    required this.totalExercises,
+    required this.missingExercises,
+  });
+
+  final int totalExercises;
+  final List<String> missingExercises;
 }
 
 class ImportService {
   ImportService(this._db);
 
   final AppDatabase _db;
+  final Map<String, MuscleInfo?> _muscleCache = {};
 
   Future<ImportResult> importFromXlsxPath(String path) async {
     final file = File(path);
@@ -26,7 +46,29 @@ class ImportService {
     }
 
     final bytes = file.readAsBytesSync();
+    return importFromXlsxBytes(bytes);
+  }
+
+  Future<ImportResult> importFromXlsxBytes(Uint8List bytes, {String? programNameOverride}) async {
     final excel = Excel.decodeBytes(bytes);
+    return _importFromExcel(excel, programNameOverride: programNameOverride);
+  }
+
+  Future<ExerciseScanResult> scanExercisesFromXlsxBytes(Uint8List bytes) async {
+    final excel = Excel.decodeBytes(bytes);
+    return _scanFromExcel(excel);
+  }
+
+  Future<ExerciseScanResult> scanExercisesFromXlsxPath(String path) async {
+    final file = File(path);
+    if (!file.existsSync()) {
+      throw Exception('File not found: $path');
+    }
+    final bytes = file.readAsBytesSync();
+    return scanExercisesFromXlsxBytes(bytes);
+  }
+
+  Future<ImportResult> _importFromExcel(Excel excel, {String? programNameOverride}) async {
     final sheet = excel.tables.values.first;
     if (sheet == null) {
       throw Exception('No sheets found');
@@ -35,62 +77,82 @@ class ImportService {
     final programRepo = ProgramRepo(_db);
     final exerciseRepo = ExerciseRepo(_db);
 
-    final programName = excel.tables.keys.first;
-    final resolvedName = await _uniqueProgramName(programName);
+    final rawName = programNameOverride?.trim().isNotEmpty == true
+        ? programNameOverride!.trim()
+        : excel.tables.keys.first;
+    final resolvedName = await _uniqueProgramName(rawName.isEmpty ? 'Imported Program' : rawName);
     final programId = await programRepo.createProgram(name: resolvedName);
 
     final rows = sheet.rows;
-    final headerRows = <int>[];
-    for (var i = 0; i < rows.length; i++) {
-      if (_rowContainsDay(rows[i])) {
-        headerRows.add(i);
-      }
-    }
-    if (headerRows.isEmpty) {
-      throw Exception('No day headers found in sheet');
-    }
-
+    final missingExercises = <String>{};
     var dayIndex = 0;
     var exerciseCount = 0;
-    for (var h = 0; h < headerRows.length; h++) {
-      final startRow = headerRows[h];
-      final endRow = h + 1 < headerRows.length ? headerRows[h + 1] : rows.length;
-      final blocks = _dayBlocks(rows[startRow]);
-      for (final block in blocks) {
-        final dayId = await programRepo.addProgramDay(
-          programId: programId,
-          dayIndex: dayIndex,
-          dayName: block.dayName,
-        );
-        dayIndex += 1;
 
-        for (var r = startRow + 1; r < endRow; r++) {
-          final row = rows[r];
-          final exerciseName = _cellString(row, block.startCol);
-          if (exerciseName == null || exerciseName.isEmpty) continue;
-          if (exerciseName.toLowerCase().contains('warm up')) {
+    int r = 0;
+    while (r < rows.length) {
+      final dayName = _dayStartName(rows[r]);
+      if (dayName == null) {
+        r += 1;
+        continue;
+      }
+      final isRestDay = dayName.toLowerCase().contains('rest');
+      final dayId = isRestDay
+          ? null
+          : await programRepo.addProgramDay(
+              programId: programId,
+              dayIndex: dayIndex,
+              dayName: dayName,
+            );
+      if (!isRestDay) {
+        dayIndex += 1;
+      }
+
+      r += 1;
+      while (r < rows.length && !_dayEndRow(rows[r]) && _dayStartName(rows[r]) == null) {
+        final row = rows[r];
+        if (!isRestDay) {
+          if (_rowHasHeaderTokens(row)) {
+            r += 1;
+            continue;
+          }
+          final exerciseName = _exerciseNameForRow(row, 0);
+          if (exerciseName == null || exerciseName.isEmpty) {
+            r += 1;
+            continue;
+          }
+          final exerciseLower = exerciseName.toLowerCase();
+          if (exerciseLower.contains('warm up') || exerciseLower.contains('optional warm up')) {
+            r += 1;
+            continue;
+          }
+          final setsValue = _cellValue(row, 1);
+          final setsCount = _parseInt(setsValue);
+          if (setsCount == null || setsCount < 1) {
+            r += 1;
             continue;
           }
 
-          final setsValue = _cellValue(row, block.startCol + 2);
-          final setsCount = _parseInt(setsValue);
-          if (setsCount == null) continue;
+          final repsValue = _cellValue(row, 2);
+          final restValue = _cellValue(row, 3);
+          final rpeValue = _cellValue(row, 4);
+          final notes = _cellString(row, 5);
+          final repsRange = _parseRange(repsValue);
 
-          final repsValue = _cellValue(row, block.startCol + 3);
-          final restValue = _cellValue(row, block.startCol + 4);
-          final rpeValue = _cellValue(row, block.startCol + 5);
-          final notes = _cellString(row, block.startCol + 6);
-
-          final exerciseId = await _resolveExerciseId(exerciseRepo, exerciseName);
+          final exerciseId = await _resolveExerciseId(exerciseRepo, exerciseName, createIfMissing: true);
+          if (exerciseId == null) {
+            missingExercises.add(exerciseName.trim());
+            r += 1;
+            continue;
+          }
+          await _maybeFillMuscles(exerciseId, exerciseName);
           final dayExerciseId = await programRepo.addProgramDayExercise(
-            programDayId: dayId,
+            programDayId: dayId!,
             exerciseId: exerciseId,
             orderIndex: await _nextOrderIndex(programRepo, dayId),
             notes: notes,
           );
           exerciseCount += 1;
 
-          final repsRange = _parseRange(repsValue);
           final rpeRange = _parseRange(rpeValue, allowDecimal: true);
           final restRange = _parseRestRange(restValue);
           final dropPercent = _parseDropPercent(notes ?? '');
@@ -104,11 +166,171 @@ class ImportService {
             dropPercent: dropPercent,
           );
           await programRepo.replaceSetPlanBlocks(dayExerciseId, blocksToInsert);
+
+          final notesCandidate = _cellString(row, 5);
+          if (notesCandidate != null &&
+              _isLikelyExerciseName(notesCandidate) &&
+              r + 1 < rows.length &&
+              !_dayEndRow(rows[r + 1]) &&
+              _dayStartName(rows[r + 1]) == null) {
+            final nextRow = rows[r + 1];
+            final nextExercise = _exerciseNameForRow(nextRow, 0);
+            final nextSetsValue = _cellValue(nextRow, 1);
+            final nextSetsCount = _parseInt(nextSetsValue);
+            final nextNotes = _cellString(nextRow, 5);
+            if ((nextExercise == null || _looksLikeNote(nextExercise)) &&
+                (nextNotes == null || !_dayEndRow(nextRow)) &&
+                nextSetsCount != null &&
+                nextSetsCount >= 1) {
+              final nextRepsValue = _cellValue(nextRow, 2);
+              final nextRestValue = _cellValue(nextRow, 3);
+              final nextRpeValue = _cellValue(nextRow, 4);
+              final nextRepsRange = _parseRange(nextRepsValue);
+              final shiftedExerciseId =
+                  await _resolveExerciseId(exerciseRepo, notesCandidate, createIfMissing: true);
+              if (shiftedExerciseId != null) {
+                final shiftedDayExerciseId = await programRepo.addProgramDayExercise(
+                  programDayId: dayId!,
+                  exerciseId: shiftedExerciseId,
+                  orderIndex: await _nextOrderIndex(programRepo, dayId),
+                  notes: nextExercise,
+                );
+                exerciseCount += 1;
+
+                final shiftedRpeRange = _parseRange(nextRpeValue, allowDecimal: true);
+                final shiftedRestRange = _parseRestRange(nextRestValue);
+                final shiftedDropPercent = _parseDropPercent(nextExercise ?? '');
+                final shiftedBlocks = _buildBlocks(
+                  setsCount: nextSetsCount,
+                  repsRange: nextRepsRange,
+                  restRange: shiftedRestRange,
+                  rpeRange: shiftedRpeRange,
+                  notes: nextExercise ?? '',
+                  dropPercent: shiftedDropPercent,
+                );
+                await programRepo.replaceSetPlanBlocks(shiftedDayExerciseId, shiftedBlocks);
+                r += 1;
+              }
+            }
+          }
         }
+        r += 1;
+      }
+      if (r < rows.length && _dayEndRow(rows[r])) {
+        r += 1;
       }
     }
 
-    return ImportResult(programId: programId, dayCount: dayIndex, exerciseCount: exerciseCount);
+    return ImportResult(
+      programId: programId,
+      dayCount: dayIndex,
+      exerciseCount: exerciseCount,
+      missingExercises: missingExercises.toList()..sort(),
+    );
+  }
+
+  Future<ExerciseScanResult> _scanFromExcel(Excel excel) async {
+    final sheet = excel.tables.values.first;
+    if (sheet == null) {
+      throw Exception('No sheets found');
+    }
+
+    final exerciseRepo = ExerciseRepo(_db);
+    final rows = sheet.rows;
+    final missing = <String>{};
+    final seen = <String>{};
+    var total = 0;
+    int r = 0;
+    while (r < rows.length) {
+      final dayName = _dayStartName(rows[r]);
+      if (dayName == null) {
+        r += 1;
+        continue;
+      }
+      final isRestDay = dayName.toLowerCase().contains('rest');
+      r += 1;
+      while (r < rows.length && !_dayEndRow(rows[r]) && _dayStartName(rows[r]) == null) {
+        final row = rows[r];
+        if (!isRestDay) {
+          if (_rowHasHeaderTokens(row)) {
+            r += 1;
+            continue;
+          }
+          final exerciseName = _exerciseNameForRow(row, 0);
+          if (exerciseName == null || exerciseName.isEmpty) {
+            r += 1;
+            continue;
+          }
+          final exerciseLower = exerciseName.toLowerCase();
+          if (exerciseLower.contains('warm up') || exerciseLower.contains('optional warm up')) {
+            r += 1;
+            continue;
+          }
+          final setsValue = _cellValue(row, 1);
+          final setsCount = _parseInt(setsValue);
+          if (setsCount == null || setsCount < 1) {
+            r += 1;
+            continue;
+          }
+          final repsValue = _cellValue(row, 2);
+          final repsRange = _parseRange(repsValue);
+          final key = exerciseName.toLowerCase().trim();
+          if (seen.contains(key)) {
+            r += 1;
+            continue;
+          }
+          seen.add(key);
+          total += 1;
+          final exists = await _exerciseExists(exerciseRepo, exerciseName);
+          if (!exists) {
+            missing.add(exerciseName.trim());
+          }
+          if (exists) {
+            final byId = await _resolveExerciseId(exerciseRepo, exerciseName, createIfMissing: false);
+            if (byId != null) {
+              await _maybeFillMuscles(byId, exerciseName);
+            }
+          }
+
+          final notesCandidate = _cellString(row, 5);
+          if (notesCandidate != null &&
+              _isLikelyExerciseName(notesCandidate) &&
+              r + 1 < rows.length &&
+              !_dayEndRow(rows[r + 1]) &&
+              _dayStartName(rows[r + 1]) == null) {
+            final nextRow = rows[r + 1];
+            final nextExercise = _exerciseNameForRow(nextRow, 0);
+            final nextSetsValue = _cellValue(nextRow, 1);
+            final nextSetsCount = _parseInt(nextSetsValue);
+            final nextNotes = _cellString(nextRow, 5);
+            if ((nextExercise == null || _looksLikeNote(nextExercise)) &&
+                (nextNotes == null || !_dayEndRow(nextRow)) &&
+                nextSetsCount != null &&
+                nextSetsCount >= 1) {
+              final shiftedKey = notesCandidate.toLowerCase().trim();
+              if (!seen.contains(shiftedKey)) {
+                seen.add(shiftedKey);
+                total += 1;
+                final existsShifted = await _exerciseExists(exerciseRepo, notesCandidate);
+                if (!existsShifted) {
+                  missing.add(notesCandidate.trim());
+                }
+              }
+              r += 1;
+            }
+          }
+        }
+        r += 1;
+      }
+      if (r < rows.length && _dayEndRow(rows[r])) {
+        r += 1;
+      }
+    }
+
+    return ExerciseScanResult(
+      totalExercises: total,
+      missingExercises: missing.toList()..sort(),
+    );
   }
 
   Future<int> _nextOrderIndex(ProgramRepo repo, int dayId) async {
@@ -128,33 +350,24 @@ class ImportService {
     return '$baseName ($i)';
   }
 
-  bool _rowContainsDay(List<Data?> row) {
-    for (final cell in row) {
-      final value = cell?.value;
-      if (value == null) continue;
-      final text = value is String ? value : value.toString();
-      if (text.trim().toUpperCase().startsWith('DAY')) {
-        return true;
-      }
-    }
-    return false;
+  String? _dayStartName(List<Data?> row) {
+    if (row.isEmpty) return null;
+    final value = row[0]?.value;
+    if (value == null) return null;
+    final text = value is String ? value : value.toString();
+    final trimmed = text.trim();
+    if (!trimmed.toUpperCase().startsWith('DAY')) return null;
+    if (trimmed.toUpperCase().contains('END')) return null;
+    return trimmed;
   }
 
-  List<_DayBlock> _dayBlocks(List<Data?> row) {
-    final blocks = <_DayBlock>[];
-    for (var i = 0; i < row.length; i++) {
-      final value = row[i]?.value;
-      if (value == null) continue;
-      final text = value is String ? value : value.toString();
-      if (text.trim().toUpperCase().startsWith('DAY')) {
-        final setsHeader = _cellString(row, i + 2);
-        final repsHeader = _cellString(row, i + 3);
-        if (setsHeader?.toLowerCase() == 'sets' && repsHeader?.toLowerCase() == 'reps') {
-          blocks.add(_DayBlock(startCol: i, dayName: text.trim()));
-        }
-      }
-    }
-    return blocks;
+  bool _dayEndRow(List<Data?> row) {
+    if (row.isEmpty) return false;
+    final value = row[0]?.value;
+    if (value == null) return false;
+    final text = value is String ? value : value.toString();
+    final trimmed = text.trim().toUpperCase();
+    return trimmed.startsWith('DAY') && trimmed.contains('END');
   }
 
   String? _cellString(List<Data?> row, int index) {
@@ -166,6 +379,56 @@ class ImportService {
     }
     final text = value is String ? value : value.toString();
     return text.trim();
+  }
+
+  String? _exerciseNameForRow(List<Data?> row, int exerciseCol) {
+    final direct = _cellString(row, exerciseCol);
+    if (direct == null || direct.isEmpty) return null;
+    if (_isHeaderToken(direct)) return null;
+    if (_looksLikeNote(direct)) return null;
+    return direct;
+  }
+
+  bool _rowHasHeaderTokens(List<Data?> row) {
+    for (final cell in row) {
+      final value = cell?.value;
+      if (value == null) continue;
+      final text = value is String ? value : value.toString();
+      if (_isHeaderToken(text)) return true;
+    }
+    return false;
+  }
+
+  bool _isHeaderToken(String text) {
+    final lower = text.trim().toLowerCase();
+    return lower == 'sets' || lower == 'reps' || lower == 'rest' || lower == 'rpe' || lower == 'notes';
+  }
+
+  bool _looksLikeNote(String text) {
+    final lower = text.toLowerCase();
+    if (lower.contains('top set') || lower.contains('back-off') || lower.contains('drop')) return true;
+    if (lower.contains('focus on') ||
+        lower.contains('keep ') ||
+        lower.contains('use ') ||
+        lower.contains('important') ||
+        lower.contains('pause ') ||
+        lower.contains('squeeze') ||
+        lower.contains('full rom') ||
+        lower.contains('warm up') ||
+        lower.contains('optional warm up')) {
+      return true;
+    }
+    if (lower.startsWith('progression') || lower.startsWith('weekly direct volume')) return true;
+    return false;
+  }
+
+  bool _isLikelyExerciseName(String text) {
+    if (text.trim().isEmpty) return false;
+    if (_isHeaderToken(text)) return false;
+    if (_looksLikeNote(text)) return false;
+    final lower = text.trim().toLowerCase();
+    if (lower.startsWith('day')) return false;
+    return true;
   }
 
   dynamic _cellValue(List<Data?> row, int index) {
@@ -329,7 +592,7 @@ class ImportService {
     };
   }
 
-  Future<int> _resolveExerciseId(ExerciseRepo repo, String name) async {
+  Future<int?> _resolveExerciseId(ExerciseRepo repo, String name, {required bool createIfMissing}) async {
     final normalized = name.toLowerCase().trim();
     final canonical = await repo.findByCanonical(normalized);
     if (canonical.isNotEmpty) return canonical.first['id'] as int;
@@ -337,6 +600,7 @@ class ImportService {
     if (alias.isNotEmpty) return alias.first['id'] as int;
     final search = await repo.search(name, limit: 1);
     if (search.isNotEmpty) return search.first['id'] as int;
+    if (!createIfMissing) return null;
 
     final equipment = _inferEquipmentType(name);
     final weightMode = equipment == 'DUMBBELL' ? 'EACH' : 'TOTAL';
@@ -347,23 +611,74 @@ class ImportService {
     );
   }
 
+  Future<void> _maybeFillMuscles(int exerciseId, String exerciseName) async {
+    final exerciseRepo = ExerciseRepo(_db);
+    final existing = await exerciseRepo.getById(exerciseId);
+    final primary = existing?['primary_muscle'] as String?;
+    if (primary != null && primary.trim().isNotEmpty) return;
+
+    final settings = SettingsRepo(_db);
+    final cloudEnabled = await settings.getCloudEnabled();
+    final apiKey = await settings.getCloudApiKey();
+    if (!cloudEnabled || apiKey == null || apiKey.trim().isEmpty) return;
+
+    final cacheKey = exerciseName.toLowerCase().trim();
+    if (_muscleCache.containsKey(cacheKey)) {
+      final cached = _muscleCache[cacheKey];
+      if (cached != null) {
+        await exerciseRepo.updateMuscles(
+          exerciseId: exerciseId,
+          primaryMuscle: cached.primary,
+          secondaryMuscles: cached.secondary,
+        );
+      }
+      return;
+    }
+
+    final provider = await settings.getCloudProvider();
+    final model = await settings.getCloudModel();
+    final enricher = MuscleEnricher();
+    final info = await enricher.enrich(
+      exerciseName: exerciseName,
+      provider: provider,
+      apiKey: apiKey,
+      model: model,
+    );
+    _muscleCache[cacheKey] = info;
+    if (info == null) return;
+    await exerciseRepo.updateMuscles(
+      exerciseId: exerciseId,
+      primaryMuscle: info.primary,
+      secondaryMuscles: info.secondary,
+    );
+  }
+
+  Future<bool> _exerciseExists(ExerciseRepo repo, String name) async {
+    final normalized = name.toLowerCase().trim();
+    final canonical = await repo.findByCanonical(normalized);
+    if (canonical.isNotEmpty) return true;
+    final alias = await repo.findByAlias(normalized);
+    if (alias.isNotEmpty) return true;
+    final search = await repo.search(name, limit: 1);
+    return search.isNotEmpty;
+  }
+
   String _inferEquipmentType(String name) {
     final lower = name.toLowerCase();
-    if (lower.contains('dumbbell')) return 'DUMBBELL';
+    if (lower.contains('dumbbell') || lower.contains('db')) return 'DUMBBELL';
     if (lower.contains('barbell') || lower.contains('ez bar')) return 'BARBELL';
     if (lower.contains('cable')) return 'CABLE';
-    if (lower.contains('smith') || lower.contains('machine') || lower.contains('hammer strength') || lower.contains('plate loaded') || lower.contains('selectorized')) {
+    if (lower.contains('smith') ||
+        lower.contains('machine') ||
+        lower.contains('hammer strength') ||
+        lower.contains('plate loaded') ||
+        lower.contains('selectorized')) {
       return 'MACHINE';
     }
     return 'MACHINE';
   }
-}
 
-class _DayBlock {
-  _DayBlock({required this.startCol, required this.dayName});
-
-  final int startCol;
-  final String dayName;
+  // Equipment inference removed while missing exercises are ignored.
 }
 
 class _Range {

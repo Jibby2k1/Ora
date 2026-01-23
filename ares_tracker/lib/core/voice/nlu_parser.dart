@@ -74,8 +74,13 @@ class NluParser {
       'when she': 'machine',
       'when shee': 'machine',
       'machines': 'machine',
+      'she just': 'machine',
+      'cd': 'seated',
       'lap poor down': 'lat pulldown',
       'lap pull down': 'lat pulldown',
+      'face pause': 'face pulls',
+      'peck': 'pec',
+      'peck deck': 'pec deck',
       'dumb bell': 'dumbbell',
       'bar bell': 'barbell',
     };

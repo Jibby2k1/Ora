@@ -47,7 +47,14 @@ class SpeechToTextEngine {
     try {
       _vosk = VoskFlutterPlugin.instance();
       final loader = ModelLoader();
-      final modelPath = await loader.loadFromAssets('assets/vosk/vosk-model-small-en-us-0.15.zip');
+      var modelPath = await loader.loadFromAssets('assets/vosk/vosk-model-small-en-us-0.15.zip');
+      if (!_isModelValid(modelPath)) {
+        await _deleteModelFolder(modelPath);
+        modelPath = await loader.loadFromAssets(
+          'assets/vosk/vosk-model-small-en-us-0.15.zip',
+          forceReload: true,
+        );
+      }
       _model = await _vosk!.createModel(modelPath);
       _recognizer = await _vosk!.createRecognizer(model: _model!, sampleRate: 16000);
 
@@ -70,6 +77,27 @@ class SpeechToTextEngine {
       _initialized = true;
     } catch (e) {
       lastError = e.toString();
+    }
+  }
+
+  bool _isModelValid(String modelPath) {
+    try {
+      final conf = File('${modelPath}/conf/mfcc.conf');
+      final model = File('${modelPath}/am/final.mdl');
+      return conf.existsSync() && model.existsSync();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _deleteModelFolder(String modelPath) async {
+    try {
+      final dir = Directory(modelPath);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+    } catch (_) {
+      // ignore cleanup failures
     }
   }
 

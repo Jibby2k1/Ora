@@ -14,6 +14,16 @@ class ExerciseRepo {
     return db.query('exercise', orderBy: 'canonical_name ASC');
   }
 
+  Future<List<Map<String, Object?>>> getMissingMuscles({int limit = 500}) async {
+    final db = await _db.database;
+    return db.query(
+      'exercise',
+      where: 'primary_muscle IS NULL OR trim(primary_muscle) = ""',
+      orderBy: 'canonical_name ASC',
+      limit: limit,
+    );
+  }
+
   Future<Map<String, Object?>?> getById(int id) async {
     final db = await _db.database;
     final rows = await db.query('exercise', where: 'id = ?', whereArgs: [id], limit: 1);
@@ -72,6 +82,23 @@ class ExerciseRepo {
       'weight_mode_default': weightModeDefault,
       'created_at': DateTime.now().toIso8601String(),
     });
+  }
+
+  Future<void> updateMuscles({
+    required int exerciseId,
+    required String primaryMuscle,
+    required List<String> secondaryMuscles,
+  }) async {
+    final db = await _db.database;
+    await db.update(
+      'exercise',
+      {
+        'primary_muscle': primaryMuscle,
+        'secondary_muscles_json': jsonEncode(secondaryMuscles),
+      },
+      where: 'id = ?',
+      whereArgs: [exerciseId],
+    );
   }
 
   Future<List<Map<String, Object?>>> search(String query, {int limit = 50}) async {
