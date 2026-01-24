@@ -7,12 +7,14 @@ import '../../../data/db/db.dart';
 import '../../../data/repositories/program_repo.dart';
 import '../../../data/repositories/settings_repo.dart';
 import '../../../data/repositories/workout_repo.dart';
+import '../../../domain/services/calorie_service.dart';
 import '../../../domain/services/import_service.dart';
 import '../../../domain/services/session_service.dart';
 import '../day_picker/day_picker_screen.dart';
 import '../history/exercise_catalog_screen.dart';
 import '../history/history_screen.dart';
 import '../session/session_screen.dart';
+import '../shell/app_shell_controller.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 import 'program_editor_screen.dart';
@@ -29,6 +31,7 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
   late final WorkoutRepo _workoutRepo;
   late final SessionService _sessionService;
   late final SettingsRepo _settingsRepo;
+  late final CalorieService _calorieService;
   int? _selectedProgramId;
   String? _selectedProgramName;
   bool _appearanceProfileEnabled = false;
@@ -46,14 +49,35 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     _workoutRepo = WorkoutRepo(db);
     _sessionService = SessionService(db);
     _settingsRepo = SettingsRepo(db);
+    _calorieService = CalorieService(db);
+    AppShellController.instance.appearanceProfileEnabled.addListener(_syncAppearancePrefsFromController);
+    AppShellController.instance.appearanceProfileSex.addListener(_syncAppearancePrefsFromController);
     _loadAppearancePrefs();
     _loadProgramDays();
+  }
+
+  @override
+  void dispose() {
+    AppShellController.instance.appearanceProfileEnabled.removeListener(_syncAppearancePrefsFromController);
+    AppShellController.instance.appearanceProfileSex.removeListener(_syncAppearancePrefsFromController);
+    super.dispose();
   }
 
   Future<void> _loadAppearancePrefs() async {
     final enabled = await _settingsRepo.getAppearanceProfileEnabled();
     final sex = await _settingsRepo.getAppearanceProfileSex();
+    AppShellController.instance.setAppearanceProfileEnabled(enabled);
+    AppShellController.instance.setAppearanceProfileSex(sex);
+    _syncAppearancePrefsFromController();
+  }
+
+  void _syncAppearancePrefsFromController() {
     if (!mounted) return;
+    final enabled = AppShellController.instance.appearanceProfileEnabled.value;
+    final sex = AppShellController.instance.appearanceProfileSex.value;
+    if (enabled == _appearanceProfileEnabled && sex == _appearanceSex) {
+      return;
+    }
     setState(() {
       _appearanceProfileEnabled = enabled;
       _appearanceSex = sex;
@@ -146,6 +170,75 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
         SnackBar(content: Text('Import failed: $e')),
       );
     }
+  }
+
+  DateTimeRange _todayRange() {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = start.add(const Duration(days: 1));
+    return DateTimeRange(start: start, end: end);
+  }
+
+  Widget _buildWorkoutCaloriesCard() {
+    final range = _todayRange();
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: FutureBuilder<WorkoutCalorieEstimate>(
+        future: _calorieService.estimateWorkoutCaloriesForRange(range.start, range.end),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final estimate = snapshot.data;
+          if (estimate == null || estimate.setCount == 0) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Workout Burn (estimate)'),
+                const SizedBox(height: 8),
+                Text(
+                  'No logged sets today yet.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            );
+          }
+          final workout = estimate.workoutCalories;
+          final bmr = estimate.bmrCalories;
+          final total = estimate.totalCalories;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Workout Burn (estimate)'),
+              const SizedBox(height: 8),
+              Text(
+                '${total.toStringAsFixed(0)} kcal',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              _CaloriesBar(workoutCalories: workout, bmrCalories: bmr),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  Text('Workout ${workout.toStringAsFixed(0)} kcal'),
+                  Text('BMR ${bmr.toStringAsFixed(0)} kcal'),
+                  Text('${estimate.durationMinutes.toStringAsFixed(0)} min'),
+                ],
+              ),
+              if (estimate.usedDefaultWeight || !estimate.bmrAvailable) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Add age/height/weight in Profile for more accurate BMR.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _startManualDay() async {
@@ -387,6 +480,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  _buildWorkoutCaloriesCard(),
+                  const SizedBox(height: 16),
                   GlassCard(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -546,6 +641,73 @@ class _StatPill extends StatelessWidget {
           Text(value, style: Theme.of(context).textTheme.titleMedium),
         ],
       ),
+    );
+  }
+}
+
+class _CaloriesBar extends StatelessWidget {
+  const _CaloriesBar({required this.workoutCalories, required this.bmrCalories});
+
+  final double workoutCalories;
+  final double bmrCalories;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = (workoutCalories + bmrCalories).clamp(0.0, double.infinity);
+    if (total <= 0) {
+      return const SizedBox(height: 10);
+    }
+    final workoutFrac = (workoutCalories / total).clamp(0.0, 1.0);
+    final bmrFrac = (bmrCalories / total).clamp(0.0, 1.0);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final workoutWidth = width * workoutFrac;
+        final bmrWidth = width * bmrFrac;
+        return SizedBox(
+          height: 12,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: Stack(
+              children: [
+                Container(color: Theme.of(context).colorScheme.surface.withOpacity(0.4)),
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: workoutWidth,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Theme.of(context).colorScheme.primary.withOpacity(0.85),
+                          Theme.of(context).colorScheme.primary.withOpacity(0.55),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: workoutWidth,
+                  top: 0,
+                  bottom: 0,
+                  width: bmrWidth,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Theme.of(context).colorScheme.secondary.withOpacity(0.7),
+                          Theme.of(context).colorScheme.secondary.withOpacity(0.4),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
