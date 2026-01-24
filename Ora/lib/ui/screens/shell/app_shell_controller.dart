@@ -13,6 +13,9 @@ class AppShellController {
   final ValueNotifier<String> appearanceProfileSex = ValueNotifier<String>('neutral');
   final ValueNotifier<bool> orbHidden = ValueNotifier<bool>(false);
   final ValueNotifier<bool> activeSession = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> activeSessionIndicatorHidden = ValueNotifier<bool>(false);
+  final ValueNotifier<int> restRemainingSeconds = ValueNotifier<int>(0);
+  final ValueNotifier<bool> restAlertActive = ValueNotifier<bool>(false);
   final ValueNotifier<InputDispatch?> pendingInput = ValueNotifier<InputDispatch?>(null);
 
   void selectTab(int index) {
@@ -43,6 +46,26 @@ class AppShellController {
   void setActiveSession(bool value) {
     if (activeSession.value == value) return;
     activeSession.value = value;
+    if (!value) {
+      activeSessionIndicatorHidden.value = false;
+      restRemainingSeconds.value = 0;
+      restAlertActive.value = false;
+    }
+  }
+
+  void setActiveSessionIndicatorHidden(bool value) {
+    if (activeSessionIndicatorHidden.value == value) return;
+    activeSessionIndicatorHidden.value = value;
+  }
+
+  void setRestRemainingSeconds(int value) {
+    if (restRemainingSeconds.value == value) return;
+    restRemainingSeconds.value = value;
+  }
+
+  void setRestAlertActive(bool value) {
+    if (restAlertActive.value == value) return;
+    restAlertActive.value = value;
   }
 
   void setPendingInput(InputDispatch? input) {
