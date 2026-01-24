@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../core/input/input_router.dart';
+
 class AppShellController {
   AppShellController._();
 
@@ -10,6 +12,7 @@ class AppShellController {
   final ValueNotifier<bool> appearanceProfileEnabled = ValueNotifier<bool>(false);
   final ValueNotifier<String> appearanceProfileSex = ValueNotifier<String>('neutral');
   final ValueNotifier<bool> orbHidden = ValueNotifier<bool>(false);
+  final ValueNotifier<InputDispatch?> pendingInput = ValueNotifier<InputDispatch?>(null);
 
   void selectTab(int index) {
     if (tabIndex.value == index) return;
@@ -34,5 +37,13 @@ class AppShellController {
   void setOrbHidden(bool value) {
     if (orbHidden.value == value) return;
     orbHidden.value = value;
+  }
+
+  void setPendingInput(InputDispatch? input) {
+    pendingInput.value = input;
+  }
+
+  void clearPendingInput() {
+    pendingInput.value = null;
   }
 }

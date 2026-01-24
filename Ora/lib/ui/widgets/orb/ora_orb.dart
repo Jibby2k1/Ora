@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -6,14 +7,15 @@ import 'package:flutter/scheduler.dart';
 
 import '../../../app.dart';
 import '../../../core/voice/stt.dart';
+import '../../../core/input/input_router.dart';
 import '../../../data/db/db.dart';
 import '../../../data/repositories/settings_repo.dart';
 import '../../screens/shell/app_shell_controller.dart';
+import '../../screens/uploads/uploads_screen.dart';
 import '../glass/glass_card.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 
-enum _OrbInputType { camera, upload, mic, text }
-
-enum _OrbDestination { training, diet, appearance, leaderboard, settings }
 
 class OraOrb extends StatefulWidget {
   const OraOrb({super.key});
@@ -31,6 +33,8 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
 
   final SettingsRepo _settingsRepo = SettingsRepo(AppDatabase.instance);
   final SpeechToTextEngine _stt = SpeechToTextEngine.instance;
+  final InputRouter _inputRouter = InputRouter(AppDatabase.instance);
+  final ImagePicker _imagePicker = ImagePicker();
 
   late final AnimationController _floatController;
   late final AnimationController _snapController;
@@ -52,7 +56,6 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
   bool _routing = false;
   bool _docked = true;
   String? _partialTranscript;
-  _OrbDestination? _lastDestination;
 
   Offset _position = Offset.zero;
   Offset _driftOffset = Offset.zero;
@@ -294,12 +297,12 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
                 _OrbActionButton(
                   icon: Icons.photo_camera,
                   label: 'Camera',
-                  onTap: () => _handleInput(_OrbInputType.camera),
+                  onTap: _handleCameraTap,
                 ),
                 _OrbActionButton(
                   icon: Icons.upload_file,
                   label: 'Upload',
-                  onTap: () => _handleInput(_OrbInputType.upload),
+                  onTap: _handleUploadTap,
                 ),
                 _OrbActionButton(
                   icon: Icons.mic,
@@ -322,9 +325,10 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
                   label: const Text('Hide'),
                 ),
                 const Spacer(),
-                const Text(
-                  'Drag to move',
-                  style: TextStyle(fontSize: 11, color: Colors.white70),
+                TextButton.icon(
+                  onPressed: _openUploads,
+                  icon: const Icon(Icons.cloud_upload, size: 18),
+                  label: const Text('Uploads'),
                 ),
               ],
             ),
@@ -628,10 +632,50 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     return Offset(dx.clamp(12, size.width - deckWidth - 12), dy);
   }
 
-  void _handleInput(_OrbInputType type) {
+  Future<void> _handleCameraTap() async {
     setState(() => _expanded = false);
-    final destination = _classify('', type);
-    _routeTo(destination);
+    final file = await _imagePicker.pickImage(source: ImageSource.camera);
+    if (file == null) return;
+    await _routeInput(
+      InputEvent(
+        source: InputSource.camera,
+        file: File(file.path),
+        fileName: file.name,
+        mimeType: _guessMimeType(file.path),
+      ),
+    );
+  }
+
+  Future<void> _handleUploadTap() async {
+    setState(() => _expanded = false);
+    final selection = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['png', 'jpg', 'jpeg', 'heic', 'pdf', 'csv', 'xlsx', 'txt'],
+      withData: false,
+    );
+    if (selection == null || selection.files.isEmpty) return;
+    final file = selection.files.first;
+    if (file.path == null) return;
+    await _routeInput(
+      InputEvent(
+        source: InputSource.upload,
+        file: File(file.path!),
+        fileName: file.name,
+      ),
+    );
+  }
+
+  Future<void> _routeInput(InputEvent event) async {
+    setState(() => _routing = true);
+    await _inputRouter.routeAndHandle(context, event);
+    if (!mounted) return;
+    setState(() => _routing = false);
+  }
+
+  void _openUploads() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const UploadsScreen()),
+    );
   }
 
   Future<void> _handleMicTap() async {
@@ -659,7 +703,9 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
             _showSnack('No speech detected.');
             return;
           }
-          _routeTo(_classify(text, _OrbInputType.mic), transcript: text);
+          await _routeInput(
+            InputEvent(source: InputSource.mic, text: text),
+          );
         },
         onError: (error) async {
           await _stopRecording();
@@ -739,179 +785,9 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     );
 
     if (text == null || text.trim().isEmpty) return;
-    _routeTo(_classify(text, _OrbInputType.text), transcript: text);
+    await _routeInput(InputEvent(source: InputSource.text, text: text));
   }
 
-  _OrbDestination _classify(String text, _OrbInputType type) {
-    final normalized = text.toLowerCase();
-    final scores = <_OrbDestination, double>{
-      _OrbDestination.training: 0,
-      _OrbDestination.diet: 0,
-      _OrbDestination.appearance: 0,
-      _OrbDestination.leaderboard: 0,
-      _OrbDestination.settings: 0,
-    };
-
-    void bump(_OrbDestination dest, double value) {
-      scores[dest] = (scores[dest] ?? 0) + value;
-    }
-
-    if (normalized.contains('leaderboard') || normalized.contains('rank')) {
-      bump(_OrbDestination.leaderboard, 3);
-    }
-    if (normalized.contains('setting') || normalized.contains('preference')) {
-      bump(_OrbDestination.settings, 3);
-    }
-
-    for (final word in [
-      'set',
-      'reps',
-      'rep',
-      'workout',
-      'session',
-      'bench',
-      'squat',
-      'deadlift',
-      'press',
-      'curl',
-      'row',
-      'rest',
-      'warmup',
-      'pr',
-    ]) {
-      if (normalized.contains(word)) bump(_OrbDestination.training, 1.6);
-    }
-
-    for (final word in [
-      'calorie',
-      'meal',
-      'protein',
-      'carb',
-      'fat',
-      'fiber',
-      'sodium',
-      'breakfast',
-      'lunch',
-      'dinner',
-      'snack',
-      'macro',
-    ]) {
-      if (normalized.contains(word)) bump(_OrbDestination.diet, 1.6);
-    }
-
-    for (final word in [
-      'appearance',
-      'physique',
-      'style',
-      'outfit',
-      'face',
-      'progress',
-      'waist',
-      'hips',
-      'chest',
-      'confidence',
-      'fit',
-      'photo',
-    ]) {
-      if (normalized.contains(word)) bump(_OrbDestination.appearance, 1.6);
-    }
-
-    if (type == _OrbInputType.camera) {
-      bump(_OrbDestination.appearance, 1.2);
-    } else if (type == _OrbInputType.upload) {
-      bump(_OrbDestination.diet, 1.0);
-    }
-
-    _OrbDestination best = _OrbDestination.training;
-    double bestScore = -1;
-    scores.forEach((dest, score) {
-      if (score > bestScore) {
-        bestScore = score;
-        best = dest;
-      }
-    });
-
-    if (bestScore <= 0 && _lastDestination != null) {
-      return _lastDestination!;
-    }
-
-    return best;
-  }
-
-  Future<void> _routeTo(_OrbDestination destination, {String? transcript}) async {
-    setState(() => _routing = true);
-    await Future.delayed(const Duration(milliseconds: 420));
-    if (!mounted) return;
-    setState(() => _routing = false);
-
-    final appearanceEnabled = AppShellController.instance.appearanceEnabled.value;
-    if (destination == _OrbDestination.appearance && !appearanceEnabled) {
-      _showSnack('Appearance is disabled.');
-      _selectTab(_OrbDestination.settings);
-      return;
-    }
-
-    _selectTab(destination);
-    _lastDestination = destination;
-    _showRouteSnackbar(destination, transcript: transcript);
-  }
-
-  void _selectTab(_OrbDestination destination) {
-    final appearanceEnabled = AppShellController.instance.appearanceEnabled.value;
-    final index = switch (destination) {
-      _OrbDestination.training => 0,
-      _OrbDestination.diet => 1,
-      _OrbDestination.appearance => appearanceEnabled ? 2 : 0,
-      _OrbDestination.leaderboard => appearanceEnabled ? 3 : 2,
-      _OrbDestination.settings => appearanceEnabled ? 4 : 3,
-    };
-    AppShellController.instance.selectTab(index);
-  }
-
-  void _showRouteSnackbar(_OrbDestination dest, {String? transcript}) {
-    final messenger = OraApp.messengerKey.currentState;
-    if (messenger == null) return;
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Routed to ${_labelFor(dest)}'),
-        action: SnackBarAction(
-          label: 'Change',
-          onPressed: () => _showDestinationPicker(),
-        ),
-        duration: const Duration(seconds: 4),
-      ),
-    );
-  }
-
-  Future<void> _showDestinationPicker() async {
-    final choice = await showModalBottomSheet<_OrbDestination>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: GlassCard(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Send input to'),
-                const SizedBox(height: 12),
-                _DestinationTile(label: 'Training', value: _OrbDestination.training),
-                _DestinationTile(label: 'Diet', value: _OrbDestination.diet),
-                _DestinationTile(label: 'Appearance', value: _OrbDestination.appearance),
-                _DestinationTile(label: 'Leaderboard', value: _OrbDestination.leaderboard),
-                _DestinationTile(label: 'Settings', value: _OrbDestination.settings),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-
-    if (choice == null) return;
-    _routeTo(choice);
-  }
 
   void _persistPosition() {
     if (_layoutSize == null) return;
@@ -927,15 +803,19 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     );
   }
 
-  String _labelFor(_OrbDestination dest) {
-    return switch (dest) {
-      _OrbDestination.training => 'Training',
-      _OrbDestination.diet => 'Diet',
-      _OrbDestination.appearance => 'Appearance',
-      _OrbDestination.leaderboard => 'Leaderboard',
-      _OrbDestination.settings => 'Settings',
-    };
+  String _guessMimeType(String path) {
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.heic')) return 'image/heic';
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.csv')) return 'text/csv';
+    if (lower.endsWith('.xlsx')) {
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    }
+    return 'application/octet-stream';
   }
+
 }
 
 class _OrbActionButton extends StatelessWidget {
@@ -1082,22 +962,6 @@ class _PartialBubble extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 12, color: Colors.white70),
       ),
-    );
-  }
-}
-
-class _DestinationTile extends StatelessWidget {
-  const _DestinationTile({required this.label, required this.value});
-
-  final String label;
-  final _OrbDestination value;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      title: Text(label),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => Navigator.of(context).pop(value),
     );
   }
 }
