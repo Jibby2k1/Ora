@@ -4,10 +4,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-
 import '../../../app.dart';
 import '../../../core/voice/stt.dart';
 import '../../../core/input/input_router.dart';
+import '../../../core/utils/image_downscaler.dart';
 import '../../../data/db/db.dart';
 import '../../../data/repositories/settings_repo.dart';
 import '../../screens/shell/app_shell_controller.dart';
@@ -636,12 +636,13 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     setState(() => _expanded = false);
     final file = await _imagePicker.pickImage(source: ImageSource.camera);
     if (file == null) return;
+    final optimized = await ImageDownscaler.downscaleImageIfNeeded(File(file.path));
     await _routeInput(
       InputEvent(
         source: InputSource.camera,
-        file: File(file.path),
-        fileName: file.name,
-        mimeType: _guessMimeType(file.path),
+        file: optimized,
+        fileName: optimized.uri.pathSegments.last,
+        mimeType: _guessMimeType(optimized.path),
       ),
     );
   }
@@ -656,11 +657,13 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     if (selection == null || selection.files.isEmpty) return;
     final file = selection.files.first;
     if (file.path == null) return;
+    final original = File(file.path!);
+    final optimized = await ImageDownscaler.downscaleImageIfNeeded(original);
     await _routeInput(
       InputEvent(
         source: InputSource.upload,
-        file: File(file.path!),
-        fileName: file.name,
+        file: optimized,
+        fileName: optimized.uri.pathSegments.last,
       ),
     );
   }
@@ -671,6 +674,7 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     if (!mounted) return;
     setState(() => _routing = false);
   }
+
 
   void _openUploads() {
     Navigator.of(context).push(
