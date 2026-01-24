@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'gemini_queue.dart';
 class DietEstimate {
   DietEstimate({
     required this.mealName,
@@ -34,6 +36,9 @@ class DietAnalysisService {
     required String apiKey,
     required String model,
   }) async {
+    if (provider == 'openai') {
+      return _openAiAnalyzeImage(file: file, apiKey: apiKey, model: model);
+    }
     if (provider != 'gemini') {
       return null;
     }
@@ -53,7 +58,7 @@ class DietAnalysisService {
             {'text': prompt},
             {
               'inlineData': {
-                'mimeType': _guessMimeType(file.path),
+                'mimeType': _guessMimeTypeForImage(file.path),
                 'data': base64Image,
               }
             },
@@ -67,15 +72,61 @@ class DietAnalysisService {
         'maxOutputTokens': 512,
       },
     };
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(payload),
+    final response = await GeminiQueue.instance.run(
+      () => http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      ),
+      label: 'diet-image',
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      debugPrint('[Gemini][diet-image] ${response.statusCode} ${_trimGeminiBody(response.body)}');
       return null;
     }
     return _parseGemini(response.body);
+  }
+
+  Future<DietEstimate?> _openAiAnalyzeImage({
+    required File file,
+    required String apiKey,
+    required String model,
+  }) async {
+    final bytes = await file.readAsBytes();
+    final base64Image = base64Encode(bytes);
+    final prompt = _analysisPrompt();
+    final uri = Uri.https('api.openai.com', '/v1/responses');
+    final dataUrl = 'data:${_guessMimeTypeForImage(file.path)};base64,$base64Image';
+    final payload = {
+      'model': model,
+      'input': [
+        {
+          'role': 'user',
+          'content': [
+            {'type': 'input_text', 'text': prompt},
+            {'type': 'input_image', 'image_url': dataUrl},
+          ],
+        }
+      ],
+    };
+
+    final response = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $apiKey',
+      },
+      body: jsonEncode(payload),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      debugPrint('[OpenAI][diet-image] ${response.statusCode} ${_trimGeminiBody(response.body)}');
+      return null;
+    }
+    final text = _extractResponseText(response.body);
+    if (text == null) return null;
+    final jsonText = _extractJsonFromText(text);
+    if (jsonText == null) return null;
+    return _parseOpenAiJson(jsonText);
   }
 
   Future<DietEstimate?> refineEstimate({
@@ -120,12 +171,16 @@ class DietAnalysisService {
         'maxOutputTokens': 256,
       },
     };
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(payload),
+    final response = await GeminiQueue.instance.run(
+      () => http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      ),
+      label: 'diet-refine',
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      debugPrint('[Gemini][diet-refine] ${response.statusCode} ${_trimGeminiBody(response.body)}');
       return null;
     }
     return _parseGemini(response.body);
@@ -165,7 +220,7 @@ class DietAnalysisService {
       if (choices.isEmpty) return null;
       final message = choices.first['message'] as Map<String, dynamic>?;
       final content = message?['content']?.toString() ?? '';
-      final jsonText = _extractJson(content);
+      final jsonText = _extractJsonFromText(content);
       if (jsonText == null) return null;
       final map = jsonDecode(jsonText) as Map<String, dynamic>;
       return _fromMap(map);
@@ -183,13 +238,66 @@ class DietAnalysisService {
       final parts = content?['parts'] as List<dynamic>? ?? [];
       if (parts.isEmpty) return null;
       final text = parts.first['text']?.toString() ?? '';
-      final jsonText = _extractJson(text);
+      final jsonText = _extractJsonFromText(text);
       if (jsonText == null) return null;
       final map = jsonDecode(jsonText) as Map<String, dynamic>;
       return _fromMap(map);
     } catch (_) {
       return null;
     }
+  }
+
+  DietEstimate? _parseOpenAiJson(String jsonText) {
+    try {
+      final decoded = jsonDecode(jsonText) as Map<String, dynamic>;
+      final mealName = decoded['meal_name']?.toString() ?? 'Meal';
+      return DietEstimate(
+        mealName: mealName,
+        calories: _asDouble(decoded['calories']),
+        proteinG: _asDouble(decoded['protein_g']),
+        carbsG: _asDouble(decoded['carbs_g']),
+        fatG: _asDouble(decoded['fat_g']),
+        fiberG: _asDouble(decoded['fiber_g']),
+        sodiumMg: _asDouble(decoded['sodium_mg']),
+        micros: _asMicros(decoded['micros']),
+        notes: decoded['notes']?.toString(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _extractResponseText(String body) {
+    try {
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      final output = data['output'] as List<dynamic>? ?? [];
+      for (final item in output) {
+        final content = (item as Map<String, dynamic>)['content'] as List<dynamic>? ?? [];
+        for (final part in content) {
+          final map = part as Map<String, dynamic>;
+          final type = map['type']?.toString();
+          if (type == 'output_text' || type == 'text') {
+            return map['text']?.toString();
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String? _extractJsonFromText(String text) {
+    final start = text.indexOf('{');
+    final end = text.lastIndexOf('}');
+    if (start == -1 || end == -1 || end <= start) return null;
+    return text.substring(start, end + 1);
+  }
+
+  String _guessMimeTypeForImage(String path) {
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.heic')) return 'image/heic';
+    return 'application/octet-stream';
   }
 
   DietEstimate? _fromMap(Map<String, dynamic> map) {
@@ -283,17 +391,9 @@ Apply user corrections and return the updated estimate.
 ''';
   }
 
-  String? _extractJson(String text) {
-    final start = text.indexOf('{');
-    final end = text.lastIndexOf('}');
-    if (start == -1 || end == -1 || end <= start) return null;
-    return text.substring(start, end + 1);
-  }
-
-  String _guessMimeType(String path) {
-    final lower = path.toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    return 'image/jpeg';
+  String _trimGeminiBody(String body) {
+    final trimmed = body.trim();
+    if (trimmed.length <= 400) return trimmed;
+    return '${trimmed.substring(0, 400)}...';
   }
 }
