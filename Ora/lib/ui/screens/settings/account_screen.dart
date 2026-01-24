@@ -174,7 +174,10 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget build(BuildContext context) {
     if (!_supported) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Account')),
+        appBar: AppBar(
+          title: const Text('Account'),
+          actions: const [SizedBox(width: 72)],
+        ),
         body: Stack(
           children: const [
             GlassBackground(),
@@ -185,7 +188,10 @@ class _AccountScreenState extends State<AccountScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Account')),
+      appBar: AppBar(
+        title: const Text('Account'),
+        actions: const [SizedBox(width: 72)],
+      ),
       body: Stack(
         children: [
           const GlassBackground(),

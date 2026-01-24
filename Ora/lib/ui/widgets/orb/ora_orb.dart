@@ -1,22 +1,19 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+
 import '../../../app.dart';
 import '../../../core/voice/stt.dart';
-import '../../../core/input/input_router.dart';
-import '../../../core/utils/image_downscaler.dart';
 import '../../../data/db/db.dart';
 import '../../../data/repositories/settings_repo.dart';
 import '../../screens/shell/app_shell_controller.dart';
-import '../../screens/uploads/uploads_screen.dart';
 import '../glass/glass_card.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:image_picker/image_picker.dart';
 
+enum _OrbInputType { camera, upload, mic, text }
+
+enum _OrbDestination { training, diet, appearance, leaderboard, settings }
 
 class OraOrb extends StatefulWidget {
   const OraOrb({super.key});
@@ -26,21 +23,14 @@ class OraOrb extends StatefulWidget {
 }
 
 class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
-  static const double _orbSize = 84;
-  static const double _dockWidth = 126;
-  static const double _dockHeight = 126;
+  static const double _orbSize = 56;
+  static const double _dockWidth = 84;
+  static const double _dockHeight = 84;
   static const double _edgePadding = 12;
   static const double _dragOverscroll = 24;
-  static const double _dockNavHeight = 68;
-  static const double _deckWidth = 220;
-  static const double _deckGap = 12;
-  static const double _deckFallbackHeight = 292;
-  static const String _orbAsset = 'assets/branding/ora.png';
 
   final SettingsRepo _settingsRepo = SettingsRepo(AppDatabase.instance);
   final SpeechToTextEngine _stt = SpeechToTextEngine.instance;
-  final InputRouter _inputRouter = InputRouter(AppDatabase.instance);
-  final ImagePicker _imagePicker = ImagePicker();
 
   late final AnimationController _floatController;
   late final AnimationController _snapController;
@@ -62,6 +52,7 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
   bool _routing = false;
   bool _docked = true;
   String? _partialTranscript;
+  _OrbDestination? _lastDestination;
 
   Offset _position = Offset.zero;
   Offset _driftOffset = Offset.zero;
@@ -72,7 +63,6 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
   double _toolbarHeight = kToolbarHeight;
   double? _savedPosX;
   double? _savedPosY;
-  Size? _deckSize;
 
   Timer? _recordTimeout;
   Timer? _driftTimer;
@@ -223,7 +213,7 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
           _stopRecording();
           return;
         }
-        _toggleExpanded();
+        setState(() => _expanded = !_expanded);
       },
       onLongPress: () => _hideOrb(),
       onPanStart: (_) => _startDrag(),
@@ -257,19 +247,26 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
               height: _orbSize,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    scheme.primary.withOpacity(0.95),
+                    scheme.secondary.withOpacity(0.75),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: scheme.primary.withOpacity(0.35),
+                    color: scheme.primary.withOpacity(0.45),
                     blurRadius: 18,
                     offset: const Offset(0, 6),
                   ),
                 ],
               ),
-              child: ClipOval(
-                child: Image.asset(
-                  _orbAsset,
-                  fit: BoxFit.cover,
-                ),
+              child: Icon(
+                _recording ? Icons.stop_rounded : Icons.auto_awesome,
+                color: scheme.onPrimary,
+                size: 26,
               ),
             ),
           ],
@@ -278,88 +275,60 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     );
   }
 
-  void _toggleExpanded() {
-    if (_expanded) {
-      setState(() => _expanded = false);
-      return;
-    }
-
-    if (_layoutSize != null) {
-      final padding = MediaQuery.of(context).padding;
-      final adjusted = _clampOrbForDeck(_layoutSize!, padding, _position);
-      if (adjusted != _position) {
-        _position = adjusted;
-        _persistPosition();
-      }
-    }
-
-    setState(() {
-      _expanded = true;
-      _driftOffset = Offset.zero;
-    });
-  }
-
   Widget _buildDeck() {
-    return _MeasureSize(
-      onChange: (size) {
-        if (_deckSize == size) return;
-        setState(() => _deckSize = size);
-      },
-      child: GlassCard(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        radius: 20,
-        child: SizedBox(
-          width: _deckWidth,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              GridView.count(
-                crossAxisCount: 2,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  _OrbActionButton(
-                    icon: Icons.photo_camera,
-                    label: 'Camera',
-                    onTap: _handleCameraTap,
-                  ),
-                  _OrbActionButton(
-                    icon: Icons.upload_file,
-                    label: 'Upload',
-                    onTap: _handleUploadTap,
-                  ),
-                  _OrbActionButton(
-                    icon: Icons.mic,
-                    label: _recording ? 'Stop' : 'Mic',
-                    onTap: _handleMicTap,
-                  ),
-                  _OrbActionButton(
-                    icon: Icons.edit_note,
-                    label: 'Text',
-                    onTap: _showTextSheet,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: _hideOrb,
-                    icon: const Icon(Icons.visibility_off, size: 18),
-                    label: const Text('Hide'),
-                  ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: _openUploads,
-                    icon: const Icon(Icons.cloud_upload, size: 18),
-                    label: const Text('Uploads'),
-                  ),
-                ],
-              ),
-            ],
-          ),
+    return GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      radius: 20,
+      child: SizedBox(
+        width: 220,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GridView.count(
+              crossAxisCount: 2,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _OrbActionButton(
+                  icon: Icons.photo_camera,
+                  label: 'Camera',
+                  onTap: () => _handleInput(_OrbInputType.camera),
+                ),
+                _OrbActionButton(
+                  icon: Icons.upload_file,
+                  label: 'Upload',
+                  onTap: () => _handleInput(_OrbInputType.upload),
+                ),
+                _OrbActionButton(
+                  icon: Icons.mic,
+                  label: _recording ? 'Stop' : 'Mic',
+                  onTap: _handleMicTap,
+                ),
+                _OrbActionButton(
+                  icon: Icons.edit_note,
+                  label: 'Text',
+                  onTap: _showTextSheet,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: _hideOrb,
+                  icon: const Icon(Icons.visibility_off, size: 18),
+                  label: const Text('Hide'),
+                ),
+                const Spacer(),
+                const Text(
+                  'Drag to move',
+                  style: TextStyle(fontSize: 11, color: Colors.white70),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -564,10 +533,6 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
         _position = _clamp(_position, size, padding);
       }
     }
-
-    if (_expanded) {
-      _position = _clampOrbForDeck(size, padding, _position);
-    }
   }
 
   void _startDriftLoop() {
@@ -590,10 +555,10 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
   }
 
   Offset _dockPosition(Size size, EdgeInsets padding) {
-    final maxY = _maxY(size, padding);
-    final y = (size.height - padding.bottom - _dockNavHeight - _orbSize * 0.35)
-        .clamp(padding.top + _edgePadding, maxY);
-    final x = (size.width - _orbSize) / 2;
+    final minY = padding.top + (_toolbarHeight - _orbSize) / 2 + 2;
+    final maxY = size.height - _orbSize - _edgePadding;
+    final y = minY.clamp(minY, maxY);
+    final x = size.width - _orbSize - _edgePadding;
     return Offset(x, y);
   }
 
@@ -616,7 +581,7 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     final minX = _edgePadding;
     final minY = padding.top + _edgePadding;
     final maxX = size.width - _orbSize - _edgePadding;
-    final maxY = _maxY(size, padding);
+    final maxY = size.height - _orbSize - _edgePadding;
     return Offset(
       pos.dx.clamp(minX, maxX),
       pos.dy.clamp(minY, maxY),
@@ -627,7 +592,7 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     final minX = _edgePadding;
     final minY = padding.top + _edgePadding;
     final maxX = size.width - _orbSize - _edgePadding;
-    final maxY = _maxY(size, padding);
+    final maxY = size.height - _orbSize - _edgePadding;
 
     double dx = pos.dx;
     double dy = pos.dy;
@@ -650,150 +615,23 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     return Offset(dx, dy);
   }
 
-  double _maxY(Size size, EdgeInsets padding) {
-    return size.height - padding.bottom - _orbSize + 6;
-  }
-
-  Size _currentDeckSize() {
-    final height = _deckSize?.height ?? _deckFallbackHeight;
-    return Size(_deckWidth, height);
-  }
-
-  Offset _clampOrbForDeck(Size size, EdgeInsets padding, Offset orbOffset) {
-    final deckHeight = _currentDeckSize().height;
-    final minX = _edgePadding;
-    final maxX = size.width - _orbSize - _edgePadding;
-    final minYOrb = padding.top + _edgePadding;
-    final maxYOrb = _maxY(size, padding);
-    final minYDeck = padding.top + _edgePadding;
-    final maxYDeck = size.height - padding.bottom - _dockNavHeight - deckHeight - _edgePadding;
-
-    final aboveMin = minYDeck + deckHeight + _deckGap;
-    final aboveMax = maxYDeck + deckHeight + _deckGap;
-    final belowMin = minYDeck - _orbSize - _deckGap;
-    final belowMax = maxYDeck - deckHeight - _orbSize - _deckGap;
-
-    final orbMin = minYOrb;
-    final orbMax = maxYOrb;
-
-    double dy = orbOffset.dy;
-    final aboveLow = math.max(orbMin, aboveMin);
-    final aboveHigh = math.min(orbMax, aboveMax);
-    final belowLow = math.max(orbMin, belowMin);
-    final belowHigh = math.min(orbMax, belowMax);
-
-    if (aboveLow <= aboveHigh) {
-      dy = dy.clamp(aboveLow, aboveHigh);
-    } else if (belowLow <= belowHigh) {
-      dy = dy.clamp(belowLow, belowHigh);
-    } else {
-      dy = dy.clamp(orbMin, orbMax);
-    }
-
-    final dx = orbOffset.dx.clamp(minX, maxX);
-    return Offset(dx, dy);
-  }
-
   Offset _deckOffset(Size size, EdgeInsets padding, Offset orbOffset) {
-    final deckSize = _currentDeckSize();
-    final deckWidth = deckSize.width;
-    final deckHeight = deckSize.height;
-    final minX = _edgePadding;
-    final maxX = size.width - deckWidth - _edgePadding;
-    final minY = padding.top + _edgePadding;
-    final maxY = size.height - padding.bottom - _dockNavHeight - deckHeight - _edgePadding;
-    final safeMaxY = math.max(minY, maxY);
-    final centerX = orbOffset.dx + _orbSize / 2;
-    final left = (centerX - deckWidth / 2).clamp(minX, maxX);
-    final aboveTop = orbOffset.dy - deckHeight - _deckGap;
-    final belowTop = orbOffset.dy + _orbSize + _deckGap;
-    final above = Rect.fromLTWH(left, aboveTop, deckWidth, deckHeight);
-    final below = Rect.fromLTWH(left, belowTop, deckWidth, deckHeight);
-
-    final aboveFits = above.top >= minY && above.bottom <= safeMaxY;
-    final belowFits = below.top >= minY && below.bottom <= safeMaxY;
-
-    Rect chosen;
-    String reason;
-    if (aboveFits) {
-      chosen = above;
-      reason = 'above';
-    } else if (belowFits) {
-      chosen = below;
-      reason = 'below';
-    } else {
-      final clampedTop = aboveTop.clamp(minY, safeMaxY);
-      chosen = Rect.fromLTWH(left, clampedTop, deckWidth, deckHeight);
-      reason = 'clamped-above';
-      final orbRect = Rect.fromLTWH(orbOffset.dx, orbOffset.dy, _orbSize, _orbSize);
-      if (chosen.overlaps(orbRect)) {
-        final clampedBelow = Rect.fromLTWH(left, belowTop.clamp(minY, safeMaxY), deckWidth, deckHeight);
-        if (!clampedBelow.overlaps(orbRect)) {
-          chosen = clampedBelow;
-          reason = 'clamped-below';
-        }
-      }
-    }
-
-    assert(() {
-      if (kDebugMode) {
-        final orbRect = Rect.fromLTWH(orbOffset.dx, orbOffset.dy, _orbSize, _orbSize);
-        debugPrint('[OrbMenu][$reason] orb=$orbRect deck=$chosen size=$size padding=$padding');
-      }
-      return true;
-    }());
-
-    return chosen.topLeft;
+    const deckWidth = 220.0;
+    const deckHeight = 170.0;
+    final isRightSide = orbOffset.dx > size.width * 0.55;
+    final dx = isRightSide
+        ? (orbOffset.dx - deckWidth - 12)
+        : (orbOffset.dx + _orbSize + 12);
+    final rawDy = orbOffset.dy + _orbSize / 2 - deckHeight / 2;
+    final dy = rawDy
+        .clamp(padding.top + 12, size.height - deckHeight - _edgePadding);
+    return Offset(dx.clamp(12, size.width - deckWidth - 12), dy);
   }
 
-  Future<void> _handleCameraTap() async {
+  void _handleInput(_OrbInputType type) {
     setState(() => _expanded = false);
-    final file = await _imagePicker.pickImage(source: ImageSource.camera);
-    if (file == null) return;
-    final optimized = await ImageDownscaler.downscaleImageIfNeeded(File(file.path));
-    await _routeInput(
-      InputEvent(
-        source: InputSource.camera,
-        file: optimized,
-        fileName: optimized.uri.pathSegments.last,
-        mimeType: _guessMimeType(optimized.path),
-      ),
-    );
-  }
-
-  Future<void> _handleUploadTap() async {
-    setState(() => _expanded = false);
-    final selection = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['png', 'jpg', 'jpeg', 'heic', 'pdf', 'csv', 'xlsx', 'txt'],
-      withData: false,
-    );
-    if (selection == null || selection.files.isEmpty) return;
-    final file = selection.files.first;
-    if (file.path == null) return;
-    final original = File(file.path!);
-    final optimized = await ImageDownscaler.downscaleImageIfNeeded(original);
-    await _routeInput(
-      InputEvent(
-        source: InputSource.upload,
-        file: optimized,
-        fileName: optimized.uri.pathSegments.last,
-      ),
-    );
-  }
-
-  Future<void> _routeInput(InputEvent event) async {
-    setState(() => _routing = true);
-    await _inputRouter.routeAndHandle(context, event);
-    if (!mounted) return;
-    setState(() => _routing = false);
-  }
-
-
-  void _openUploads() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const UploadsScreen()),
-    );
+    final destination = _classify('', type);
+    _routeTo(destination);
   }
 
   Future<void> _handleMicTap() async {
@@ -821,9 +659,7 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
             _showSnack('No speech detected.');
             return;
           }
-          await _routeInput(
-            InputEvent(source: InputSource.mic, text: text),
-          );
+          _routeTo(_classify(text, _OrbInputType.mic), transcript: text);
         },
         onError: (error) async {
           await _stopRecording();
@@ -903,9 +739,179 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     );
 
     if (text == null || text.trim().isEmpty) return;
-    await _routeInput(InputEvent(source: InputSource.text, text: text));
+    _routeTo(_classify(text, _OrbInputType.text), transcript: text);
   }
 
+  _OrbDestination _classify(String text, _OrbInputType type) {
+    final normalized = text.toLowerCase();
+    final scores = <_OrbDestination, double>{
+      _OrbDestination.training: 0,
+      _OrbDestination.diet: 0,
+      _OrbDestination.appearance: 0,
+      _OrbDestination.leaderboard: 0,
+      _OrbDestination.settings: 0,
+    };
+
+    void bump(_OrbDestination dest, double value) {
+      scores[dest] = (scores[dest] ?? 0) + value;
+    }
+
+    if (normalized.contains('leaderboard') || normalized.contains('rank')) {
+      bump(_OrbDestination.leaderboard, 3);
+    }
+    if (normalized.contains('setting') || normalized.contains('preference')) {
+      bump(_OrbDestination.settings, 3);
+    }
+
+    for (final word in [
+      'set',
+      'reps',
+      'rep',
+      'workout',
+      'session',
+      'bench',
+      'squat',
+      'deadlift',
+      'press',
+      'curl',
+      'row',
+      'rest',
+      'warmup',
+      'pr',
+    ]) {
+      if (normalized.contains(word)) bump(_OrbDestination.training, 1.6);
+    }
+
+    for (final word in [
+      'calorie',
+      'meal',
+      'protein',
+      'carb',
+      'fat',
+      'fiber',
+      'sodium',
+      'breakfast',
+      'lunch',
+      'dinner',
+      'snack',
+      'macro',
+    ]) {
+      if (normalized.contains(word)) bump(_OrbDestination.diet, 1.6);
+    }
+
+    for (final word in [
+      'appearance',
+      'physique',
+      'style',
+      'outfit',
+      'face',
+      'progress',
+      'waist',
+      'hips',
+      'chest',
+      'confidence',
+      'fit',
+      'photo',
+    ]) {
+      if (normalized.contains(word)) bump(_OrbDestination.appearance, 1.6);
+    }
+
+    if (type == _OrbInputType.camera) {
+      bump(_OrbDestination.appearance, 1.2);
+    } else if (type == _OrbInputType.upload) {
+      bump(_OrbDestination.diet, 1.0);
+    }
+
+    _OrbDestination best = _OrbDestination.training;
+    double bestScore = -1;
+    scores.forEach((dest, score) {
+      if (score > bestScore) {
+        bestScore = score;
+        best = dest;
+      }
+    });
+
+    if (bestScore <= 0 && _lastDestination != null) {
+      return _lastDestination!;
+    }
+
+    return best;
+  }
+
+  Future<void> _routeTo(_OrbDestination destination, {String? transcript}) async {
+    setState(() => _routing = true);
+    await Future.delayed(const Duration(milliseconds: 420));
+    if (!mounted) return;
+    setState(() => _routing = false);
+
+    final appearanceEnabled = AppShellController.instance.appearanceEnabled.value;
+    if (destination == _OrbDestination.appearance && !appearanceEnabled) {
+      _showSnack('Appearance is disabled.');
+      _selectTab(_OrbDestination.settings);
+      return;
+    }
+
+    _selectTab(destination);
+    _lastDestination = destination;
+    _showRouteSnackbar(destination, transcript: transcript);
+  }
+
+  void _selectTab(_OrbDestination destination) {
+    final appearanceEnabled = AppShellController.instance.appearanceEnabled.value;
+    final index = switch (destination) {
+      _OrbDestination.training => 0,
+      _OrbDestination.diet => 1,
+      _OrbDestination.appearance => appearanceEnabled ? 2 : 0,
+      _OrbDestination.leaderboard => appearanceEnabled ? 3 : 2,
+      _OrbDestination.settings => appearanceEnabled ? 4 : 3,
+    };
+    AppShellController.instance.selectTab(index);
+  }
+
+  void _showRouteSnackbar(_OrbDestination dest, {String? transcript}) {
+    final messenger = OraApp.messengerKey.currentState;
+    if (messenger == null) return;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Routed to ${_labelFor(dest)}'),
+        action: SnackBarAction(
+          label: 'Change',
+          onPressed: () => _showDestinationPicker(),
+        ),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  Future<void> _showDestinationPicker() async {
+    final choice = await showModalBottomSheet<_OrbDestination>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: GlassCard(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Send input to'),
+                const SizedBox(height: 12),
+                _DestinationTile(label: 'Training', value: _OrbDestination.training),
+                _DestinationTile(label: 'Diet', value: _OrbDestination.diet),
+                _DestinationTile(label: 'Appearance', value: _OrbDestination.appearance),
+                _DestinationTile(label: 'Leaderboard', value: _OrbDestination.leaderboard),
+                _DestinationTile(label: 'Settings', value: _OrbDestination.settings),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (choice == null) return;
+    _routeTo(choice);
+  }
 
   void _persistPosition() {
     if (_layoutSize == null) return;
@@ -921,19 +927,15 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     );
   }
 
-  String _guessMimeType(String path) {
-    final lower = path.toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-    if (lower.endsWith('.heic')) return 'image/heic';
-    if (lower.endsWith('.pdf')) return 'application/pdf';
-    if (lower.endsWith('.csv')) return 'text/csv';
-    if (lower.endsWith('.xlsx')) {
-      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    }
-    return 'application/octet-stream';
+  String _labelFor(_OrbDestination dest) {
+    return switch (dest) {
+      _OrbDestination.training => 'Training',
+      _OrbDestination.diet => 'Diet',
+      _OrbDestination.appearance => 'Appearance',
+      _OrbDestination.leaderboard => 'Leaderboard',
+      _OrbDestination.settings => 'Settings',
+    };
   }
-
 }
 
 class _OrbActionButton extends StatelessWidget {
@@ -1021,32 +1023,6 @@ class _DockTarget extends StatelessWidget {
   }
 }
 
-class _MeasureSize extends StatefulWidget {
-  const _MeasureSize({required this.onChange, required this.child});
-
-  final ValueChanged<Size> onChange;
-  final Widget child;
-
-  @override
-  State<_MeasureSize> createState() => _MeasureSizeState();
-}
-
-class _MeasureSizeState extends State<_MeasureSize> {
-  Size? _oldSize;
-
-  @override
-  Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final size = context.size;
-      if (size == null || size == _oldSize) return;
-      _oldSize = size;
-      widget.onChange(size);
-    });
-    return widget.child;
-  }
-}
-
 class _HiddenTab extends StatelessWidget {
   const _HiddenTab({required this.onTap});
 
@@ -1106,6 +1082,22 @@ class _PartialBubble extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 12, color: Colors.white70),
       ),
+    );
+  }
+}
+
+class _DestinationTile extends StatelessWidget {
+  const _DestinationTile({required this.label, required this.value});
+
+  final String label;
+  final _OrbDestination value;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      title: Text(label),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.of(context).pop(value),
     );
   }
 }

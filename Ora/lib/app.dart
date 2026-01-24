@@ -33,8 +33,15 @@ class OraApp extends StatelessWidget {
         future: _initFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
+            return Scaffold(
+              backgroundColor: const Color(0xFF1D4ED8),
+              body: Center(
+                child: Image.asset(
+                  'assets/branding/ora_logo_blue.png',
+                  width: 180,
+                  height: 180,
+                ),
+              ),
             );
           }
           if (snapshot.hasError) {

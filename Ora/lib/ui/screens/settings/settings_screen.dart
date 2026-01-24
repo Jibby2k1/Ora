@@ -6,6 +6,7 @@ import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 import 'account_screen.dart';
 import 'profile_screen.dart';
+import '../shell/app_shell_controller.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -25,6 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _wakeWordEnabled = false;
   bool _cloudEnabled = false;
   String _cloudProvider = 'gemini';
+  bool _orbHidden = false;
 
   final _incrementController = TextEditingController();
   final _restController = TextEditingController();
@@ -58,6 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final cloudKey = await _settingsRepo.getCloudApiKey();
     final cloudModel = await _settingsRepo.getCloudModel();
     final cloudProvider = await _settingsRepo.getCloudProvider();
+    final orbHidden = await _settingsRepo.getOrbHidden();
     setState(() {
       _unit = unit;
       _increment = increment;
@@ -70,6 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _cloudKeyController.text = cloudKey ?? '';
       _cloudModelController.text = cloudModel;
       _cloudProvider = cloudProvider;
+      _orbHidden = orbHidden;
       _loading = false;
     });
   }
@@ -103,6 +107,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
+        actions: const [SizedBox(width: 72)],
       ),
       body: Stack(
         children: [
@@ -129,6 +134,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           Navigator.of(context).push(
                             MaterialPageRoute(builder: (_) => const AccountScreen()),
                           );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                GlassCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Ora Orb'),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        value: !_orbHidden,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Show floating input'),
+                        subtitle: const Text('Always-on input hub across tabs'),
+                        onChanged: (value) async {
+                          setState(() => _orbHidden = !value);
+                          await _settingsRepo.setOrbHidden(!value);
+                          AppShellController.instance.setOrbHidden(!value);
                         },
                       ),
                     ],

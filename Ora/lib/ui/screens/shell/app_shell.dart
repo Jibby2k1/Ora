@@ -8,6 +8,7 @@ import '../settings/settings_screen.dart';
 import 'app_shell_controller.dart';
 import '../../../data/db/db.dart';
 import '../../../data/repositories/settings_repo.dart';
+import '../../widgets/orb/ora_orb.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -37,9 +38,14 @@ class _AppShellState extends State<AppShell> {
       _index = maxIndex;
     }
     return Scaffold(
-      body: IndexedStack(
-        index: _index,
-        children: tabs,
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _index,
+            children: tabs,
+          ),
+          const OraOrb(),
+        ],
       ),
       bottomNavigationBar: ClipRRect(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),

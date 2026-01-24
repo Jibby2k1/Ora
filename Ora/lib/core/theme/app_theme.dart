@@ -35,6 +35,7 @@ class AppTheme {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
+        toolbarHeight: 72,
       ),
       cardTheme: CardThemeData(
         color: surface.withOpacity(0.6),

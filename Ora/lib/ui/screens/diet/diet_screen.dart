@@ -695,6 +695,7 @@ class _DietScreenState extends State<DietScreen> {
             icon: const Icon(Icons.file_upload_outlined),
             onPressed: _uploadMealPlan,
           ),
+          const SizedBox(width: 72),
         ],
       ),
       body: Stack(
