@@ -1,11 +1,10 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
-
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../data/db/db.dart';
 import '../../../data/repositories/settings_repo.dart';
+import '../../../core/cloud/leaderboard_service.dart';
 import '../../widgets/consent/cloud_consent.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
@@ -19,11 +18,13 @@ class LeaderboardScreen extends StatefulWidget {
 
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
   late final SettingsRepo _settingsRepo;
+  late final LeaderboardService _leaderboardService;
 
   @override
   void initState() {
     super.initState();
     _settingsRepo = SettingsRepo(AppDatabase.instance);
+    _leaderboardService = LeaderboardService(AppDatabase.instance);
   }
 
   @override
@@ -59,38 +60,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                         subtitle: 'Requires account + consent',
                         icon: Icons.group,
                         audience: 'friends',
-                        onTap: () async {
-                          if (FirebaseAuth.instance.currentUser == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Sign in to access leaderboards.')),
-                            );
-                            return;
-                          }
-                          final ok = await CloudConsent.ensureLeaderboardConsent(context, _settingsRepo);
-                          if (!ok || !context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Friends leaderboard coming soon.')),
-                          );
-                        },
+                        settingsRepo: _settingsRepo,
+                        service: _leaderboardService,
                       ),
                       _LeaderboardTab(
                         title: 'Global',
                         subtitle: 'Optional, with warning + consent',
                         icon: Icons.public,
                         audience: 'global',
-                        onTap: () async {
-                          if (FirebaseAuth.instance.currentUser == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Sign in to access leaderboards.')),
-                            );
-                            return;
-                          }
-                          final ok = await CloudConsent.ensureLeaderboardConsent(context, _settingsRepo);
-                          if (!ok || !context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Global leaderboard coming soon.')),
-                          );
-                        },
+                        settingsRepo: _settingsRepo,
+                        service: _leaderboardService,
                       ),
                     ],
                   ),
@@ -100,7 +79,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   child: GlassCard(
                     child: const ListTile(
                       title: Text('Scoring'),
-                      subtitle: Text('Geometric mean (placeholder)'),
+                      subtitle: Text('Geometric mean of training/diet/appearance (placeholder).'),
                     ),
                   ),
                 ),
@@ -118,15 +97,17 @@ class _LeaderboardTab extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.icon,
-    required this.onTap,
     required this.audience,
+    required this.settingsRepo,
+    required this.service,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
-  final VoidCallback onTap;
   final String audience;
+  final SettingsRepo settingsRepo;
+  final LeaderboardService service;
 
   @override
   Widget build(BuildContext context) {
@@ -134,41 +115,10 @@ class _LeaderboardTab extends StatelessWidget {
       title: title,
       subtitle: subtitle,
       icon: icon,
-      onTap: onTap,
       audience: audience,
+      settingsRepo: settingsRepo,
+      service: service,
     );
-  }
-}
-
-List<_ScoreRow> _demoScores() {
-  final raw = [
-    _ScoreRow('Avery', 82, 76, 70),
-    _ScoreRow('Jordan', 75, 88, 64),
-    _ScoreRow('Taylor', 68, 72, 90),
-  ];
-  final scored = raw.map((row) => row.withScore()).toList();
-  scored.sort((a, b) => b.score.compareTo(a.score));
-  for (var i = 0; i < scored.length; i++) {
-    scored[i].rank = i + 1;
-  }
-  return scored;
-}
-
-class _ScoreRow {
-  _ScoreRow(this.name, this.workout, this.diet, this.appearance);
-
-  final String name;
-  final double workout;
-  final double diet;
-  final double appearance;
-  double score = 0;
-  int rank = 0;
-
-  _ScoreRow withScore() {
-    final values = [workout, diet, appearance];
-    final product = values.fold<double>(1, (acc, v) => acc * v);
-    score = product == 0 ? 0 : MathHelper.nthRoot(product, values.length);
-    return this;
   }
 }
 
@@ -177,15 +127,17 @@ class _TrainingLeaderboard extends StatefulWidget {
     required this.title,
     required this.subtitle,
     required this.icon,
-    required this.onTap,
     required this.audience,
+    required this.settingsRepo,
+    required this.service,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
-  final VoidCallback onTap;
   final String audience;
+  final SettingsRepo settingsRepo;
+  final LeaderboardService service;
 
   @override
   State<_TrainingLeaderboard> createState() => _TrainingLeaderboardState();
@@ -194,15 +146,17 @@ class _TrainingLeaderboard extends StatefulWidget {
 class _TrainingLeaderboardState extends State<_TrainingLeaderboard> {
   final Set<String> _selectedMuscles = {};
   _TrainingMetric _metric = _TrainingMetric.pr;
+  final _friendController = TextEditingController();
+  bool _consented = false;
+
+  @override
+  void dispose() {
+    _friendController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final rows = _demoTrainingScores(
-      audience: widget.audience,
-      muscles: _selectedMuscles.isEmpty ? _muscleOptions : _selectedMuscles.toList(),
-      metric: _metric,
-    );
-
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       children: [
@@ -211,17 +165,100 @@ class _TrainingLeaderboardState extends State<_TrainingLeaderboard> {
             title: Text(widget.title),
             subtitle: Text(widget.subtitle),
             trailing: Icon(widget.icon),
-            onTap: widget.onTap,
+            onTap: () async {
+              if (FirebaseAuth.instance.currentUser == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Sign in to access leaderboards.')),
+                );
+                return;
+              }
+              final ok = await CloudConsent.ensureLeaderboardConsent(context, widget.settingsRepo);
+              if (!ok || !context.mounted) return;
+              setState(() => _consented = true);
+            },
           ),
         ),
         const SizedBox(height: 12),
-        const GlassCard(
+        GlassCard(
           child: ListTile(
-            title: Text('Status'),
-            subtitle: Text('Not connected yet'),
+            title: const Text('Status'),
+            subtitle: Text(_consented ? 'Connected' : 'Awaiting consent'),
+            trailing: ElevatedButton(
+              onPressed: _consented
+                  ? () async {
+                      await widget.service.syncScores();
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Leaderboard synced.')),
+                      );
+                    }
+                  : null,
+              child: const Text('Sync'),
+            ),
           ),
         ),
         const SizedBox(height: 12),
+        if (widget.audience == 'friends') ...[
+          GlassCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                StreamBuilder<List<String>>(
+                  stream: widget.service.watchFriends(),
+                  builder: (context, snapshot) {
+                    final friends = snapshot.data ?? const <String>[];
+                    final user = FirebaseAuth.instance.currentUser;
+                    return Row(
+                      children: [
+                        const Expanded(child: Text('Friends')),
+                        Text(
+                          friends.isNotEmpty ? '${friends.length} saved' : 'None yet',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: user == null
+                              ? null
+                              : () async {
+                                  await Clipboard.setData(ClipboardData(text: user.uid));
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Your UID copied.')),
+                                  );
+                                },
+                          icon: const Icon(Icons.copy, size: 16),
+                          label: const Text('Copy my UID'),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _friendController,
+                  decoration: const InputDecoration(
+                    labelText: 'Add friend by UID',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      final uid = _friendController.text.trim();
+                      if (uid.isEmpty) return;
+                      await widget.service.addFriend(uid);
+                      _friendController.clear();
+                    },
+                    child: const Text('Add friend'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         GlassCard(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -247,34 +284,51 @@ class _TrainingLeaderboardState extends State<_TrainingLeaderboard> {
                   ),
                 ],
               ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        GlassCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Rankings'),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final muscle in _muscleOptions)
-                    FilterChip(
-                      label: Text(muscle),
-                      selected: _selectedMuscles.contains(muscle),
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _selectedMuscles.add(muscle);
-                          } else {
-                            _selectedMuscles.remove(muscle);
-                          }
-                        });
-                      },
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              ...rows.map((row) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(child: Text(row.rank.toString())),
-                    title: Text(row.name),
-                    subtitle: Text('${_metric.label}: ${row.displayValue}'),
-                  )),
+              if (!_consented)
+                const Text('Enable consent and sync to view rankings.')
+              else
+                StreamBuilder<List<LeaderboardRow>>(
+                  stream: widget.audience == 'friends'
+                      ? widget.service.watchFriends().asyncExpand(
+                          (uids) => widget.service.watchFriendScores(uids),
+                        )
+                      : widget.service.watchGlobalScores(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final rows = snapshot.data!;
+                    if (rows.isEmpty) {
+                      return const Text('No leaderboard entries yet.');
+                    }
+                    return Column(
+                      children: [
+                        for (var i = 0; i < rows.length; i++)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: CircleAvatar(
+                              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                              child: Text('${i + 1}'),
+                            ),
+                            title: Text(rows[i].displayName),
+                            subtitle: Text('Score ${rows[i].score.toStringAsFixed(1)}'),
+                            trailing: Text('Train ${rows[i].trainingScore.toStringAsFixed(0)}'),
+                          ),
+                      ],
+                    );
+                  },
+                ),
             ],
           ),
         ),
@@ -289,87 +343,6 @@ enum _TrainingMetric {
   prCount('PR Count');
 
   const _TrainingMetric(this.label);
+
   final String label;
-}
-
-class _TrainingRow {
-  _TrainingRow(this.name, this.value, this.rank, this.displayValue);
-
-  final String name;
-  final double value;
-  final int rank;
-  final String displayValue;
-}
-
-const _muscleOptions = [
-  'Chest',
-  'Back',
-  'Lats',
-  'Upper Back',
-  'Traps',
-  'Shoulders',
-  'Front Delts',
-  'Side Delts',
-  'Rear Delts',
-  'Biceps',
-  'Triceps',
-  'Forearms',
-  'Abs',
-  'Obliques',
-  'Quads',
-  'Hamstrings',
-  'Glutes',
-  'Calves',
-  'Adductors',
-  'Abductors',
-  'Hip Flexors',
-];
-
-List<_TrainingRow> _demoTrainingScores({
-  required String audience,
-  required List<String> muscles,
-  required _TrainingMetric metric,
-}) {
-  final names = ['You', 'Avery', 'Jordan', 'Taylor', 'Riley', 'Morgan'];
-  final rows = <_TrainingRow>[];
-  for (final name in names) {
-    final seed = _hash('$audience|${metric.name}|${muscles.join(',')}|$name');
-    double value;
-    String display;
-    switch (metric) {
-      case _TrainingMetric.pr:
-        value = 135 + (seed % 120);
-        display = '${value.toStringAsFixed(0)} lb';
-        break;
-      case _TrainingMetric.volume:
-        value = 8000 + (seed % 9000);
-        display = value.toStringAsFixed(0);
-        break;
-      case _TrainingMetric.prCount:
-        value = 2 + (seed % 12);
-        display = value.toStringAsFixed(0);
-        break;
-    }
-    rows.add(_TrainingRow(name, value, 0, display));
-  }
-  rows.sort((a, b) => b.value.compareTo(a.value));
-  for (var i = 0; i < rows.length; i++) {
-    rows[i] = _TrainingRow(rows[i].name, rows[i].value, i + 1, rows[i].displayValue);
-  }
-  return rows;
-}
-
-int _hash(String input) {
-  var h = 0;
-  for (final code in input.codeUnits) {
-    h = (h * 31 + code) & 0x7fffffff;
-  }
-  return h;
-}
-
-class MathHelper {
-  static double nthRoot(double value, int n) {
-    if (value <= 0) return 0;
-    return value == 0 ? 0 : math.pow(value, 1 / n).toDouble();
-  }
 }
