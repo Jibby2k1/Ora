@@ -1,0 +1,1471 @@
+{
+  "generated_at": "2026-01-20T03:47:16.934037Z",
+  "token_count": 2532,
+  "unique_tokens": 110,
+  "top_tokens": [
+    {
+      "token": "machine",
+      "count": 214
+    },
+    {
+      "token": "press",
+      "count": 210
+    },
+    {
+      "token": "dumbbell",
+      "count": 132
+    },
+    {
+      "token": "curl",
+      "count": 130
+    },
+    {
+      "token": "cable",
+      "count": 120
+    },
+    {
+      "token": "leg",
+      "count": 114
+    },
+    {
+      "token": "row",
+      "count": 99
+    },
+    {
+      "token": "chest",
+      "count": 95
+    },
+    {
+      "token": "single",
+      "count": 78
+    },
+    {
+      "token": "seated",
+      "count": 63
+    },
+    {
+      "token": "incline",
+      "count": 61
+    },
+    {
+      "token": "barbell",
+      "count": 60
+    },
+    {
+      "token": "shoulder",
+      "count": 60
+    },
+    {
+      "token": "extension",
+      "count": 55
+    },
+    {
+      "token": "fly",
+      "count": 48
+    },
+    {
+      "token": "arm",
+      "count": 48
+    },
+    {
+      "token": "decline",
+      "count": 45
+    },
+    {
+      "token": "raise",
+      "count": 44
+    },
+    {
+      "token": "squat",
+      "count": 42
+    },
+    {
+      "token": "plate",
+      "count": 39
+    },
+    {
+      "token": "loaded",
+      "count": 39
+    },
+    {
+      "token": "selectorized",
+      "count": 39
+    },
+    {
+      "token": "standing",
+      "count": 36
+    },
+    {
+      "token": "bench",
+      "count": 35
+    },
+    {
+      "token": "triceps",
+      "count": 29
+    },
+    {
+      "token": "hip",
+      "count": 28
+    },
+    {
+      "token": "pulldown",
+      "count": 26
+    },
+    {
+      "token": "lateral",
+      "count": 24
+    },
+    {
+      "token": "deadlift",
+      "count": 22
+    },
+    {
+      "token": "hammer",
+      "count": 19
+    },
+    {
+      "token": "smith",
+      "count": 18
+    },
+    {
+      "token": "lat",
+      "count": 17
+    },
+    {
+      "token": "pull",
+      "count": 15
+    },
+    {
+      "token": "high",
+      "count": 15
+    },
+    {
+      "token": "calf",
+      "count": 14
+    },
+    {
+      "token": "reverse",
+      "count": 12
+    },
+    {
+      "token": "wrist",
+      "count": 12
+    },
+    {
+      "token": "hack",
+      "count": 11
+    },
+    {
+      "token": "abduction",
+      "count": 11
+    },
+    {
+      "token": "adduction",
+      "count": 11
+    },
+    {
+      "token": "biceps",
+      "count": 11
+    },
+    {
+      "token": "strength",
+      "count": 10
+    },
+    {
+      "token": "overhead",
+      "count": 9
+    },
+    {
+      "token": "front",
+      "count": 9
+    },
+    {
+      "token": "shrug",
+      "count": 9
+    },
+    {
+      "token": "skullcrusher",
+      "count": 9
+    },
+    {
+      "token": "split",
+      "count": 9
+    },
+    {
+      "token": "rear",
+      "count": 9
+    },
+    {
+      "token": "delt",
+      "count": 9
+    },
+    {
+      "token": "kickback",
+      "count": 9
+    },
+    {
+      "token": "low",
+      "count": 9
+    },
+    {
+      "token": "grip",
+      "count": 6
+    },
+    {
+      "token": "floor",
+      "count": 6
+    },
+    {
+      "token": "pause",
+      "count": 6
+    },
+    {
+      "token": "push",
+      "count": 6
+    },
+    {
+      "token": "romanian",
+      "count": 6
+    },
+    {
+      "token": "sumo",
+      "count": 6
+    },
+    {
+      "token": "back",
+      "count": 6
+    },
+    {
+      "token": "thrust",
+      "count": 6
+    },
+    {
+      "token": "lying",
+      "count": 6
+    },
+    {
+      "token": "bulgarian",
+      "count": 6
+    },
+    {
+      "token": "ez",
+      "count": 6
+    },
+    {
+      "token": "bar",
+      "count": 6
+    },
+    {
+      "token": "preacher",
+      "count": 6
+    },
+    {
+      "token": "landmine",
+      "count": 6
+    },
+    {
+      "token": "upright",
+      "count": 6
+    },
+    {
+      "token": "supported",
+      "count": 6
+    },
+    {
+      "token": "pullover",
+      "count": 6
+    },
+    {
+      "token": "straight",
+      "count": 6
+    },
+    {
+      "token": "crunch",
+      "count": 6
+    },
+    {
+      "token": "pushdown",
+      "count": 6
+    },
+    {
+      "token": "rotation",
+      "count": 6
+    },
+    {
+      "token": "close",
+      "count": 3
+    },
+    {
+      "token": "pendlay",
+      "count": 3
+    },
+    {
+      "token": "deficit",
+      "count": 3
+    },
+    {
+      "token": "rack",
+      "count": 3
+    },
+    {
+      "token": "box",
+      "count": 3
+    },
+    {
+      "token": "good",
+      "count": 3
+    },
+    {
+      "token": "morning",
+      "count": 3
+    },
+    {
+      "token": "arnold",
+      "count": 3
+    },
+    {
+      "token": "z",
+      "count": 3
+    },
+    {
+      "token": "concentration",
+      "count": 3
+    },
+    {
+      "token": "spider",
+      "count": 3
+    },
+    {
+      "token": "cross",
+      "count": 3
+    },
+    {
+      "token": "body",
+      "count": 3
+    },
+    {
+      "token": "tate",
+      "count": 3
+    },
+    {
+      "token": "lunge",
+      "count": 3
+    },
+    {
+      "token": "step",
+      "count": 3
+    },
+    {
+      "token": "up",
+      "count": 3
+    },
+    {
+      "token": "goblet",
+      "count": 3
+    },
+    {
+      "token": "farmer",
+      "count": 3
+    },
+    {
+      "token": "carry",
+      "count": 3
+    },
+    {
+      "token": "neutral",
+      "count": 3
+    },
+    {
+      "token": "horizontal",
+      "count": 3
+    },
+    {
+      "token": "vertical",
+      "count": 3
+    },
+    {
+      "token": "belt",
+      "count": 3
+    },
+    {
+      "token": "pec",
+      "count": 3
+    },
+    {
+      "token": "deck",
+      "count": 3
+    },
+    {
+      "token": "pressdown",
+      "count": 3
+    },
+    {
+      "token": "ab",
+      "count": 3
+    },
+    {
+      "token": "glute",
+      "count": 3
+    },
+    {
+      "token": "crossover",
+      "count": 3
+    },
+    {
+      "token": "face",
+      "count": 3
+    },
+    {
+      "token": "rope",
+      "count": 3
+    },
+    {
+      "token": "through",
+      "count": 3
+    },
+    {
+      "token": "over",
+      "count": 3
+    },
+    {
+      "token": "woodchop",
+      "count": 3
+    },
+    {
+      "token": "pallof",
+      "count": 3
+    },
+    {
+      "token": "external",
+      "count": 3
+    },
+    {
+      "token": "internal",
+      "count": 3
+    }
+  ],
+  "flagged_tokens": [
+    {
+      "token": "machine",
+      "count": 214
+    },
+    {
+      "token": "press",
+      "count": 210
+    },
+    {
+      "token": "dumbbell",
+      "count": 132
+    },
+    {
+      "token": "curl",
+      "count": 130
+    },
+    {
+      "token": "cable",
+      "count": 120
+    },
+    {
+      "token": "leg",
+      "count": 114
+    },
+    {
+      "token": "row",
+      "count": 99
+    },
+    {
+      "token": "chest",
+      "count": 95
+    },
+    {
+      "token": "single",
+      "count": 78
+    },
+    {
+      "token": "seated",
+      "count": 63
+    },
+    {
+      "token": "incline",
+      "count": 61
+    },
+    {
+      "token": "barbell",
+      "count": 60
+    },
+    {
+      "token": "shoulder",
+      "count": 60
+    },
+    {
+      "token": "extension",
+      "count": 55
+    },
+    {
+      "token": "fly",
+      "count": 48
+    },
+    {
+      "token": "arm",
+      "count": 48
+    },
+    {
+      "token": "decline",
+      "count": 45
+    },
+    {
+      "token": "raise",
+      "count": 44
+    },
+    {
+      "token": "squat",
+      "count": 42
+    },
+    {
+      "token": "plate",
+      "count": 39
+    },
+    {
+      "token": "loaded",
+      "count": 39
+    },
+    {
+      "token": "selectorized",
+      "count": 39
+    },
+    {
+      "token": "standing",
+      "count": 36
+    },
+    {
+      "token": "bench",
+      "count": 35
+    },
+    {
+      "token": "triceps",
+      "count": 29
+    },
+    {
+      "token": "hip",
+      "count": 28
+    },
+    {
+      "token": "pulldown",
+      "count": 26
+    },
+    {
+      "token": "lateral",
+      "count": 24
+    },
+    {
+      "token": "deadlift",
+      "count": 22
+    },
+    {
+      "token": "hammer",
+      "count": 19
+    },
+    {
+      "token": "smith",
+      "count": 18
+    },
+    {
+      "token": "lat",
+      "count": 17
+    },
+    {
+      "token": "pull",
+      "count": 15
+    },
+    {
+      "token": "high",
+      "count": 15
+    },
+    {
+      "token": "calf",
+      "count": 14
+    },
+    {
+      "token": "reverse",
+      "count": 12
+    },
+    {
+      "token": "wrist",
+      "count": 12
+    },
+    {
+      "token": "hack",
+      "count": 11
+    },
+    {
+      "token": "abduction",
+      "count": 11
+    },
+    {
+      "token": "adduction",
+      "count": 11
+    },
+    {
+      "token": "biceps",
+      "count": 11
+    },
+    {
+      "token": "strength",
+      "count": 10
+    },
+    {
+      "token": "overhead",
+      "count": 9
+    },
+    {
+      "token": "front",
+      "count": 9
+    },
+    {
+      "token": "rear",
+      "count": 9
+    },
+    {
+      "token": "low",
+      "count": 9
+    },
+    {
+      "token": "push",
+      "count": 6
+    },
+    {
+      "token": "ez",
+      "count": 6
+    },
+    {
+      "token": "bar",
+      "count": 6
+    },
+    {
+      "token": "close",
+      "count": 3
+    },
+    {
+      "token": "box",
+      "count": 3
+    },
+    {
+      "token": "z",
+      "count": 3
+    },
+    {
+      "token": "up",
+      "count": 3
+    },
+    {
+      "token": "pec",
+      "count": 3
+    },
+    {
+      "token": "ab",
+      "count": 3
+    }
+  ],
+  "top_bigrams": [
+    {
+      "phrase": "chest press",
+      "count": 65
+    },
+    {
+      "phrase": "shoulder press",
+      "count": 60
+    },
+    {
+      "phrase": "single arm",
+      "count": 42
+    },
+    {
+      "phrase": "plate loaded",
+      "count": 39
+    },
+    {
+      "phrase": "single leg",
+      "count": 36
+    },
+    {
+      "phrase": "bench press",
+      "count": 35
+    },
+    {
+      "phrase": "leg curl",
+      "count": 34
+    },
+    {
+      "phrase": "press machine",
+      "count": 32
+    },
+    {
+      "phrase": "extension machine",
+      "count": 30
+    },
+    {
+      "phrase": "curl machine",
+      "count": 30
+    },
+    {
+      "phrase": "leg extension",
+      "count": 29
+    },
+    {
+      "phrase": "cable chest",
+      "count": 28
+    },
+    {
+      "phrase": "lateral raise",
+      "count": 24
+    },
+    {
+      "phrase": "seated leg",
+      "count": 24
+    },
+    {
+      "phrase": "chest fly",
+      "count": 24
+    },
+    {
+      "phrase": "triceps extension",
+      "count": 20
+    },
+    {
+      "phrase": "cable row",
+      "count": 18
+    },
+    {
+      "phrase": "lat pulldown",
+      "count": 17
+    },
+    {
+      "phrase": "leg press",
+      "count": 17
+    },
+    {
+      "phrase": "machine shoulder",
+      "count": 17
+    },
+    {
+      "phrase": "dumbbell shoulder",
+      "count": 14
+    },
+    {
+      "phrase": "dumbbell lateral",
+      "count": 14
+    },
+    {
+      "phrase": "dumbbell row",
+      "count": 14
+    },
+    {
+      "phrase": "dumbbell curl",
+      "count": 14
+    },
+    {
+      "phrase": "row machine",
+      "count": 14
+    },
+    {
+      "phrase": "calf raise",
+      "count": 14
+    },
+    {
+      "phrase": "cable curl",
+      "count": 14
+    },
+    {
+      "phrase": "machine chest",
+      "count": 14
+    },
+    {
+      "phrase": "smith machine",
+      "count": 12
+    },
+    {
+      "phrase": "arm cable",
+      "count": 12
+    },
+    {
+      "phrase": "hack squat",
+      "count": 11
+    },
+    {
+      "phrase": "hip abduction",
+      "count": 11
+    },
+    {
+      "phrase": "hip adduction",
+      "count": 11
+    },
+    {
+      "phrase": "biceps curl",
+      "count": 11
+    },
+    {
+      "phrase": "incline bench",
+      "count": 10
+    },
+    {
+      "phrase": "pulldown machine",
+      "count": 10
+    },
+    {
+      "phrase": "squat machine",
+      "count": 10
+    },
+    {
+      "phrase": "raise machine",
+      "count": 10
+    },
+    {
+      "phrase": "hammer strength",
+      "count": 10
+    },
+    {
+      "phrase": "split squat",
+      "count": 9
+    },
+    {
+      "phrase": "rear delt",
+      "count": 9
+    },
+    {
+      "phrase": "hammer curl",
+      "count": 9
+    },
+    {
+      "phrase": "wrist curl",
+      "count": 9
+    },
+    {
+      "phrase": "loaded leg",
+      "count": 9
+    },
+    {
+      "phrase": "selectorized leg",
+      "count": 9
+    },
+    {
+      "phrase": "dumbbell incline",
+      "count": 8
+    },
+    {
+      "phrase": "abduction machine",
+      "count": 8
+    },
+    {
+      "phrase": "adduction machine",
+      "count": 8
+    },
+    {
+      "phrase": "seated cable",
+      "count": 8
+    },
+    {
+      "phrase": "seated dumbbell",
+      "count": 8
+    },
+    {
+      "phrase": "standing dumbbell",
+      "count": 8
+    },
+    {
+      "phrase": "arm dumbbell",
+      "count": 8
+    },
+    {
+      "phrase": "leg dumbbell",
+      "count": 8
+    },
+    {
+      "phrase": "incline dumbbell",
+      "count": 8
+    },
+    {
+      "phrase": "decline dumbbell",
+      "count": 8
+    },
+    {
+      "phrase": "standing cable",
+      "count": 8
+    },
+    {
+      "phrase": "leg cable",
+      "count": 8
+    },
+    {
+      "phrase": "incline cable",
+      "count": 8
+    },
+    {
+      "phrase": "decline cable",
+      "count": 8
+    },
+    {
+      "phrase": "high row",
+      "count": 7
+    },
+    {
+      "phrase": "decline bench",
+      "count": 6
+    },
+    {
+      "phrase": "grip bench",
+      "count": 6
+    },
+    {
+      "phrase": "floor press",
+      "count": 6
+    },
+    {
+      "phrase": "push press",
+      "count": 6
+    },
+    {
+      "phrase": "romanian deadlift",
+      "count": 6
+    },
+    {
+      "phrase": "sumo deadlift",
+      "count": 6
+    },
+    {
+      "phrase": "hip thrust",
+      "count": 6
+    },
+    {
+      "phrase": "reverse curl",
+      "count": 6
+    },
+    {
+      "phrase": "bulgarian split",
+      "count": 6
+    },
+    {
+      "phrase": "ez bar",
+      "count": 6
+    },
+    {
+      "phrase": "preacher curl",
+      "count": 6
+    },
+    {
+      "phrase": "front raise",
+      "count": 6
+    },
+    {
+      "phrase": "delt fly",
+      "count": 6
+    },
+    {
+      "phrase": "upright row",
+      "count": 6
+    },
+    {
+      "phrase": "chest supported",
+      "count": 6
+    },
+    {
+      "phrase": "supported row",
+      "count": 6
+    },
+    {
+      "phrase": "overhead triceps",
+      "count": 6
+    },
+    {
+      "phrase": "incline chest",
+      "count": 6
+    },
+    {
+      "phrase": "decline chest",
+      "count": 6
+    },
+    {
+      "phrase": "straight arm",
+      "count": 6
+    },
+    {
+      "phrase": "arm pulldown",
+      "count": 6
+    },
+    {
+      "phrase": "cable fly",
+      "count": 6
+    },
+    {
+      "phrase": "loaded hip",
+      "count": 6
+    },
+    {
+      "phrase": "selectorized hip",
+      "count": 6
+    },
+    {
+      "phrase": "incline row",
+      "count": 5
+    },
+    {
+      "phrase": "incline curl",
+      "count": 5
+    },
+    {
+      "phrase": "seated row",
+      "count": 5
+    },
+    {
+      "phrase": "barbell pause",
+      "count": 4
+    },
+    {
+      "phrase": "barbell landmine",
+      "count": 4
+    },
+    {
+      "phrase": "dumbbell chest",
+      "count": 4
+    },
+    {
+      "phrase": "low row",
+      "count": 4
+    },
+    {
+      "phrase": "low cable",
+      "count": 4
+    },
+    {
+      "phrase": "high cable",
+      "count": 4
+    },
+    {
+      "phrase": "cable lat",
+      "count": 4
+    },
+    {
+      "phrase": "cable reverse",
+      "count": 4
+    },
+    {
+      "phrase": "cable pull",
+      "count": 4
+    },
+    {
+      "phrase": "cable wrist",
+      "count": 4
+    },
+    {
+      "phrase": "seated machine",
+      "count": 4
+    },
+    {
+      "phrase": "standing machine",
+      "count": 4
+    },
+    {
+      "phrase": "arm machine",
+      "count": 4
+    },
+    {
+      "phrase": "leg machine",
+      "count": 4
+    },
+    {
+      "phrase": "incline machine",
+      "count": 4
+    },
+    {
+      "phrase": "decline machine",
+      "count": 4
+    },
+    {
+      "phrase": "close grip",
+      "count": 3
+    },
+    {
+      "phrase": "pause bench",
+      "count": 3
+    },
+    {
+      "phrase": "overhead press",
+      "count": 3
+    },
+    {
+      "phrase": "pendlay row",
+      "count": 3
+    },
+    {
+      "phrase": "deficit deadlift",
+      "count": 3
+    },
+    {
+      "phrase": "rack pull",
+      "count": 3
+    },
+    {
+      "phrase": "front squat",
+      "count": 3
+    },
+    {
+      "phrase": "back squat",
+      "count": 3
+    },
+    {
+      "phrase": "pause squat",
+      "count": 3
+    },
+    {
+      "phrase": "box squat",
+      "count": 3
+    },
+    {
+      "phrase": "good morning",
+      "count": 3
+    },
+    {
+      "phrase": "lying triceps",
+      "count": 3
+    },
+    {
+      "phrase": "landmine press",
+      "count": 3
+    },
+    {
+      "phrase": "landmine row",
+      "count": 3
+    },
+    {
+      "phrase": "incline fly",
+      "count": 3
+    },
+    {
+      "phrase": "arnold press",
+      "count": 3
+    },
+    {
+      "phrase": "z press",
+      "count": 3
+    },
+    {
+      "phrase": "high pull",
+      "count": 3
+    },
+    {
+      "phrase": "concentration curl",
+      "count": 3
+    },
+    {
+      "phrase": "spider curl",
+      "count": 3
+    },
+    {
+      "phrase": "cross body",
+      "count": 3
+    },
+    {
+      "phrase": "body hammer",
+      "count": 3
+    },
+    {
+      "phrase": "tate press",
+      "count": 3
+    },
+    {
+      "phrase": "triceps kickback",
+      "count": 3
+    },
+    {
+      "phrase": "step up",
+      "count": 3
+    },
+    {
+      "phrase": "goblet squat",
+      "count": 3
+    },
+    {
+      "phrase": "farmer carry",
+      "count": 3
+    },
+    {
+      "phrase": "reverse wrist",
+      "count": 3
+    },
+    {
+      "phrase": "neutral grip",
+      "count": 3
+    },
+    {
+      "phrase": "horizontal leg",
+      "count": 3
+    },
+    {
+      "phrase": "vertical leg",
+      "count": 3
+    },
+    {
+      "phrase": "belt squat",
+      "count": 3
+    },
+    {
+      "phrase": "lying leg",
+      "count": 3
+    },
+    {
+      "phrase": "seated calf",
+      "count": 3
+    },
+    {
+      "phrase": "pec deck",
+      "count": 3
+    },
+    {
+      "phrase": "triceps pressdown",
+      "count": 3
+    },
+    {
+      "phrase": "ab crunch",
+      "count": 3
+    },
+    {
+      "phrase": "back extension",
+      "count": 3
+    },
+    {
+      "phrase": "glute kickback",
+      "count": 3
+    },
+    {
+      "phrase": "machine bench",
+      "count": 3
+    },
+    {
+      "phrase": "machine incline",
+      "count": 3
+    },
+    {
+      "phrase": "machine squat",
+      "count": 3
+    },
+    {
+      "phrase": "machine deadlift",
+      "count": 3
+    },
+    {
+      "phrase": "machine row",
+      "count": 3
+    },
+    {
+      "phrase": "incline press",
+      "count": 3
+    },
+    {
+      "phrase": "face pull",
+      "count": 3
+    },
+    {
+      "phrase": "triceps pushdown",
+      "count": 3
+    },
+    {
+      "phrase": "rope pushdown",
+      "count": 3
+    },
+    {
+      "phrase": "pull through",
+      "count": 3
+    },
+    {
+      "phrase": "pull over",
+      "count": 3
+    },
+    {
+      "phrase": "pallof press",
+      "count": 3
+    },
+    {
+      "phrase": "reverse fly",
+      "count": 3
+    },
+    {
+      "phrase": "external rotation",
+      "count": 3
+    },
+    {
+      "phrase": "internal rotation",
+      "count": 3
+    },
+    {
+      "phrase": "wrist extension",
+      "count": 3
+    },
+    {
+      "phrase": "seated chest",
+      "count": 3
+    },
+    {
+      "phrase": "standing chest",
+      "count": 3
+    },
+    {
+      "phrase": "arm chest",
+      "count": 3
+    },
+    {
+      "phrase": "leg chest",
+      "count": 3
+    },
+    {
+      "phrase": "seated seated",
+      "count": 3
+    },
+    {
+      "phrase": "standing seated",
+      "count": 3
+    },
+    {
+      "phrase": "arm seated",
+      "count": 3
+    },
+    {
+      "phrase": "leg seated",
+      "count": 3
+    },
+    {
+      "phrase": "incline seated",
+      "count": 3
+    },
+    {
+      "phrase": "decline seated",
+      "count": 3
+    },
+    {
+      "phrase": "standing leg",
+      "count": 3
+    },
+    {
+      "phrase": "arm leg",
+      "count": 3
+    },
+    {
+      "phrase": "leg leg",
+      "count": 3
+    },
+    {
+      "phrase": "incline leg",
+      "count": 3
+    },
+    {
+      "phrase": "decline leg",
+      "count": 3
+    },
+    {
+      "phrase": "loaded chest",
+      "count": 3
+    },
+    {
+      "phrase": "selectorized chest",
+      "count": 3
+    },
+    {
+      "phrase": "loaded shoulder",
+      "count": 3
+    },
+    {
+      "phrase": "selectorized shoulder",
+      "count": 3
+    },
+    {
+      "phrase": "loaded row",
+      "count": 3
+    },
+    {
+      "phrase": "selectorized row",
+      "count": 3
+    },
+    {
+      "phrase": "loaded lat",
+      "count": 3
+    },
+    {
+      "phrase": "selectorized lat",
+      "count": 3
+    },
+    {
+      "phrase": "loaded hack",
+      "count": 3
+    },
+    {
+      "phrase": "selectorized hack",
+      "count": 3
+    },
+    {
+      "phrase": "loaded biceps",
+      "count": 3
+    },
+    {
+      "phrase": "selectorized biceps",
+      "count": 3
+    },
+    {
+      "phrase": "loaded triceps",
+      "count": 3
+    },
+    {
+      "phrase": "selectorized triceps",
+      "count": 3
+    },
+    {
+      "phrase": "loaded calf",
+      "count": 3
+    },
+    {
+      "phrase": "selectorized calf",
+      "count": 3
+    },
+    {
+      "phrase": "barbell bench",
+      "count": 2
+    },
+    {
+      "phrase": "barbell incline",
+      "count": 2
+    },
+    {
+      "phrase": "barbell decline",
+      "count": 2
+    },
+    {
+      "phrase": "barbell close",
+      "count": 2
+    },
+    {
+      "phrase": "barbell floor",
+      "count": 2
+    },
+    {
+      "phrase": "barbell overhead",
+      "count": 2
+    },
+    {
+      "phrase": "barbell push",
+      "count": 2
+    },
+    {
+      "phrase": "barbell row",
+      "count": 2
+    },
+    {
+      "phrase": "barbell pendlay",
+      "count": 2
+    },
+    {
+      "phrase": "barbell deadlift",
+      "count": 2
+    },
+    {
+      "phrase": "barbell romanian",
+      "count": 2
+    }
+  ]
+}
