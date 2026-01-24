@@ -69,12 +69,22 @@ class AppDatabase {
     }
 
     for (final statements in batches) {
-      final batch = db.batch();
       for (final sql in statements) {
-        batch.execute(sql);
+        try {
+          await db.execute(sql);
+        } on DatabaseException catch (error) {
+          if (_isDuplicateColumnError(error)) {
+            continue;
+          }
+          rethrow;
+        }
       }
-      await batch.commit(noResult: true);
     }
+  }
+
+  bool _isDuplicateColumnError(DatabaseException error) {
+    final message = error.toString().toLowerCase();
+    return message.contains('duplicate column name');
   }
 
   Future<void> seedExercisesIfNeeded(String jsonAssetOrPath, {bool fromAsset = true}) async {
