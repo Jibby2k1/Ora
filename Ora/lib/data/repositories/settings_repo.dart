@@ -26,6 +26,10 @@ class SettingsRepo {
   static const String keyAppearanceProfileEnabled = 'appearance_profile_enabled';
   static const String keyAppearanceProfileSex = 'appearance_profile_sex';
   static const String keyAppearanceAccessEnabled = 'appearance_access_enabled';
+  static const String keyOrbHidden = 'orb_hidden';
+  static const String keyOrbDocked = 'orb_docked';
+  static const String keyOrbPosX = 'orb_pos_x';
+  static const String keyOrbPosY = 'orb_pos_y';
 
   Future<String> getUnit() async {
     return (await _get(keyUnit)) ?? 'lb';
@@ -190,6 +194,39 @@ class SettingsRepo {
 
   Future<void> setAppearanceAccessEnabled(bool value) async {
     await _set(keyAppearanceAccessEnabled, value ? '1' : '0');
+  }
+
+  Future<bool> getOrbHidden() async {
+    final raw = await _get(keyOrbHidden);
+    return raw == '1';
+  }
+
+  Future<void> setOrbHidden(bool value) async {
+    await _set(keyOrbHidden, value ? '1' : '0');
+  }
+
+  Future<bool> getOrbDocked() async {
+    final raw = await _get(keyOrbDocked);
+    return raw == null ? true : raw == '1';
+  }
+
+  Future<void> setOrbDocked(bool value) async {
+    await _set(keyOrbDocked, value ? '1' : '0');
+  }
+
+  Future<double?> getOrbPosX() async {
+    final raw = await _get(keyOrbPosX);
+    return raw == null ? null : double.tryParse(raw);
+  }
+
+  Future<double?> getOrbPosY() async {
+    final raw = await _get(keyOrbPosY);
+    return raw == null ? null : double.tryParse(raw);
+  }
+
+  Future<void> setOrbPosition({required double x, required double y}) async {
+    await _set(keyOrbPosX, x.toStringAsFixed(4));
+    await _set(keyOrbPosY, y.toStringAsFixed(4));
   }
 
   Future<String?> getValue(String key) async {

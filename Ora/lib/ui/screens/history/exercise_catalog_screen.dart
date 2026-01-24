@@ -136,6 +136,7 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
             onPressed: _isFilling ? null : _fillMissingMuscles,
             icon: _isFilling ? const Icon(Icons.sync) : const Icon(Icons.auto_fix_high),
           ),
+          const SizedBox(width: 72),
         ],
       ),
       body: Stack(

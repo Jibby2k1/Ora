@@ -161,6 +161,7 @@ class _DayEditorScreenState extends State<DayEditorScreen> {
               );
             },
           ),
+          const SizedBox(width: 72),
         ],
       ),
       body: Stack(

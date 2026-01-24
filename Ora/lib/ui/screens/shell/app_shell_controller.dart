@@ -9,6 +9,7 @@ class AppShellController {
   final ValueNotifier<bool> appearanceEnabled = ValueNotifier<bool>(true);
   final ValueNotifier<bool> appearanceProfileEnabled = ValueNotifier<bool>(false);
   final ValueNotifier<String> appearanceProfileSex = ValueNotifier<String>('neutral');
+  final ValueNotifier<bool> orbHidden = ValueNotifier<bool>(false);
 
   void selectTab(int index) {
     if (tabIndex.value == index) return;
@@ -28,5 +29,10 @@ class AppShellController {
   void setAppearanceProfileSex(String value) {
     if (appearanceProfileSex.value == value) return;
     appearanceProfileSex.value = value;
+  }
+
+  void setOrbHidden(bool value) {
+    if (orbHidden.value == value) return;
+    orbHidden.value = value;
   }
 }
