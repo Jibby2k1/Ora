@@ -11,6 +11,7 @@ import '../../../data/repositories/diet_repo.dart';
 import '../../../data/repositories/settings_repo.dart';
 import '../../../domain/models/diet_entry.dart';
 import '../../../core/cloud/diet_analysis_service.dart';
+import '../../../core/utils/image_downscaler.dart';
 import '../../../core/voice/stt.dart';
 import '../../screens/shell/app_shell_controller.dart';
 import '../../../core/input/input_router.dart';
@@ -326,7 +327,8 @@ class _DietScreenState extends State<DietScreen> {
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
     if (file.path == null) return;
-    await _analyzePhoto(File(file.path!));
+    final optimized = await ImageDownscaler.downscaleImageIfNeeded(File(file.path!));
+    await _analyzePhoto(optimized);
   }
 
   Future<void> _useCamera() async {
@@ -340,7 +342,8 @@ class _DietScreenState extends State<DietScreen> {
     if (!ok || !context.mounted) return;
     final file = await _imagePicker.pickImage(source: ImageSource.camera);
     if (file == null) return;
-    await _analyzePhoto(File(file.path));
+    final optimized = await ImageDownscaler.downscaleImageIfNeeded(File(file.path));
+    await _analyzePhoto(optimized);
   }
 
 
@@ -354,12 +357,6 @@ class _DietScreenState extends State<DietScreen> {
     if (!enabled || apiKey == null || apiKey.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cloud analysis requires an API key.')),
-      );
-      return;
-    }
-    if (provider != 'gemini') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Photo analysis requires Gemini.')),
       );
       return;
     }
@@ -384,6 +381,26 @@ class _DietScreenState extends State<DietScreen> {
 
   Future<void> _reviewEstimate(DietEstimate estimate) async {
     final refineController = TextEditingController();
+    final servingsController = TextEditingController(text: '1');
+    final servingSizeController = TextEditingController(text: '100');
+    final gramsController = TextEditingController();
+    final caloriesController =
+        TextEditingController(text: estimate.calories?.toStringAsFixed(1) ?? '');
+    final proteinController =
+        TextEditingController(text: estimate.proteinG?.toStringAsFixed(1) ?? '');
+    final carbsController =
+        TextEditingController(text: estimate.carbsG?.toStringAsFixed(1) ?? '');
+    final fatController =
+        TextEditingController(text: estimate.fatG?.toStringAsFixed(1) ?? '');
+    final fiberController =
+        TextEditingController(text: estimate.fiberG?.toStringAsFixed(1) ?? '');
+    final sodiumController =
+        TextEditingController(text: estimate.sodiumMg?.toStringAsFixed(0) ?? '');
+    final microControllers = <String, TextEditingController>{
+      for (final entry in (estimate.micros ?? {}).entries)
+        entry.key: TextEditingController(text: entry.value.toStringAsFixed(1)),
+    };
+    DietEstimate baseEstimate = estimate;
     DietEstimate current = estimate;
     await showModalBottomSheet<void>(
       context: context,
@@ -408,6 +425,41 @@ class _DietScreenState extends State<DietScreen> {
                   );
                 }
 
+                void applyDetails() {
+                  final updatedMicros = <String, double>{};
+                  for (final entry in microControllers.entries) {
+                    final parsed = _parseDouble(entry.value.text);
+                    if (parsed != null) {
+                      updatedMicros[entry.key] = parsed;
+                    }
+                  }
+                  baseEstimate = DietEstimate(
+                    mealName: baseEstimate.mealName,
+                    calories: _parseDouble(caloriesController.text),
+                    proteinG: _parseDouble(proteinController.text),
+                    carbsG: _parseDouble(carbsController.text),
+                    fatG: _parseDouble(fatController.text),
+                    fiberG: _parseDouble(fiberController.text),
+                    sodiumMg: _parseDouble(sodiumController.text),
+                    micros: updatedMicros.isEmpty ? null : updatedMicros,
+                    notes: baseEstimate.notes,
+                  );
+                }
+
+                void applyMultiplier() {
+                  final servings = _parseDouble(servingsController.text) ?? 1;
+                  final totalGrams = _parseDouble(gramsController.text);
+                  final servingSize = _parseDouble(servingSizeController.text) ?? 100;
+                  final multiplier = (totalGrams != null && servingSize > 0)
+                      ? (totalGrams / servingSize)
+                      : servings;
+                  final normalized = (multiplier <= 0 ? 1.0 : multiplier.toDouble());
+                  setModalState(() {
+                    applyDetails();
+                    current = _scaleEstimate(baseEstimate, normalized);
+                  });
+                }
+
                 final micros = current.micros ?? const {};
                 return ListView(
                   shrinkWrap: true,
@@ -425,6 +477,61 @@ class _DietScreenState extends State<DietScreen> {
                       const Text('Micros'),
                       const SizedBox(height: 4),
                       ...micros.entries.map((e) => Text('${e.key}: ${e.value.toStringAsFixed(1)}')),
+                    ],
+                    const SizedBox(height: 12),
+                    const Text('Quantity'),
+                    const SizedBox(height: 8),
+                    _numberField(servingsController, 'Servings', max: 20, onChanged: (_) => applyMultiplier()),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _numberField(
+                            servingSizeController,
+                            'Serving size (g)',
+                            max: 5000,
+                            onChanged: (_) => applyMultiplier(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _numberField(
+                            gramsController,
+                            'Total grams',
+                            max: 20000,
+                            onChanged: (_) => applyMultiplier(),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Details'),
+                    const SizedBox(height: 8),
+                    _numberField(caloriesController, 'Calories', onChanged: (_) => applyMultiplier()),
+                    const SizedBox(height: 8),
+                    _numberField(proteinController, 'Protein (g)', onChanged: (_) => applyMultiplier()),
+                    const SizedBox(height: 8),
+                    _numberField(carbsController, 'Carbs (g)', onChanged: (_) => applyMultiplier()),
+                    const SizedBox(height: 8),
+                    _numberField(fatController, 'Fat (g)', onChanged: (_) => applyMultiplier()),
+                    const SizedBox(height: 8),
+                    _numberField(fiberController, 'Fiber (g)', onChanged: (_) => applyMultiplier()),
+                    const SizedBox(height: 8),
+                    _numberField(sodiumController, 'Sodium (mg)', onChanged: (_) => applyMultiplier()),
+                    if (microControllers.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      const Text('Micros/Vitamins'),
+                      const SizedBox(height: 4),
+                      ...microControllers.entries.map(
+                        (entry) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: _numberField(
+                            entry.value,
+                            entry.key,
+                            onChanged: (_) => applyMultiplier(),
+                          ),
+                        ),
+                      ),
                     ],
                     const SizedBox(height: 12),
                     TextField(
@@ -454,7 +561,20 @@ class _DietScreenState extends State<DietScreen> {
                             await _applyRefinement(
                               transcript,
                               current,
-                              (updated) => setModalState(() => current = updated),
+                              (updated) => setModalState(() {
+                                baseEstimate = updated;
+                                caloriesController.text = updated.calories?.toStringAsFixed(1) ?? '';
+                                proteinController.text = updated.proteinG?.toStringAsFixed(1) ?? '';
+                                carbsController.text = updated.carbsG?.toStringAsFixed(1) ?? '';
+                                fatController.text = updated.fatG?.toStringAsFixed(1) ?? '';
+                                fiberController.text = updated.fiberG?.toStringAsFixed(1) ?? '';
+                                sodiumController.text = updated.sodiumMg?.toStringAsFixed(0) ?? '';
+                                final updatedMicros = updated.micros ?? const {};
+                                for (final entry in microControllers.entries) {
+                                  entry.value.text = updatedMicros[entry.key]?.toStringAsFixed(1) ?? '';
+                                }
+                                applyMultiplier();
+                              }),
                             );
                           },
                           icon: const Icon(Icons.mic),
@@ -467,7 +587,20 @@ class _DietScreenState extends State<DietScreen> {
                             await _applyRefinement(
                               text,
                               current,
-                              (updated) => setModalState(() => current = updated),
+                              (updated) => setModalState(() {
+                                baseEstimate = updated;
+                                caloriesController.text = updated.calories?.toStringAsFixed(1) ?? '';
+                                proteinController.text = updated.proteinG?.toStringAsFixed(1) ?? '';
+                                carbsController.text = updated.carbsG?.toStringAsFixed(1) ?? '';
+                                fatController.text = updated.fatG?.toStringAsFixed(1) ?? '';
+                                fiberController.text = updated.fiberG?.toStringAsFixed(1) ?? '';
+                                sodiumController.text = updated.sodiumMg?.toStringAsFixed(0) ?? '';
+                                final updatedMicros = updated.micros ?? const {};
+                                for (final entry in microControllers.entries) {
+                                  entry.value.text = updatedMicros[entry.key]?.toStringAsFixed(1) ?? '';
+                                }
+                                applyMultiplier();
+                              }),
                             );
                           },
                           child: const Text('Apply refine text'),
@@ -632,27 +765,60 @@ class _DietScreenState extends State<DietScreen> {
                     const SizedBox(height: 12),
                     Align(
                       alignment: Alignment.centerRight,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          await _dietRepo.updateEntry(
-                            id: entry.id,
-                            mealName: nameController.text.trim().isEmpty
-                                ? entry.mealName
-                                : nameController.text.trim(),
-                            calories: _parseAndClamp(caloriesController.text, max: 6000),
-                            proteinG: _parseAndClamp(proteinController.text, max: 500),
-                            carbsG: _parseAndClamp(carbsController.text, max: 800),
-                            fatG: _parseAndClamp(fatController.text, max: 300),
-                            fiberG: _parseAndClamp(fiberController.text, max: 200),
-                            sodiumMg: _parseAndClamp(sodiumController.text, max: 10000),
-                            micros: current.micros,
-                            notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
-                          );
-                          if (context.mounted) Navigator.of(context).pop();
-                          await _load();
-                        },
-                        icon: const Icon(Icons.save),
-                        label: const Text('Save changes'),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextButton.icon(
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('Delete meal?'),
+                                  content: const Text('This cannot be undone.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(context).pop(false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () => Navigator.of(context).pop(true),
+                                      child: const Text('Delete'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm != true) return;
+                              await _dietRepo.deleteEntry(entry.id);
+                              if (context.mounted) Navigator.of(context).pop();
+                              await _load();
+                            },
+                            icon: const Icon(Icons.delete_outline),
+                            label: const Text('Delete'),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              await _dietRepo.updateEntry(
+                                id: entry.id,
+                                mealName: nameController.text.trim().isEmpty
+                                    ? entry.mealName
+                                    : nameController.text.trim(),
+                                calories: _parseAndClamp(caloriesController.text, max: 6000),
+                                proteinG: _parseAndClamp(proteinController.text, max: 500),
+                                carbsG: _parseAndClamp(carbsController.text, max: 800),
+                                fatG: _parseAndClamp(fatController.text, max: 300),
+                                fiberG: _parseAndClamp(fiberController.text, max: 200),
+                                sodiumMg: _parseAndClamp(sodiumController.text, max: 10000),
+                                micros: current.micros,
+                                notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+                              );
+                              if (context.mounted) Navigator.of(context).pop();
+                              await _load();
+                            },
+                            icon: const Icon(Icons.save),
+                            label: const Text('Save changes'),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -685,7 +851,12 @@ class _DietScreenState extends State<DietScreen> {
     }
   }
 
-  TextField _numberField(TextEditingController controller, String label, {double? max}) {
+  TextField _numberField(
+    TextEditingController controller,
+    String label, {
+    double? max,
+    ValueChanged<String>? onChanged,
+  }) {
     return TextField(
       controller: controller,
       decoration: InputDecoration(
@@ -696,6 +867,7 @@ class _DietScreenState extends State<DietScreen> {
       inputFormatters: [
         FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
       ],
+      onChanged: onChanged,
     );
   }
 
@@ -703,6 +875,25 @@ class _DietScreenState extends State<DietScreen> {
     final text = value.trim();
     if (text.isEmpty) return null;
     return double.tryParse(text);
+  }
+
+  DietEstimate _scaleEstimate(DietEstimate base, double multiplier) {
+    Map<String, double>? scaleMicros(Map<String, double>? micros) {
+      if (micros == null) return null;
+      return micros.map((key, value) => MapEntry(key, value * multiplier));
+    }
+
+    return DietEstimate(
+      mealName: base.mealName,
+      calories: base.calories == null ? null : base.calories! * multiplier,
+      proteinG: base.proteinG == null ? null : base.proteinG! * multiplier,
+      carbsG: base.carbsG == null ? null : base.carbsG! * multiplier,
+      fatG: base.fatG == null ? null : base.fatG! * multiplier,
+      fiberG: base.fiberG == null ? null : base.fiberG! * multiplier,
+      sodiumMg: base.sodiumMg == null ? null : base.sodiumMg! * multiplier,
+      micros: scaleMicros(base.micros),
+      notes: base.notes,
+    );
   }
 
   double? _parseAndClamp(String value, {required double max}) {
@@ -860,6 +1051,31 @@ class _DietScreenState extends State<DietScreen> {
                                       IconButton(
                                         icon: const Icon(Icons.edit),
                                         onPressed: () => _editMeal(meal),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline),
+                                        onPressed: () async {
+                                          final confirm = await showDialog<bool>(
+                                            context: context,
+                                            builder: (context) => AlertDialog(
+                                              title: const Text('Delete meal?'),
+                                              content: const Text('This cannot be undone.'),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.of(context).pop(false),
+                                                  child: const Text('Cancel'),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () => Navigator.of(context).pop(true),
+                                                  child: const Text('Delete'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                          if (confirm != true) return;
+                                          await _dietRepo.deleteEntry(meal.id);
+                                          await _load();
+                                        },
                                       ),
                                     ],
                                   ),
