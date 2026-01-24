@@ -9,6 +9,7 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../../app.dart';
 import '../../data/db/db.dart';
 import '../../data/repositories/settings_repo.dart';
+import '../../domain/services/import_service.dart';
 import '../../ui/screens/shell/app_shell_controller.dart';
 
 enum InputSource { mic, text, camera, upload }
@@ -115,6 +116,10 @@ class InputRouter {
 
     _selectTab(result.intent);
     _showSnack('Routed to ${_labelFor(result.intent)}');
+    if (result.intent == InputIntent.programImport && event.file != null) {
+      await _handleProgramImport(context, event.file!);
+      return;
+    }
     AppShellController.instance.setPendingInput(
       InputDispatch(
         intent: result.intent,
@@ -124,6 +129,41 @@ class InputRouter {
         entity: result.entity,
       ),
     );
+  }
+
+  Future<void> _handleProgramImport(BuildContext context, File file) async {
+    final service = ImportService(_db);
+    try {
+      final result = await service.importFromXlsxPath(file.path);
+      final missingCount = result.missingExercises.length;
+      final snack = missingCount == 0
+          ? 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises.'
+          : 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises. Missing $missingCount exercises.';
+      _showSnack(snack);
+      if (missingCount > 0) {
+        if (!context.mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: const Text('Missing exercises'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: result.missingExercises.map((e) => Text('• $e')).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
+              ],
+            );
+          },
+        );
+      }
+    } catch (e) {
+      _showSnack('Import failed: $e');
+    }
   }
 
   Future<InputRouteResult?> _classifyOpenAi(String prompt, String apiKey, String model) async {
