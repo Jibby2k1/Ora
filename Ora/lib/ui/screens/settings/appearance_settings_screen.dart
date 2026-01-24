@@ -108,10 +108,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Appearance Settings'),
-        actions: const [SizedBox(width: 72)],
-      ),
+      appBar: AppBar(title: const Text('Appearance Settings')),
       body: Stack(
         children: [
           const GlassBackground(),

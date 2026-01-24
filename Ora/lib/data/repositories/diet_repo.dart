@@ -19,7 +19,6 @@ class DietRepo {
     double? sodiumMg,
     Map<String, double>? micros,
     String? notes,
-    String? imagePath,
   }) async {
     final db = await _db.database;
     return db.insert('diet_entry', {
@@ -33,7 +32,6 @@ class DietRepo {
       'sodium_mg': sodiumMg,
       'micros_json': micros == null ? null : jsonEncode(micros),
       'notes': notes,
-      'image_path': imagePath,
     });
   }
 
@@ -173,7 +171,6 @@ ORDER BY day DESC
     double? sodiumMg,
     Map<String, double>? micros,
     String? notes,
-    String? imagePath,
   }) async {
     final db = await _db.database;
     await db.update(
@@ -188,16 +185,10 @@ ORDER BY day DESC
         if (sodiumMg != null) 'sodium_mg': sodiumMg,
         if (micros != null) 'micros_json': jsonEncode(micros),
         if (notes != null) 'notes': notes,
-        if (imagePath != null) 'image_path': imagePath,
       },
       where: 'id = ?',
       whereArgs: [id],
     );
-  }
-
-  Future<void> deleteEntry(int id) async {
-    final db = await _db.database;
-    await db.delete('diet_entry', where: 'id = ?', whereArgs: [id]);
   }
 
   DietEntry _fromRow(Map<String, Object?> row) {
@@ -213,7 +204,6 @@ ORDER BY day DESC
       sodiumMg: _asDouble(row['sodium_mg']),
       micros: _decodeMicros(row['micros_json'] as String?),
       notes: row['notes'] as String?,
-      imagePath: row['image_path'] as String?,
     );
   }
 

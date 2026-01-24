@@ -107,7 +107,6 @@ class _ProgramEditorScreenState extends State<ProgramEditorScreen> {
               );
             },
           ),
-          const SizedBox(width: 72),
         ],
       ),
       body: Stack(

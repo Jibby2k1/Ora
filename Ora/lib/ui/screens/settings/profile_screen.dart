@@ -131,7 +131,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
-        actions: const [SizedBox(width: 72)],
       ),
       body: Stack(
         children: [

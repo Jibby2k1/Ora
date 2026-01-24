@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,12 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app.dart';
-import '../../core/cloud/appearance_analysis_service.dart';
-import '../../core/utils/image_downscaler.dart';
-import '../../data/db/db.dart';
-import '../../data/repositories/appearance_repo.dart';
-import '../../data/repositories/settings_repo.dart';
-import '../../domain/models/appearance_entry.dart';
 import '../../ui/screens/shell/app_shell_controller.dart';
 
 enum UploadType { diet, appearance }
@@ -47,7 +40,6 @@ class UploadService extends ChangeNotifier {
 
   final List<UploadItem> queue = [];
   final List<UploadEvaluation> _evaluations = [];
-  final AppearanceAnalysisService _appearanceAnalysis = AppearanceAnalysisService();
 
   bool get isSupported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
@@ -152,145 +144,8 @@ class UploadService extends ChangeNotifier {
         summary: item.evaluationSummary ?? '',
       ));
       notifyListeners();
-      if (item.type == UploadType.appearance) {
-        _logAppearanceFeedback(item, item.evaluationSummary ?? 'Awaiting feedback.');
-      }
     });
   }
-
-  Future<void> _logAppearanceFeedback(UploadItem item, String summary) async {
-    final repo = AppearanceRepo(AppDatabase.instance);
-    final recent = await repo.getRecentEntries(limit: 200);
-    final scores = _latestScoresFromEntries(recent);
-    final now = DateTime.now();
-    final category = await _inferAppearanceCategory(item, summary);
-    final score = _scoreForCategory(scores, category);
-    final imagePath = await _persistAppearanceImage(item.path, category);
-    await repo.addEntry(
-      createdAt: now,
-      measurements: _buildFeedbackPayload(
-        category: category,
-        score: score,
-        delta: 0,
-        feedback: summary.trim(),
-        uploadName: item.name,
-      ),
-      imagePath: imagePath,
-    );
-  }
-
-  Future<String> _inferAppearanceCategory(UploadItem item, String summary) async {
-    final settings = SettingsRepo(AppDatabase.instance);
-    final enabled = await settings.getCloudEnabled();
-    final apiKey = await settings.getCloudApiKey();
-    final provider = await settings.getCloudProvider();
-    final model = await settings.getCloudModel();
-    if (!enabled || apiKey == null || apiKey.trim().isEmpty) {
-      return 'skin';
-    }
-    try {
-      final file = File(item.path);
-      if (!await file.exists()) return 'skin';
-      final category = await _appearanceAnalysis.classifyImage(
-        file: file,
-        provider: provider,
-        apiKey: apiKey,
-        model: model,
-        summary: summary,
-      );
-      return category ?? 'skin';
-    } catch (_) {
-      return 'skin';
-    }
-  }
-
-  double _scoreForCategory(_FeedbackScores scores, String category) {
-    switch (category) {
-      case 'physique':
-        return scores.physique;
-      case 'style':
-        return scores.style;
-      case 'skin':
-      default:
-        return scores.skin;
-    }
-  }
-
-  Future<String?> _persistAppearanceImage(String path, String category) async {
-    try {
-      final file = File(path);
-      if (!await file.exists()) return null;
-      final persisted = await ImageDownscaler.persistImageToSubdir(file, 'appearance/$category');
-      return persisted.path;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  _FeedbackScores _latestScoresFromEntries(List<AppearanceEntry> entries) {
-    double skin = 50;
-    double physique = 50;
-    double style = 50;
-    for (final entry in entries) {
-      final raw = entry.measurements;
-      if (raw == null || raw.toString().trim().isEmpty) continue;
-      try {
-        final decoded = jsonDecode(raw);
-        if (decoded is! Map) continue;
-        if (decoded['type'] != 'feedback') continue;
-        final category = decoded['category']?.toString();
-        final score = _readScore(decoded['score']);
-        if (score == null) continue;
-        switch (category) {
-          case 'skin':
-            skin = score;
-            break;
-          case 'physique':
-            physique = score;
-            break;
-          case 'style':
-            style = score;
-            break;
-        }
-      } catch (_) {}
-    }
-    return _FeedbackScores(skin: skin, physique: physique, style: style);
-  }
-
-  double? _readScore(Object? raw) {
-    if (raw is int) return raw.toDouble();
-    if (raw is double) return raw;
-    return double.tryParse(raw?.toString() ?? '');
-  }
-
-  String _buildFeedbackPayload({
-    required String category,
-    required double score,
-    required int delta,
-    required String feedback,
-    required String uploadName,
-  }) {
-    return jsonEncode({
-      'type': 'feedback',
-      'category': category,
-      'score': score.round(),
-      'score_delta': delta,
-      'feedback': feedback,
-      'upload_name': uploadName,
-    });
-  }
-}
-
-class _FeedbackScores {
-  const _FeedbackScores({
-    required this.skin,
-    required this.physique,
-    required this.style,
-  });
-
-  final double skin;
-  final double physique;
-  final double style;
 }
 
 class UploadEvaluation {

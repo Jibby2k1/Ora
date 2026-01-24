@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import '../cloud/gemini_queue.dart';
 class MuscleInfo {
   MuscleInfo({required this.primary, required this.secondary});
 
@@ -75,22 +73,18 @@ class MuscleEnricher {
 
     http.Response response;
     try {
-      response = await GeminiQueue.instance.run(
-        () => http
-            .post(
-              uri,
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode(payload),
-            )
-            .timeout(const Duration(seconds: 10)),
-        label: 'muscle-enrich',
-      );
+      response = await http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 10));
     } catch (_) {
       return null;
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      debugPrint('[Gemini][muscle] ${response.statusCode} ${_trimGeminiBody(response.body)}');
       return null;
     }
 
@@ -206,11 +200,5 @@ $options
     final end = text.lastIndexOf('}');
     if (start == -1 || end == -1 || end <= start) return null;
     return text.substring(start, end + 1);
-  }
-
-  String _trimGeminiBody(String body) {
-    final trimmed = body.trim();
-    if (trimmed.length <= 400) return trimmed;
-    return '${trimmed.substring(0, 400)}...';
   }
 }

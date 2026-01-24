@@ -13,8 +13,6 @@ import 'migrations/m0003_profile_settings.dart';
 import 'migrations/m0004_diet.dart';
 import 'migrations/m0005_appearance.dart';
 import 'migrations/m0006_diet_micros.dart';
-import 'migrations/m0007_diet_images.dart';
-import 'migrations/m0008_appearance_images.dart';
 import 'schema.dart';
 
 class AppDatabase {
@@ -69,30 +67,14 @@ class AppDatabase {
     if (from < 6 && to >= 6) {
       batches.add(migration0006());
     }
-    if (from < 7 && to >= 7) {
-      batches.add(migration0007());
-    }
-    if (from < 8 && to >= 8) {
-      batches.add(migration0008());
-    }
 
     for (final statements in batches) {
+      final batch = db.batch();
       for (final sql in statements) {
-        try {
-          await db.execute(sql);
-        } on DatabaseException catch (error) {
-          if (_isDuplicateColumnError(error)) {
-            continue;
-          }
-          rethrow;
-        }
+        batch.execute(sql);
       }
+      await batch.commit(noResult: true);
     }
-  }
-
-  bool _isDuplicateColumnError(DatabaseException error) {
-    final message = error.toString().toLowerCase();
-    return message.contains('duplicate column name');
   }
 
   Future<void> seedExercisesIfNeeded(String jsonAssetOrPath, {bool fromAsset = true}) async {

@@ -85,7 +85,6 @@ class LogSetEntry extends Command {
     this.partials,
     this.rpe,
     this.rir,
-    this.restSecActual,
   });
 
   final int sessionExerciseId;
@@ -96,7 +95,6 @@ class LogSetEntry extends Command {
   final int? partials;
   final double? rpe;
   final double? rir;
-  final int? restSecActual;
 
   @override
   String get type => 'LogSetEntry';
@@ -110,7 +108,6 @@ class UpdateSetEntry extends Command {
     this.partials,
     this.rpe,
     this.rir,
-    this.restSecActual,
   });
 
   final int id;
@@ -119,7 +116,6 @@ class UpdateSetEntry extends Command {
   final int? partials;
   final double? rpe;
   final double? rir;
-  final int? restSecActual;
 
   @override
   String get type => 'UpdateSetEntry';

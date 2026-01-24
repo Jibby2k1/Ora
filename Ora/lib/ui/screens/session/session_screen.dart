@@ -24,39 +24,19 @@ import '../../../domain/models/last_logged_set.dart';
 import '../../../domain/models/session_context.dart';
 import '../../../domain/models/session_exercise_info.dart';
 import '../../../domain/services/exercise_matcher.dart';
-import '../../../domain/services/set_plan_service.dart';
-import '../shell/app_shell_controller.dart';
-import '../history/exercise_catalog_screen.dart';
 import '../../widgets/confirmation_card/confirmation_card.dart';
 import '../../widgets/exercise_modal/exercise_modal.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
+import '../../widgets/timer_bar/timer_bar.dart';
 
 class SessionScreen extends StatefulWidget {
-  const SessionScreen({super.key, required this.contextData, this.isEditing = false});
+  const SessionScreen({super.key, required this.contextData});
 
   final SessionContext contextData;
-  final bool isEditing;
 
   @override
   State<SessionScreen> createState() => _SessionScreenState();
-}
-
-class _DraftSet {
-  final TextEditingController weight = TextEditingController();
-  final TextEditingController reps = TextEditingController();
-
-  void dispose() {
-    weight.dispose();
-    reps.dispose();
-  }
-}
-
-class _InlineSetData {
-  _InlineSetData({required this.sets, required this.previousSets});
-
-  final List<Map<String, Object?>> sets;
-  final List<Map<String, Object?>> previousSets;
 }
 
 enum _PendingField { weight, reps }
@@ -122,20 +102,10 @@ class _SessionScreenState extends State<SessionScreen> {
   List<String> _otherDayExerciseNames = [];
   List<String> _catalogExerciseNames = [];
   final UndoRedoStack _undoRedo = UndoRedoStack();
-  bool _isLoggingSet = false;
-  final List<String> _setDebugNotes = [];
-  bool _showSetDebug = false;
-  final Map<int, _InlineSetData> _inlineSetCache = {};
-  final Map<int, Future<_InlineSetData>> _inlineSetFutures = {};
-  final Map<int, String> _inlineDebugSnapshot = {};
-  final Map<int, int> _restSecondsByExerciseId = {};
-  Timer? _inlineRestTicker;
-  DateTime _inlineRestNow = DateTime.now();
-  DateTime? _sessionStartedAt;
-  DateTime? _sessionEndedAt;
+  Timer? _restTimer;
+  int _restRemaining = 0;
   bool _listening = false;
   String? _voicePartial;
-  final Map<int, List<_DraftSet>> _draftSetsByExerciseId = {};
 
   _PendingLogSet? _pending;
   LastLoggedSet? _lastLogged;
@@ -160,17 +130,11 @@ class _SessionScreenState extends State<SessionScreen> {
   String _cloudModel = 'gemini-2.5-pro';
   String _cloudProvider = 'gemini';
   bool _wakeWordEnabled = false;
-  bool _sessionEnded = false;
-  String _weightUnit = 'lb';
 
   @override
   void initState() {
     super.initState();
     final db = AppDatabase.instance;
-    if (!widget.isEditing) {
-      AppShellController.instance.setActiveSession(true);
-      AppShellController.instance.setActiveSessionIndicatorHidden(false);
-    }
     _workoutRepo = WorkoutRepo(db);
     _exerciseRepo = ExerciseRepo(db);
     _programRepo = ProgramRepo(db);
@@ -191,30 +155,12 @@ class _SessionScreenState extends State<SessionScreen> {
     Future.microtask(_loadCloudSettings);
     Future.microtask(_loadExerciseHints);
     Future.microtask(_loadSessionMuscles);
-    Future.microtask(_loadUnitPref);
-    Future.microtask(_loadSessionHeader);
-    Future.microtask(_seedInitialDraftSets);
-    _inlineRestNow = DateTime.now();
-    _inlineRestTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() {
-        _inlineRestNow = DateTime.now();
-      });
-    });
   }
 
   @override
   void dispose() {
     _voiceController.dispose();
-    _inlineRestTicker?.cancel();
-    for (final drafts in _draftSetsByExerciseId.values) {
-      for (final draft in drafts) {
-        draft.dispose();
-      }
-    }
-    if (_sessionEnded && !widget.isEditing) {
-      AppShellController.instance.setActiveSession(false);
-    }
+    _restTimer?.cancel();
     super.dispose();
   }
 
@@ -240,39 +186,14 @@ class _SessionScreenState extends State<SessionScreen> {
     }
   }
 
-  Future<void> _loadSessionHeader() async {
-    final header = await _workoutRepo.getSessionHeader(widget.contextData.sessionId);
-    if (!mounted) return;
-    setState(() {
-      _sessionStartedAt = DateTime.tryParse(header?['started_at'] as String? ?? '');
-      _sessionEndedAt = DateTime.tryParse(header?['ended_at'] as String? ?? '');
-    });
-  }
-
-  Future<void> _seedInitialDraftSets() async {
-    if (widget.isEditing) return;
-    if (widget.contextData.programDayId == null) return;
-    var added = false;
-    for (final info in _sessionExercises) {
-      if (_draftSetsByExerciseId.containsKey(info.sessionExerciseId)) continue;
-      final sets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
-      if (sets.isNotEmpty) continue;
-      _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []).add(_DraftSet());
-      added = true;
-    }
-    if (!mounted || !added) return;
-    setState(() {});
-  }
-
   Future<void> _loadExerciseHints() async {
     try {
       final programId = widget.contextData.programId;
       final programDayId = widget.contextData.programDayId;
-      if (programId == null) return;
       final byDay = await _programRepo.getExerciseNamesByDayForProgram(programId);
       final other = <String>[];
       byDay.forEach((dayId, names) {
-        if (programDayId == null || dayId != programDayId) {
+        if (dayId != programDayId) {
           other.addAll(names);
         }
       });
@@ -342,787 +263,6 @@ class _SessionScreenState extends State<SessionScreen> {
       }
       if (mounted) setState(() {});
     } catch (_) {}
-  }
-
-  Future<void> _loadUnitPref() async {
-    final unit = await _settingsRepo.getUnit();
-    if (!mounted) return;
-    setState(() {
-      _weightUnit = unit;
-    });
-  }
-
-  Future<void> _showQuickAddSet(SessionExerciseInfo info) async {
-    final list = _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []);
-    list.add(_DraftSet());
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  String _formatSetWeight(num? weight) {
-    if (weight == null) return '—';
-    final value = weight.toDouble();
-    return value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(1);
-  }
-
-  String _formatPrevious(Map<String, Object?>? row) {
-    if (row == null) return '—';
-    final weight = row['weight_value'] as num?;
-    final reps = row['reps'] as int?;
-    if (weight == null || reps == null) return '—';
-    final unit = (row['weight_unit'] as String?)?.trim();
-    final unitLabel = unit == null || unit.isEmpty ? '' : ' $unit';
-    return '${_formatSetWeight(weight)}$unitLabel × $reps';
-  }
-
-  int? _planRestSeconds(SessionExerciseInfo info) {
-    int? restMax;
-    int? restMin;
-    for (final block in info.planBlocks) {
-      if (block.restSecMax != null) {
-        if (restMax == null || block.restSecMax! > restMax) {
-          restMax = block.restSecMax;
-        }
-      }
-      if (block.restSecMin != null) {
-        if (restMin == null || block.restSecMin! < restMin!) {
-          restMin = block.restSecMin;
-        }
-      }
-    }
-    return restMax ?? restMin;
-  }
-
-  int _restSecondsForExercise(SessionExerciseInfo info) {
-    final cached = _restSecondsByExerciseId[info.exerciseId];
-    if (cached != null) return cached;
-    const fallback = 90;
-    final value = _planRestSeconds(info) ?? fallback;
-    _restSecondsByExerciseId[info.exerciseId] = value;
-    return value;
-  }
-
-  String _formatRestShort(int seconds) {
-    if (seconds <= 0) return '0:00';
-    final mins = seconds ~/ 60;
-    final secs = seconds % 60;
-    return '${mins}:${secs.toString().padLeft(2, '0')}';
-  }
-
-  String _formatSessionTimer(Duration elapsed) {
-    final totalSeconds = elapsed.inSeconds.clamp(0, 86400 * 7);
-    final hours = totalSeconds ~/ 3600;
-    final minutes = (totalSeconds % 3600) ~/ 60;
-    final seconds = totalSeconds % 60;
-    if (hours > 0) {
-      return '${hours}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    }
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
-
-  void _startInlineRest({
-    required int setId,
-    required int restSeconds,
-    required int exerciseId,
-  }) {
-    if (restSeconds <= 0) return;
-    AppShellController.instance.startRestTimer(
-      seconds: restSeconds,
-      setId: setId,
-      exerciseId: exerciseId,
-    );
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  void _completeInlineRest() {
-    if (AppShellController.instance.restActiveSetId == null) return;
-    AppShellController.instance.completeRestTimer();
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _undoCompletedSet(SessionExerciseInfo info, Map<String, Object?> row) async {
-    final id = row['id'] as int?;
-    if (id == null) return;
-    final weight = row['weight_value'] as num?;
-    final reps = row['reps'] as int?;
-    await _deleteSet(id, info);
-    final draft = _DraftSet();
-    if (weight != null) {
-      draft.weight.text = _formatSetWeight(weight);
-    }
-    if (reps != null) {
-      draft.reps.text = reps.toString();
-    }
-    _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []).add(draft);
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _showRestPicker(SessionExerciseInfo info, int currentSeconds) async {
-    final controller = TextEditingController(text: currentSeconds.toString());
-    final quickOptions = [30, 45, 60, 90, 120, 180];
-    final selected = await showDialog<int>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Rest Timer'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Seconds',
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final seconds in quickOptions)
-                    OutlinedButton(
-                      onPressed: () => controller.text = seconds.toString(),
-                      child: Text('${seconds}s'),
-                    ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () {
-                final value = int.tryParse(controller.text.trim());
-                if (value == null || value < 0) {
-                  _showMessage('Enter a valid rest time.');
-                  return;
-                }
-                Navigator.of(context).pop(value);
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-    if (selected == null || !mounted) return;
-    setState(() {
-      _restSecondsByExerciseId[info.exerciseId] = selected;
-    });
-  }
-
-  Future<_InlineSetData> _loadInlineSetData(SessionExerciseInfo info) async {
-    try {
-      final sets = List<Map<String, Object?>>.from(
-        await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId),
-      );
-      sets.sort((a, b) {
-        final aIndex = (a['set_index'] as int?) ?? 0;
-        final bIndex = (b['set_index'] as int?) ?? 0;
-        if (aIndex != bIndex) return aIndex.compareTo(bIndex);
-        final aId = (a['id'] as int?) ?? 0;
-        final bId = (b['id'] as int?) ?? 0;
-        return aId.compareTo(bId);
-      });
-      final previousSets = List<Map<String, Object?>>.from(
-        await _workoutRepo.getPreviousSetsForExercise(
-          exerciseId: info.exerciseId,
-          excludeSessionId: widget.contextData.sessionId,
-        ),
-      );
-      final drafts = _draftSetsByExerciseId[info.sessionExerciseId] ?? const [];
-      _logInlineSnapshot(info, sets, previousSets, drafts, source: 'load');
-      return _InlineSetData(sets: sets, previousSets: previousSets);
-    } catch (error, stack) {
-      _pushSetDebug(
-        '[load] ex=${info.sessionExerciseId} error=${error.runtimeType} '
-        '${error.toString().split('\n').first}',
-      );
-      debugPrint(stack.toString());
-      final cached = _inlineSetCache[info.sessionExerciseId];
-      if (cached != null) return cached;
-      return _InlineSetData(sets: const [], previousSets: const []);
-    }
-  }
-
-  Future<_InlineSetData> _getInlineSetFuture(SessionExerciseInfo info) {
-    final existing = _inlineSetFutures[info.sessionExerciseId];
-    if (existing != null) {
-      _pushSetDebug(
-        '[future] ex=${info.sessionExerciseId} reuse future=${existing.hashCode}',
-      );
-      return existing;
-    }
-    final future = _loadInlineSetData(info).then((data) {
-      _inlineSetCache[info.sessionExerciseId] = data;
-      return data;
-    });
-    _inlineSetFutures[info.sessionExerciseId] = future;
-    _pushSetDebug(
-      '[future] ex=${info.sessionExerciseId} create future=${future.hashCode}',
-    );
-    return future;
-  }
-
-  void _refreshInlineSetData(SessionExerciseInfo info) {
-    final previous = _inlineSetFutures[info.sessionExerciseId];
-    final future = _loadInlineSetData(info).then((data) {
-      _inlineSetCache[info.sessionExerciseId] = data;
-      _pushSetDebug(
-        '[refresh] ex=${info.sessionExerciseId} done sets=${data.sets.length} '
-        'rows=${_summarizeSetRows(data.sets)}',
-      );
-      return data;
-    });
-    _inlineSetFutures[info.sessionExerciseId] = future;
-    _pushSetDebug(
-      '[refresh] ex=${info.sessionExerciseId} start future=${future.hashCode} '
-      'prev=${previous?.hashCode}',
-    );
-  }
-
-  Future<void> _commitDraftSet(SessionExerciseInfo info, _DraftSet draft) async {
-    final reps = int.tryParse(draft.reps.text.trim());
-    if (reps == null || reps <= 0) {
-      _showMessage('Enter valid reps.');
-      return;
-    }
-    final weightRaw = draft.weight.text.trim();
-    final weight = weightRaw.isEmpty ? null : double.tryParse(weightRaw);
-    _pushSetDebug(
-      '[commit] start ex=${info.sessionExerciseId} reps=$reps weight=$weight',
-    );
-    _isLoggingSet = true;
-    try {
-      final beforeSets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
-      _pushSetDebug('[commit] beforeCount=${beforeSets.length} rows=${_summarizeSetRows(beforeSets)}');
-      await _logInlineSet(info, reps: reps, weight: weight);
-      final afterSets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
-      _pushSetDebug('[commit] afterCount=${afterSets.length} rows=${_summarizeSetRows(afterSets)}');
-      if (afterSets.length <= beforeSets.length) {
-        _showMessage('Set not saved. Try again.');
-        return;
-      }
-      final list = _draftSetsByExerciseId[info.sessionExerciseId];
-      list?.remove(draft);
-      draft.dispose();
-      _refreshInlineSetData(info);
-      if (!mounted) return;
-      setState(() {});
-    } finally {
-      _isLoggingSet = false;
-    }
-  }
-
-  void _pushSetDebug(String message) {
-    if (!_showSetDebug) return;
-    final stamp = DateTime.now().toIso8601String().split('T').last;
-    final entry = '$stamp $message';
-    _setDebugNotes.add(entry);
-    if (_setDebugNotes.length > 12) {
-      _setDebugNotes.removeRange(0, _setDebugNotes.length - 12);
-    }
-    debugPrint(entry);
-  }
-
-  String _summarizeParts(List<String> parts, {int max = 6}) {
-    if (parts.isEmpty) return '—';
-    if (parts.length <= max) return parts.join(', ');
-    final preview = parts.take(max).join(', ');
-    return '$preview, …+${parts.length - max}';
-  }
-
-  String _summarizeSetRows(List<Map<String, Object?>> rows) {
-    final parts = <String>[];
-    for (final row in rows) {
-      final id = row['id'] as int?;
-      final index = row['set_index'] as int?;
-      final reps = row['reps'] as int?;
-      final weight = row['weight_value'] as num?;
-      final weightLabel = _formatSetWeight(weight);
-      parts.add('${id ?? '?'}:${index ?? '?'} ${weightLabel}x${reps ?? '?'}');
-    }
-    return _summarizeParts(parts);
-  }
-
-  String _summarizePreviousRows(List<Map<String, Object?>> rows) {
-    final parts = <String>[];
-    for (final row in rows) {
-      final index = row['set_index'] as int?;
-      final reps = row['reps'] as int?;
-      final weight = row['weight_value'] as num?;
-      final weightLabel = _formatSetWeight(weight);
-      parts.add('${index ?? '?'}:${weightLabel}x${reps ?? '?'}');
-    }
-    return _summarizeParts(parts);
-  }
-
-  void _logInlineSnapshot(
-    SessionExerciseInfo info,
-    List<Map<String, Object?>> sets,
-    List<Map<String, Object?>> previousSets,
-    List<_DraftSet> drafts, {
-    required String source,
-  }) {
-    if (!_showSetDebug) return;
-    final draftCount = drafts.length;
-    final summary =
-        '[snapshot:$source] ex=${info.sessionExerciseId} sets=${sets.length} '
-        '(${_summarizeSetRows(sets)}) '
-        'prev=${previousSets.length} (${_summarizePreviousRows(previousSets)}) '
-        'drafts=$draftCount';
-    final last = _inlineDebugSnapshot[info.sessionExerciseId];
-    if (last == summary) return;
-    _inlineDebugSnapshot[info.sessionExerciseId] = summary;
-    _pushSetDebug(summary);
-  }
-
-  Widget _buildInlineSets(
-    BuildContext context,
-    SessionExerciseInfo info,
-    List<Map<String, Object?>> sets,
-    List<Map<String, Object?>> previousSets,
-    List<_DraftSet> drafts, {
-    String renderSource = 'render',
-  }
-  ) {
-    var volume = 0.0;
-    for (final row in sets) {
-      final weight = row['weight_value'] as num?;
-      final reps = row['reps'] as int?;
-      if (weight != null && reps != null) {
-        volume += weight.toDouble() * reps;
-      }
-    }
-    _logInlineSnapshot(info, sets, previousSets, drafts, source: renderSource);
-    final restSeconds = _restSecondsForExercise(info);
-    final volumeLabel = volume == 0 ? '—' : volume.toStringAsFixed(0);
-    const setColWidth = 32.0;
-    const prevColWidth = 96.0;
-    const weightColWidth = 64.0;
-    const repsColWidth = 52.0;
-    const checkColWidth = 32.0;
-    const colGap = 10.0;
-    final headerStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.4,
-        );
-    final restController = AppShellController.instance;
-    final activeRestSetId = restController.restActiveSetId;
-    final activeRestStartedAt = restController.restStartedAt;
-    final activeRestDuration = restController.restDurationSeconds;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text('Sets ${sets.length + drafts.length}'),
-            const SizedBox(width: 12),
-            Text('Volume $volumeLabel'),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: () => _showRestPicker(info, restSeconds),
-              icon: const Icon(Icons.timer, size: 16),
-              label: Text('Rest ${_formatRestShort(restSeconds)}'),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (sets.isEmpty && drafts.isEmpty)
-          Text(
-            'No sets yet.',
-            style: Theme.of(context).textTheme.bodySmall,
-          )
-        else ...[
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: setColWidth,
-                  child: Center(child: Text('Set', style: headerStyle)),
-                ),
-                const SizedBox(width: colGap),
-                SizedBox(
-                  width: prevColWidth,
-                  child: Center(child: Text('Previous', style: headerStyle)),
-                ),
-                const SizedBox(width: colGap),
-                SizedBox(
-                  width: weightColWidth,
-                  child: Center(child: Text(_weightUnit, style: headerStyle)),
-                ),
-                const SizedBox(width: colGap),
-                SizedBox(
-                  width: repsColWidth,
-                  child: Center(child: Text('Reps', style: headerStyle)),
-                ),
-                const SizedBox(width: colGap),
-                SizedBox(
-                  width: checkColWidth,
-                  child: Text('', style: headerStyle),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          for (var i = 0; i < sets.length; i++)
-            Builder(
-              builder: (context) {
-                final row = sets[i];
-                final setNumber = i + 1;
-                final previousRow = i < previousSets.length ? previousSets[i] : null;
-                final restSecondsActual =
-                    (row['rest_sec_actual'] as int?) ?? _restSecondsForExercise(info);
-                final createdAt = DateTime.tryParse((row['created_at'] as String?) ?? '');
-                final rowId = row['id'] as int?;
-                final isActive = rowId != null && rowId == activeRestSetId;
-                final effectiveRestSeconds =
-                    isActive && activeRestDuration > 0 ? activeRestDuration : restSecondsActual;
-                final hasRest = effectiveRestSeconds > 0;
-                final startedAt = isActive ? activeRestStartedAt ?? createdAt : null;
-                final elapsed = startedAt == null ? 0 : _inlineRestNow.difference(startedAt).inSeconds;
-                final remaining = isActive && hasRest
-                    ? (effectiveRestSeconds - elapsed).clamp(0, effectiveRestSeconds)
-                    : 0;
-                final progress = isActive && hasRest && effectiveRestSeconds > 0
-                    ? remaining / effectiveRestSeconds
-                    : 0.0;
-                final displayProgress = hasRest ? (isActive ? progress : 1.0) : 0.0;
-                final rowContent = Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: setColWidth,
-                            child: Center(child: Text('$setNumber')),
-                          ),
-                          const SizedBox(width: colGap),
-                          SizedBox(
-                            width: prevColWidth,
-                            child: Center(child: Text(_formatPrevious(previousRow))),
-                          ),
-                          const SizedBox(width: colGap),
-                          SizedBox(
-                            width: weightColWidth,
-                            child: Center(
-                              child: Text(_formatSetWeight(row['weight_value'] as num?)),
-                            ),
-                          ),
-                          const SizedBox(width: colGap),
-                          SizedBox(
-                            width: repsColWidth,
-                            child: Center(
-                              child: Text((row['reps'] as int?)?.toString() ?? '—'),
-                            ),
-                          ),
-                          const SizedBox(width: colGap),
-                          SizedBox(
-                            width: checkColWidth,
-                            child: Center(
-                              child: IconButton(
-                                padding: EdgeInsets.zero,
-                                visualDensity: VisualDensity.compact,
-                                icon: Icon(
-                                  Icons.check_circle,
-                                  size: 18,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                tooltip: 'Undo set',
-                                onPressed: () => _undoCompletedSet(info, row),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (hasRest)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: TweenAnimationBuilder<double>(
-                                tween: Tween(begin: displayProgress, end: displayProgress),
-                                duration: const Duration(milliseconds: 250),
-                                builder: (context, value, _) {
-                                  return ClipRRect(
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: LinearProgressIndicator(
-                                      value: value,
-                                      minHeight: 6,
-                                      backgroundColor:
-                                          Theme.of(context).colorScheme.surface.withOpacity(0.25),
-                                      color: isActive
-                                          ? Theme.of(context).colorScheme.primary
-                                          : Colors.greenAccent.shade400,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              isActive ? _formatRestShort(remaining) : 'Done',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: isActive ? null : Colors.greenAccent.shade200,
-                                  ),
-                            ),
-                            if (isActive) ...[
-                              const SizedBox(width: 6),
-                              IconButton(
-                                onPressed: _completeInlineRest,
-                                padding: EdgeInsets.zero,
-                                visualDensity: VisualDensity.compact,
-                                icon: const Icon(Icons.check_circle, size: 18),
-                                tooltip: 'Complete rest',
-                              ),
-                            ] else if (rowId != null) ...[
-                              const SizedBox(width: 6),
-                              TextButton(
-                                onPressed: () => _startInlineRest(
-                                  setId: rowId,
-                                  restSeconds: restSecondsActual,
-                                  exerciseId: info.exerciseId,
-                                ),
-                                style: TextButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                  minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                child: const Text('Undo'),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                  ],
-                );
-                final setId = row['id'] as int?;
-                if (setId == null) return rowContent;
-                return Dismissible(
-                  key: ValueKey('set-$setId'),
-                  direction: DismissDirection.startToEnd,
-                  dismissThresholds: const {
-                    DismissDirection.startToEnd: 0.35,
-                  },
-                  confirmDismiss: (_) async {
-                    _pushSetDebug('[swipe] saved id=$setId');
-                    return !_isLoggingSet;
-                  },
-                  background: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    alignment: Alignment.centerLeft,
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.35),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.delete_outline),
-                  ),
-                  onDismissed: (_) => _deleteSet(setId, info),
-                  child: rowContent,
-                );
-              },
-            ),
-          for (var i = 0; i < drafts.length; i++)
-            Builder(
-              builder: (context) {
-                final setNumber = sets.length + i + 1;
-                final previousRow =
-                    (sets.length + i) < previousSets.length ? previousSets[sets.length + i] : null;
-                final rowContent = Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: setColWidth,
-                        child: Center(child: Text('$setNumber')),
-                      ),
-                      const SizedBox(width: colGap),
-                      SizedBox(
-                        width: prevColWidth,
-                        child: Center(child: Text(_formatPrevious(previousRow))),
-                      ),
-                      const SizedBox(width: colGap),
-                      SizedBox(
-                        width: weightColWidth,
-                        child: TextField(
-                          controller: drafts[i].weight,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          textAlign: TextAlign.center,
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: colGap),
-                      SizedBox(
-                        width: repsColWidth,
-                        child: TextField(
-                          controller: drafts[i].reps,
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.center,
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: colGap),
-                      SizedBox(
-                        width: checkColWidth,
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                          icon: Icon(
-                            Icons.check_circle,
-                            size: 20,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          onPressed: () => _commitDraftSet(info, drafts[i]),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-                return Dismissible(
-                  key: ValueKey('draft-${info.sessionExerciseId}-$i-${drafts[i].hashCode}'),
-                  direction: DismissDirection.startToEnd,
-                  dismissThresholds: const {
-                    DismissDirection.startToEnd: 0.45,
-                  },
-                  confirmDismiss: (_) async {
-                    _pushSetDebug('[swipe] draft ex=${info.sessionExerciseId} idx=$i');
-                    return !_isLoggingSet;
-                  },
-                  background: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    alignment: Alignment.centerLeft,
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.35),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.delete_outline),
-                  ),
-                  onDismissed: (_) => _removeDraftSet(info, drafts[i]),
-                  child: rowContent,
-                );
-              },
-            ),
-        ],
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            onPressed: () => _showQuickAddSet(info),
-            style: OutlinedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.surface.withOpacity(0.2),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text('+ Add Set'),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _logInlineSet(
-    SessionExerciseInfo info, {
-    required int reps,
-    double? weight,
-  }) async {
-    final existing = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
-    var maxIndex = 0;
-    for (final row in existing) {
-      final value = row['set_index'] as int?;
-      if (value != null && value > maxIndex) {
-        maxIndex = value;
-      }
-    }
-    final setIndex = maxIndex + 1;
-    final planResult = SetPlanService().nextExpected(
-      blocks: info.planBlocks,
-      existingSets: existing,
-    );
-    final role = planResult?.nextRole ?? 'TOP';
-    final isAmrap = planResult?.isAmrap ?? false;
-    final restSeconds = _restSecondsForExercise(info);
-    _pushSetDebug(
-      '[log] ex=${info.sessionExerciseId} setIndex=$setIndex role=$role reps=$reps weight=$weight',
-    );
-    final id = await _workoutRepo.addSetEntry(
-      sessionExerciseId: info.sessionExerciseId,
-      setIndex: setIndex,
-      setRole: role,
-      weightValue: weight,
-      weightUnit: _weightUnit,
-      weightMode: info.weightModeDefault,
-      reps: reps,
-      partialReps: 0,
-      rpe: null,
-      rir: null,
-      flagWarmup: role == 'WARMUP',
-      flagPartials: false,
-      isAmrap: isAmrap,
-      restSecActual: restSeconds,
-    );
-    _startInlineRest(setId: id, restSeconds: restSeconds, exerciseId: info.exerciseId);
-    _pushSetDebug('[log] inserted id=$id');
-    final latest = await _workoutRepo.getSetEntryById(id);
-    final setsForExercise = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
-    _pushSetDebug(
-      '[log] ex=${info.sessionExerciseId} nowCount=${setsForExercise.length} '
-      'rows=${_summarizeSetRows(setsForExercise)}',
-    );
-    final roleLabel = latest?['set_role'] as String? ?? 'TOP';
-    final isAmrapLabel = (latest?['is_amrap'] as int? ?? 0) == 1;
-    if (!mounted) return;
-    setState(() {
-      _lastLogged = LastLoggedSet(
-        exerciseName: info.exerciseName,
-        reps: reps,
-        weight: weight,
-        role: roleLabel,
-        isAmrap: isAmrapLabel,
-        sessionSetCount: setsForExercise.length,
-      );
-      _lastExerciseInfo = info;
-      _prompt = null;
-      _pending = null;
-    });
   }
 
   List<String> _dedupeList(List<String> values) {
@@ -1809,7 +949,6 @@ class _SessionScreenState extends State<SessionScreen> {
     double? rpe,
     double? rir,
   }) async {
-    final restSeconds = _restSecondsForExercise(info);
     final result = await _dispatcher.dispatch(
       LogSetEntry(
         sessionExerciseId: info.sessionExerciseId,
@@ -1820,7 +959,6 @@ class _SessionScreenState extends State<SessionScreen> {
         partials: partials,
         rpe: rpe,
         rir: rir,
-        restSecActual: restSeconds,
       ),
     );
     if (result.inverse != null) {
@@ -1830,14 +968,6 @@ class _SessionScreenState extends State<SessionScreen> {
     final setsForExercise = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
     final role = latest?['set_role'] as String? ?? 'TOP';
     final isAmrap = (latest?['is_amrap'] as int? ?? 0) == 1;
-    final latestId = latest?['id'] as int?;
-    if (latestId != null) {
-      _startInlineRest(
-        setId: latestId,
-        restSeconds: restSeconds,
-        exerciseId: info.exerciseId,
-      );
-    }
     setState(() {
       _lastLogged = LastLoggedSet(
         exerciseName: info.exerciseName,
@@ -1853,15 +983,7 @@ class _SessionScreenState extends State<SessionScreen> {
     });
   }
 
-  Future<void> _updateSet(
-    int id, {
-    double? weight,
-    int? reps,
-    int? partials,
-    double? rpe,
-    double? rir,
-    int? restSecActual,
-  }) async {
+  Future<void> _updateSet(int id, {double? weight, int? reps, int? partials, double? rpe, double? rir}) async {
     final result = await _dispatcher.dispatch(
       UpdateSetEntry(
         id: id,
@@ -1870,46 +992,11 @@ class _SessionScreenState extends State<SessionScreen> {
         partials: partials,
         rpe: rpe,
         rir: rir,
-        restSecActual: restSecActual,
       ),
     );
     if (result.inverse != null) {
       _undoRedo.pushUndo(result.inverse!);
     }
-    setState(() {});
-  }
-
-  Future<void> _deleteSet(int id, SessionExerciseInfo info) async {
-    if (_isLoggingSet) return;
-    final beforeSets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
-    _pushSetDebug(
-      '[delete] ex=${info.sessionExerciseId} id=$id beforeCount=${beforeSets.length} '
-      'rows=${_summarizeSetRows(beforeSets)}',
-    );
-    final result = await _dispatcher.dispatch(DeleteSetEntry(id));
-    if (result.inverse != null) {
-      _undoRedo.pushUndo(result.inverse!);
-    }
-    final afterSets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
-    _pushSetDebug(
-      '[delete] ex=${info.sessionExerciseId} id=$id afterCount=${afterSets.length} '
-      'rows=${_summarizeSetRows(afterSets)}',
-    );
-    _refreshInlineSetData(info);
-    if (AppShellController.instance.restActiveSetId == id) {
-      _completeInlineRest();
-    }
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  void _removeDraftSet(SessionExerciseInfo info, _DraftSet draft) {
-    final list = _draftSetsByExerciseId[info.sessionExerciseId];
-    if (list == null) return;
-    _pushSetDebug('[draft-delete] ex=${info.sessionExerciseId}');
-    list.remove(draft);
-    draft.dispose();
-    if (!mounted) return;
     setState(() {});
   }
 
@@ -1934,13 +1021,29 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   void _startRestTimer([int seconds = 120]) {
-    AppShellController.instance.startRestTimer(seconds: seconds);
+    _restTimer?.cancel();
+    setState(() {
+      _restRemaining = seconds;
+    });
+    _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_restRemaining <= 1) {
+        timer.cancel();
+        setState(() {
+          _restRemaining = 0;
+        });
+      } else {
+        setState(() {
+          _restRemaining -= 1;
+        });
+      }
+    });
   }
 
   void _stopRestTimer() {
-    AppShellController.instance.completeRestTimer();
-    if (!mounted) return;
-    setState(() {});
+    _restTimer?.cancel();
+    setState(() {
+      _restRemaining = 0;
+    });
   }
 
   Future<void> _runVoice() async {
@@ -2101,7 +1204,6 @@ class _SessionScreenState extends State<SessionScreen> {
       _sessionExercises.add(info);
       _exerciseById[info.exerciseId] = info;
       _sessionExerciseById[info.sessionExerciseId] = info;
-      _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []).add(_DraftSet());
     });
     return info;
   }
@@ -2163,78 +1265,20 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
-  Future<void> _promptAddExercise() async {
-    final match = await Navigator.of(context).push<ExerciseMatch>(
-      MaterialPageRoute(
-        builder: (_) => const ExerciseCatalogScreen(selectionMode: true),
-      ),
-    );
-    if (match == null || !mounted) return;
-    final existing = _exerciseById[match.id];
-    if (existing != null) {
-      return;
-    }
-    await _addExerciseToSession(match);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final startedAt = _sessionStartedAt;
-    final endedAt = _sessionEndedAt;
-    final sessionTimer = startedAt == null
-        ? null
-        : _formatSessionTimer((endedAt ?? _inlineRestNow).difference(startedAt));
     return Scaffold(
       appBar: AppBar(
-        centerTitle: true,
-        title: sessionTimer == null
-            ? const Text('Session')
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Session'),
-                  Text(
-                    sessionTimer,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white70),
-                  ),
-                ],
-              ),
+        title: const Text('Session'),
         actions: [
-          if (widget.isEditing) ...[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Finish'),
-            ),
-            const SizedBox(width: 12),
-          ] else ...[
-            TextButton(
-              onPressed: () async {
-                await _workoutRepo.deleteSession(widget.contextData.sessionId);
-                _sessionEnded = true;
-                AppShellController.instance.setActiveSession(false);
-                if (!mounted) return;
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancel'),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: () async {
-                await _workoutRepo.endSession(widget.contextData.sessionId);
-                _sessionEnded = true;
-                AppShellController.instance.setActiveSession(false);
-                if (!mounted) return;
-                Navigator.of(context).pop();
-              },
-              child: const Text('Finish'),
-            ),
-            const SizedBox(width: 12),
-          ],
+          IconButton(
+            icon: const Icon(Icons.stop_circle_outlined),
+            onPressed: () async {
+              await _workoutRepo.endSession(widget.contextData.sessionId);
+              if (!mounted) return;
+              Navigator.of(context).pop();
+            },
+          ),
         ],
       ),
       floatingActionButton: GestureDetector(
@@ -2253,31 +1297,9 @@ class _SessionScreenState extends State<SessionScreen> {
               Expanded(
                 child: ListView.separated(
                   padding: const EdgeInsets.all(16),
-                  itemCount: _sessionExercises.length + 1,
+                  itemCount: _sessionExercises.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
-                    if (index == _sessionExercises.length) {
-                      return GlassCard(
-                        padding: const EdgeInsets.all(12),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(12),
-                          onTap: _promptAddExercise,
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: Row(
-                              children: [
-                                const Icon(Icons.add_circle_outline, size: 18),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Add Exercise',
-                                  style: Theme.of(context).textTheme.titleMedium,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }
                     final info = _sessionExercises[index];
                     final muscles = _musclesByExerciseId[info.exerciseId];
                     final tags = <String>[];
@@ -2292,16 +1314,10 @@ class _SessionScreenState extends State<SessionScreen> {
                       muscleChips.add(
                         Chip(
                           label: Text(primary),
-                          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+                          visualDensity: VisualDensity.compact,
                           backgroundColor: primaryColor.withOpacity(0.22),
-                          labelStyle: TextStyle(
-                            color: primaryColor,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11,
-                          ),
+                          labelStyle: TextStyle(color: primaryColor, fontWeight: FontWeight.w600),
                           side: BorderSide(color: primaryColor.withOpacity(0.6)),
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       );
                     }
@@ -2309,94 +1325,58 @@ class _SessionScreenState extends State<SessionScreen> {
                       muscleChips.add(
                         Chip(
                           label: Text(secondary),
-                          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+                          visualDensity: VisualDensity.compact,
                           backgroundColor: secondaryColor.withOpacity(0.18),
-                          labelStyle: TextStyle(
-                            color: secondaryColor,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 11,
-                          ),
+                          labelStyle: TextStyle(color: secondaryColor, fontWeight: FontWeight.w500),
                           side: BorderSide(color: secondaryColor.withOpacity(0.5)),
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       );
                     }
                     for (final tag in tags) {
                       muscleChips.add(
                         Chip(
-                          label: Text(tag, style: const TextStyle(fontSize: 11)),
-                          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+                          label: Text(tag),
+                          visualDensity: VisualDensity.compact,
                           backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       );
                     }
                     return GlassCard(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  info.exerciseName,
-                                  style: Theme.of(context).textTheme.titleMedium,
+                      padding: EdgeInsets.zero,
+                      child: ListTile(
+                        title: Text(info.exerciseName),
+                        subtitle: muscleChips.isEmpty
+                            ? const Text('Tap to log sets')
+                            : Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: muscleChips,
                                 ),
                               ),
-                              IconButton(
-                                onPressed: () => _openExerciseModal(info),
-                                icon: const Icon(Icons.edit, size: 18),
-                                tooltip: 'Edit sets',
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ],
-                          ),
-                          if (muscleChips.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: muscleChips,
-                              ),
-                            ),
-                          const SizedBox(height: 8),
-                          FutureBuilder<_InlineSetData>(
-                            future: _getInlineSetFuture(info),
-                            builder: (context, snapshot) {
-                              final cached = _inlineSetCache[info.sessionExerciseId];
-                              if (snapshot.hasError) {
-                                _pushSetDebug(
-                                  '[builder] ex=${info.sessionExerciseId} error=${snapshot.error}',
-                                );
-                              }
-                              final useCache = (snapshot.connectionState != ConnectionState.done ||
-                                      snapshot.hasError ||
-                                      snapshot.data == null) &&
-                                  cached != null;
-                              final sets = useCache ? cached!.sets : snapshot.data?.sets ?? [];
-                              final previousSets =
-                                  useCache ? cached!.previousSets : snapshot.data?.previousSets ?? [];
-                              final drafts =
-                                  _draftSetsByExerciseId[info.sessionExerciseId] ?? const <_DraftSet>[];
-                              return _buildInlineSets(
-                                context,
-                                info,
-                                sets,
-                                previousSets,
-                                drafts,
-                                renderSource: useCache ? 'render-cache' : 'render-snapshot',
-                              );
-                            },
-                          ),
-                        ],
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _openExerciseModal(info),
                       ),
                     );
                   },
                 ),
+              ),
+              if (_lastLogged != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: ConfirmationCard(
+                    lastLogged: _lastLogged!,
+                    onUndo: _undo,
+                    onRedo: _redo,
+                    onStartRest: _startRestTimer,
+                    undoCount: _undoRedo.undoCount,
+                    redoCount: _undoRedo.redoCount,
+                  ),
+                ),
+              TimerBar(
+                remainingSeconds: _restRemaining,
+                onStop: _stopRestTimer,
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),

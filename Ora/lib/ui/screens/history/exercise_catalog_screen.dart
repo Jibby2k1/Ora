@@ -4,20 +4,12 @@ import '../../../data/db/db.dart';
 import '../../../data/repositories/exercise_repo.dart';
 import '../../../data/repositories/settings_repo.dart';
 import '../../../core/voice/muscle_enricher.dart';
-import '../../../domain/services/exercise_matcher.dart';
 import 'history_screen.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 
 class ExerciseCatalogScreen extends StatefulWidget {
-  const ExerciseCatalogScreen({
-    super.key,
-    this.initialQuery,
-    this.selectionMode = false,
-  });
-
-  final String? initialQuery;
-  final bool selectionMode;
+  const ExerciseCatalogScreen({super.key});
 
   @override
   State<ExerciseCatalogScreen> createState() => _ExerciseCatalogScreenState();
@@ -30,21 +22,12 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
   bool _isFilling = false;
   int _fillTotal = 0;
   int _fillDone = 0;
-  int _activeView = 0;
 
   @override
   void initState() {
     super.initState();
     _exerciseRepo = ExerciseRepo(AppDatabase.instance);
-    if (widget.selectionMode) {
-      _activeView = 0;
-    }
-    if (widget.initialQuery != null && widget.initialQuery!.trim().isNotEmpty) {
-      _controller.text = widget.initialQuery!.trim();
-      _search(_controller.text);
-    } else {
-      _loadAll();
-    }
+    _loadAll();
   }
 
   Future<void> _loadAll() async {
@@ -146,16 +129,13 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.selectionMode ? 'Select Exercise' : 'Exercise Catalog'),
+        title: const Text('Exercise Catalog'),
         actions: [
-          if (!widget.selectionMode) ...[
-            IconButton(
-              tooltip: 'Fill missing muscles (cloud)',
-              onPressed: _isFilling ? null : _fillMissingMuscles,
-              icon: _isFilling ? const Icon(Icons.sync) : const Icon(Icons.auto_fix_high),
-            ),
-            const SizedBox(width: 72),
-          ],
+          IconButton(
+            tooltip: 'Fill missing muscles (cloud)',
+            onPressed: _isFilling ? null : _fillMissingMuscles,
+            icon: _isFilling ? const Icon(Icons.sync) : const Icon(Icons.auto_fix_high),
+          ),
         ],
       ),
       body: Stack(
@@ -163,117 +143,68 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
           const GlassBackground(),
           Column(
             children: [
-              if (!widget.selectionMode)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _activeView == 0
-                            ? ElevatedButton(
-                                onPressed: () => setState(() => _activeView = 0),
-                                child: const Text('Catalog'),
-                              )
-                            : OutlinedButton(
-                                onPressed: () => setState(() => _activeView = 0),
-                                child: const Text('Catalog'),
-                              ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _activeView == 1
-                            ? ElevatedButton(
-                                onPressed: () => setState(() => _activeView = 1),
-                                child: const Text('History'),
-                              )
-                            : OutlinedButton(
-                                onPressed: () => setState(() => _activeView = 1),
-                                child: const Text('History'),
-                              ),
-                      ),
-                    ],
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: TextField(
+                  controller: _controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Search exercises',
+                    border: OutlineInputBorder(),
                   ),
+                  onChanged: _search,
                 ),
-              if (_activeView == 0 || widget.selectionMode) ...[
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: TextField(
-                    controller: _controller,
-                    decoration: const InputDecoration(
-                      labelText: 'Search exercises',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: _search,
-                  ),
-                ),
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _results.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final item = _results[index];
-                      final primary = item['primary_muscle'] as String?;
-                      return GlassCard(
-                        padding: EdgeInsets.zero,
-                        child: ListTile(
-                          title: Text(item['canonical_name'] as String),
-                          subtitle: Text(
-                            primary == null || primary.trim().isEmpty
-                                ? (item['equipment_type'] as String)
-                                : '${item['equipment_type']} • $primary',
-                          ),
-                          onTap: widget.selectionMode
-                              ? () => Navigator.of(context).pop(
-                                    ExerciseMatch(
-                                      id: item['id'] as int,
-                                      name: item['canonical_name'] as String,
-                                    ),
-                                  )
-                              : null,
-                          trailing: widget.selectionMode
-                              ? const Icon(Icons.add_circle_outline)
-                              : IconButton(
-                                  icon: const Icon(Icons.show_chart),
-                                  onPressed: () async {
-                                    await Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => HistoryScreen(
-                                          initialExerciseId: item['id'] as int,
-                                          mode: HistoryMode.exercise,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _results.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final item = _results[index];
+                    final primary = item['primary_muscle'] as String?;
+                    return GlassCard(
+                      padding: EdgeInsets.zero,
+                      child: ListTile(
+                        title: Text(item['canonical_name'] as String),
+                        subtitle: Text(
+                          primary == null || primary.trim().isEmpty
+                              ? (item['equipment_type'] as String)
+                              : '${item['equipment_type']} • $primary',
                         ),
-                      );
-                    },
-                  ),
-                ),
-                if (_isFilling)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                    child: GlassCard(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      child: Row(
-                        children: [
-                          const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text('Filling muscles: $_fillDone / $_fillTotal'),
-                          ),
-                        ],
+                        trailing: IconButton(
+                          icon: const Icon(Icons.show_chart),
+                          onPressed: () async {
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => HistoryScreen(initialExerciseId: item['id'] as int),
+                              ),
+                            );
+                          },
+                        ),
                       ),
+                    );
+                  },
+                ),
+              ),
+              if (_isFilling)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: GlassCard(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text('Filling muscles: $_fillDone / $_fillTotal'),
+                        ),
+                      ],
                     ),
                   ),
-              ] else if (!widget.selectionMode)
-                Expanded(
-                  child: HistoryScreen(embedded: true),
                 ),
             ],
           ),

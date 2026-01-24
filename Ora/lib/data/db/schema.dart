@@ -1,5 +1,5 @@
 const dbName = 'ora.db';
-const dbVersion = 8;
+const dbVersion = 6;
 
 const createTableExercise = '''
 CREATE TABLE exercise(
@@ -161,8 +161,7 @@ CREATE TABLE diet_entry(
   fiber_g REAL,
   sodium_mg REAL,
   micros_json TEXT,
-  notes TEXT,
-  image_path TEXT
+  notes TEXT
 );
 ''';
 
@@ -171,8 +170,7 @@ CREATE TABLE appearance_entry(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at TEXT NOT NULL,
   measurements TEXT,
-  notes TEXT,
-  image_path TEXT
+  notes TEXT
 );
 ''';
 

@@ -28,15 +28,7 @@ class ExerciseModal extends StatefulWidget {
   final SessionExerciseInfo info;
   final WorkoutRepo workoutRepo;
   final Future<void> Function({double? weight, required int reps, int? partials, double? rpe, double? rir}) onAddSet;
-  final Future<void> Function(
-    int id, {
-    double? weight,
-    int? reps,
-    int? partials,
-    double? rpe,
-    double? rir,
-    int? restSecActual,
-  }) onUpdateSet;
+  final Future<void> Function(int id, {double? weight, int? reps, int? partials, double? rpe, double? rir}) onUpdateSet;
   final VoidCallback onUndo;
   final VoidCallback onRedo;
   final VoidCallback onStartRest;
@@ -247,7 +239,6 @@ class _ExerciseModalState extends State<ExerciseModal> {
       partials: updated.partials,
       rpe: updated.rpe,
       rir: updated.rir,
-      restSecActual: updated.restSeconds,
     );
 
     setState(() {
@@ -680,7 +671,6 @@ class _SetEditSheetState extends State<_SetEditSheet> {
   late final TextEditingController _partialsController;
   late final TextEditingController _rpeController;
   late final TextEditingController _rirController;
-  late final TextEditingController _restController;
   TextEditingController? _activeController;
 
   @override
@@ -691,7 +681,6 @@ class _SetEditSheetState extends State<_SetEditSheet> {
     _partialsController = TextEditingController(text: widget.setRow['partial_reps']?.toString() ?? '0');
     _rpeController = TextEditingController(text: widget.setRow['rpe']?.toString() ?? '');
     _rirController = TextEditingController(text: widget.setRow['rir']?.toString() ?? '');
-    _restController = TextEditingController(text: widget.setRow['rest_sec_actual']?.toString() ?? '');
     _activeController = _weightController;
   }
 
@@ -702,7 +691,6 @@ class _SetEditSheetState extends State<_SetEditSheet> {
     _partialsController.dispose();
     _rpeController.dispose();
     _rirController.dispose();
-    _restController.dispose();
     super.dispose();
   }
 
@@ -737,7 +725,6 @@ class _SetEditSheetState extends State<_SetEditSheet> {
       partials: int.tryParse(_partialsController.text.trim()),
       rpe: double.tryParse(_rpeController.text.trim()),
       rir: double.tryParse(_rirController.text.trim()),
-      restSeconds: int.tryParse(_restController.text.trim()),
     ));
   }
 
@@ -806,13 +793,6 @@ class _SetEditSheetState extends State<_SetEditSheet> {
             onTap: () => _setActive(_rirController),
           ),
           const SizedBox(height: 8),
-          TextField(
-            controller: _restController,
-            readOnly: true,
-            decoration: const InputDecoration(labelText: 'Rest (sec)'),
-            onTap: () => _setActive(_restController),
-          ),
-          const SizedBox(height: 8),
           _NumericKeypad(onKey: _appendKey),
           const SizedBox(height: 8),
           Row(
@@ -830,14 +810,13 @@ class _SetEditSheetState extends State<_SetEditSheet> {
 }
 
 class _SetEditResult {
-  _SetEditResult({this.weight, this.reps, this.partials, this.rpe, this.rir, this.restSeconds});
+  _SetEditResult({this.weight, this.reps, this.partials, this.rpe, this.rir});
 
   final double? weight;
   final int? reps;
   final int? partials;
   final double? rpe;
   final double? rir;
-  final int? restSeconds;
 }
 
 class _KeypadButton extends StatelessWidget {

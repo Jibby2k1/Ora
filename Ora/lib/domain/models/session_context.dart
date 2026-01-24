@@ -10,6 +10,6 @@ class SessionContext {
 
   final int sessionId;
   final List<SessionExerciseInfo> exercises;
-  final int? programId;
-  final int? programDayId;
+  final int programId;
+  final int programDayId;
 }

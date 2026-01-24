@@ -19,14 +19,7 @@ class SessionCommandReducer {
         return CommandResult(dbWrites: [], uiEvents: ['error:missing_session_exercise'], inverse: null);
       }
       final existing = await workoutRepo.getSetsForSessionExercise(command.sessionExerciseId);
-      var maxIndex = 0;
-      for (final row in existing) {
-        final value = row['set_index'] as int?;
-        if (value != null && value > maxIndex) {
-          maxIndex = value;
-        }
-      }
-      final setIndex = maxIndex + 1;
+      final setIndex = existing.length + 1;
       final planResult = SetPlanService().nextExpected(blocks: info.planBlocks, existingSets: existing);
       final role = planResult?.nextRole ?? 'TOP';
       final isAmrap = planResult?.isAmrap ?? false;
@@ -45,7 +38,6 @@ class SessionCommandReducer {
         flagWarmup: role == 'WARMUP',
         flagPartials: (command.partials ?? 0) > 0,
         isAmrap: isAmrap,
-        restSecActual: command.restSecActual,
       );
 
       final created = await workoutRepo.getSetEntryById(id);
@@ -64,7 +56,6 @@ class SessionCommandReducer {
       if (before == null) {
         return CommandResult(dbWrites: [], uiEvents: ['error:missing_set'], inverse: null);
       }
-      final restActual = command.restSecActual ?? before['rest_sec_actual'] as int?;
       await workoutRepo.updateSetEntry(
         id: command.id,
         weightValue: command.weight,
@@ -72,7 +63,6 @@ class SessionCommandReducer {
         partialReps: command.partials,
         rpe: command.rpe,
         rir: command.rir,
-        restSecActual: restActual,
       );
       final inverse = UpdateSetEntry(
         id: command.id,
@@ -81,7 +71,6 @@ class SessionCommandReducer {
         partials: before['partial_reps'] as int?,
         rpe: before['rpe'] as double?,
         rir: before['rir'] as double?,
-        restSecActual: before['rest_sec_actual'] as int?,
       );
       return CommandResult(
         dbWrites: ['update set_entry'],
