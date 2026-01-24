@@ -6,6 +6,14 @@ Local-first workout tracking app with voice logging.
 - `flutter pub get`
 - `flutter run`
 
+## Firebase config
+Firebase config files are not committed. Copy the examples and fill in your own keys:
+
+```bash
+cp android/app/google-services.json.example android/app/google-services.json
+cp ios/Runner/GoogleService-Info.plist.example ios/Runner/GoogleService-Info.plist
+```
+
 ## Architecture
 - Local-first SQLite via `sqflite` with schema migrations.
 - Command bus for deterministic logging actions, undo/redo.
