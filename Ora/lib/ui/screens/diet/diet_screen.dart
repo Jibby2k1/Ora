@@ -12,6 +12,9 @@ import '../../../data/repositories/settings_repo.dart';
 import '../../../domain/models/diet_entry.dart';
 import '../../../core/cloud/diet_analysis_service.dart';
 import '../../../core/voice/stt.dart';
+import '../../screens/shell/app_shell_controller.dart';
+import '../../../core/input/input_router.dart';
+import '../../../core/cloud/upload_service.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 import '../../widgets/consent/cloud_consent.dart';
@@ -36,6 +39,7 @@ class _DietScreenState extends State<DietScreen> {
   final _imagePicker = ImagePicker();
   final _dietAnalysis = DietAnalysisService();
   final _stt = SpeechToTextEngine.instance;
+  bool _handlingInput = false;
 
   final _goalCalories = TextEditingController();
   final _goalProtein = TextEditingController();
@@ -51,10 +55,12 @@ class _DietScreenState extends State<DietScreen> {
     _dietRepo = DietRepo(db);
     _settingsRepo = SettingsRepo(db);
     _load();
+    AppShellController.instance.pendingInput.addListener(_handlePendingInput);
   }
 
   @override
   void dispose() {
+    AppShellController.instance.pendingInput.removeListener(_handlePendingInput);
     _goalCalories.dispose();
     _goalProtein.dispose();
     _goalCarbs.dispose();
@@ -62,6 +68,45 @@ class _DietScreenState extends State<DietScreen> {
     _goalFiber.dispose();
     _goalSodium.dispose();
     super.dispose();
+  }
+
+  Future<void> _handlePendingInput() async {
+    if (!mounted || _handlingInput) return;
+    final dispatch = AppShellController.instance.pendingInput.value;
+    if (dispatch == null || dispatch.intent != InputIntent.dietLog) return;
+    _handlingInput = true;
+    AppShellController.instance.clearPendingInput();
+    final event = dispatch.event;
+    if (event.file != null) {
+      if (_isImageFile(event.file!.path)) {
+        await _analyzePhoto(event.file!);
+      } else {
+        UploadService.instance.enqueue(
+          UploadItem(
+            type: UploadType.diet,
+            name: event.file!.uri.pathSegments.last,
+            path: event.file!.path,
+          ),
+        );
+        UploadService.instance.uploadAll();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Diet file queued for analysis.')),
+          );
+        }
+      }
+    } else if ((dispatch.entity ?? event.text)?.trim().isNotEmpty == true) {
+      await _addMeal(initialName: (dispatch.entity ?? event.text!).trim());
+    }
+    _handlingInput = false;
+  }
+
+  bool _isImageFile(String path) {
+    final lower = path.toLowerCase();
+    return lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.heic');
   }
 
   Future<void> _load() async {
@@ -691,10 +736,6 @@ class _DietScreenState extends State<DietScreen> {
             icon: const Icon(Icons.add),
             onPressed: _showMealPlanEditor,
           ),
-          IconButton(
-            icon: const Icon(Icons.file_upload_outlined),
-            onPressed: _uploadMealPlan,
-          ),
           const SizedBox(width: 72),
         ],
       ),
@@ -785,58 +826,6 @@ class _DietScreenState extends State<DietScreen> {
                       ] else ...[
                         ..._buildMicroRows(vitaminsOnly: _nutrientView == DietNutrientView.vitamins),
                       ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                GlassCard(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Add a Meal'),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: _pickMedia,
-                            icon: const Icon(Icons.photo),
-                            label: const Text('Pick photo'),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: _useCamera,
-                            icon: const Icon(Icons.photo_camera),
-                            label: const Text('Use camera'),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: () async {
-                              final transcript = await _stt.listenOnce();
-                              if (transcript == null || transcript.trim().isEmpty) {
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('No voice captured.')),
-                                );
-                                return;
-                              }
-                              await _addMeal(initialName: transcript.trim());
-                            },
-                            icon: const Icon(Icons.mic),
-                            label: const Text('Voice entry'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: _addPreviousEntry,
-                            icon: const Icon(Icons.copy),
-                            label: const Text('Previous entry'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => _addMeal(),
-                            icon: const Icon(Icons.edit),
-                            label: const Text('Manual entry'),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ),

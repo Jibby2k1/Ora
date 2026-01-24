@@ -15,6 +15,7 @@ import '../../widgets/consent/cloud_consent.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 import '../shell/app_shell_controller.dart';
+import '../../../core/input/input_router.dart';
 
 enum AppearanceAssessment { face, physique, style }
 
@@ -50,6 +51,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   final _measurementWeight = TextEditingController();
   String _styleSummary = 'No summary yet.';
   Future<List<AppearanceEntry>>? _timelineFuture;
+  bool _handlingInput = false;
 
   @override
   void initState() {
@@ -61,11 +63,13 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     _refreshTimeline();
     Future.microtask(_rebuildStyleSummary);
     _uploadService.addListener(_onUploadsChanged);
+    AppShellController.instance.pendingInput.addListener(_handlePendingInput);
   }
 
   @override
   void dispose() {
     _uploadService.removeListener(_onUploadsChanged);
+    AppShellController.instance.pendingInput.removeListener(_handlePendingInput);
     _fitNotesController.dispose();
     _styleNotesController.dispose();
     _routineNotesController.dispose();
@@ -75,6 +79,100 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     _measurementChest.dispose();
     _measurementWeight.dispose();
     super.dispose();
+  }
+
+  Future<void> _handlePendingInput() async {
+    if (!mounted || _handlingInput) return;
+    final dispatch = AppShellController.instance.pendingInput.value;
+    if (dispatch == null || dispatch.intent != InputIntent.appearanceLog) return;
+    _handlingInput = true;
+    AppShellController.instance.clearPendingInput();
+    final event = dispatch.event;
+    if (event.file != null) {
+      await _confirmAppearanceUpload(event.file!);
+    } else if ((dispatch.entity ?? event.text)?.trim().isNotEmpty == true) {
+      await _confirmAppearanceNote((dispatch.entity ?? event.text!).trim());
+    }
+    _handlingInput = false;
+  }
+
+  Future<void> _confirmAppearanceNote(String note) async {
+    if (!mounted) return;
+    final approved = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: GlassCard(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Add appearance note'),
+                const SizedBox(height: 8),
+                Text(note),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    icon: const Icon(Icons.check),
+                    label: const Text('Save'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (approved != true) return;
+    await _saveAppearanceEntry(type: 'style_notes', notes: note);
+  }
+
+  Future<void> _confirmAppearanceUpload(File file) async {
+    if (!mounted) return;
+    final approved = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: GlassCard(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Queue appearance upload'),
+                const SizedBox(height: 8),
+                Text(file.path.split('/').last),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    icon: const Icon(Icons.cloud_upload),
+                    label: const Text('Queue'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (approved != true) return;
+    _uploadService.enqueue(
+      UploadItem(
+        type: UploadType.appearance,
+        name: file.uri.pathSegments.last,
+        path: file.path,
+      ),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Queued for upload.')),
+    );
   }
 
   void _onUploadsChanged() {
@@ -807,40 +905,23 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              GlassCard(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Add Media (Cloud)'),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+              if (_uploadService.queue.where((e) => e.type == UploadType.appearance).isNotEmpty)
+                ...[
+                  GlassCard(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ElevatedButton.icon(
-                          onPressed: _pickMedia,
-                          icon: const Icon(Icons.cloud_upload),
-                          label: const Text('Pick media'),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: _useCamera,
-                          icon: const Icon(Icons.photo_camera),
-                          label: const Text('Use camera'),
-                        ),
+                        const Text('Uploads (Appearance)'),
+                        const SizedBox(height: 8),
+                        ..._uploadService.queue
+                            .where((e) => e.type == UploadType.appearance)
+                            .map((item) => _uploadTile(item, _assessment)),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    if (_uploadService.queue.where((e) => e.type == UploadType.appearance).isEmpty)
-                      const Text('No uploads queued.')
-                    else
-                      ..._uploadService.queue
-                          .where((e) => e.type == UploadType.appearance)
-                          .map((item) => _uploadTile(item, _assessment)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
+                  ),
+                  const SizedBox(height: 12),
+                ],
               _buildTimelineCard(),
             ],
           ),
