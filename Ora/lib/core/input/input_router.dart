@@ -7,6 +7,7 @@ import 'package:excel/excel.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 import '../../app.dart';
+import '../cloud/gemini_queue.dart';
 import '../../data/db/db.dart';
 import '../../data/repositories/settings_repo.dart';
 import '../../domain/services/import_service.dart';
@@ -305,15 +306,20 @@ class InputRouter {
       },
     };
 
-    final response = await http
-        .post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(payload),
-        )
-        .timeout(const Duration(seconds: 12));
+    final response = await GeminiQueue.instance.run(
+      () => http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 12)),
+      label: _pendingImageBytes != null ? 'classify-image' : 'classify-text',
+    );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      final body = _trimGeminiBody(response.body);
+      debugPrint('[Gemini][classify] ${response.statusCode} $body');
       _showSnack('Gemini error: ${response.statusCode}');
       return null;
     }
@@ -370,15 +376,20 @@ class InputRouter {
         'maxOutputTokens': 256,
       },
     };
-    final response = await http
-        .post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(payload),
-        )
-        .timeout(const Duration(seconds: 12));
+    final response = await GeminiQueue.instance.run(
+      () => http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 12)),
+      label: 'classify-image',
+    );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      final body = _trimGeminiBody(response.body);
+      debugPrint('[Gemini][classify-image] ${response.statusCode} $body');
       _showSnack('Gemini error: ${response.statusCode}');
       return null;
     }
@@ -454,6 +465,12 @@ class InputRouter {
       return null;
     }
     return null;
+  }
+
+  String _trimGeminiBody(String body) {
+    final trimmed = body.trim();
+    if (trimmed.length <= 400) return trimmed;
+    return '${trimmed.substring(0, 400)}...';
   }
 
   String _readTextPreview(File file) {

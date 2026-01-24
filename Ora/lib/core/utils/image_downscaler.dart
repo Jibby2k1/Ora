@@ -1,8 +1,6 @@
 import 'dart:io';
 
 import 'package:image/image.dart' as img;
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 class ImageDownscaler {
   ImageDownscaler._();
@@ -29,40 +27,10 @@ class ImageDownscaler {
           )
         : decoded;
     final jpg = img.encodeJpg(resized, quality: jpegQuality);
-    final dir = await _mediaDir(subdir: null);
-    final outPath = p.join(dir.path, 'ora_media_${DateTime.now().millisecondsSinceEpoch}.jpg');
+    final outPath = '${Directory.systemTemp.path}/ora_upload_${DateTime.now().millisecondsSinceEpoch}.jpg';
     final outFile = File(outPath);
     await outFile.writeAsBytes(jpg, flush: true);
     return outFile;
-  }
-
-  static Future<File> persistImage(File file) async {
-    final dir = await _mediaDir();
-    if (p.isWithin(dir.path, file.path)) return file;
-    final ext = p.extension(file.path).isEmpty ? '.jpg' : p.extension(file.path);
-    final outPath = p.join(dir.path, 'ora_media_${DateTime.now().millisecondsSinceEpoch}$ext');
-    return file.copy(outPath);
-  }
-
-  static Future<File> persistImageToSubdir(File file, String subdir) async {
-    final dir = await _mediaDir(subdir: subdir);
-    if (p.isWithin(dir.path, file.path)) return file;
-    final ext = p.extension(file.path).isEmpty ? '.jpg' : p.extension(file.path);
-    final outPath = p.join(dir.path, 'ora_media_${DateTime.now().millisecondsSinceEpoch}$ext');
-    return file.copy(outPath);
-  }
-
-  static Future<Directory> _mediaDir({String? subdir}) async {
-    final root = await getApplicationDocumentsDirectory();
-    final parts = <String>['media'];
-    if (subdir != null && subdir.trim().isNotEmpty) {
-      parts.addAll(subdir.split('/').where((segment) => segment.trim().isNotEmpty));
-    }
-    final dir = Directory(p.joinAll([root.path, ...parts]));
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    return dir;
   }
 
   static bool _isImagePath(String path) {

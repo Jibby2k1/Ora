@@ -191,6 +191,11 @@ ORDER BY day DESC
     );
   }
 
+  Future<void> deleteEntry(int id) async {
+    final db = await _db.database;
+    await db.delete('diet_entry', where: 'id = ?', whereArgs: [id]);
+  }
+
   DietEntry _fromRow(Map<String, Object?> row) {
     return DietEntry(
       id: row['id'] as int,
