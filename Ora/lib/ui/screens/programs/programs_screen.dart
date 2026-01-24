@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -15,6 +17,7 @@ import '../history/exercise_catalog_screen.dart';
 import '../history/history_screen.dart';
 import '../session/session_screen.dart';
 import '../shell/app_shell_controller.dart';
+import '../../../core/input/input_router.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 import 'program_editor_screen.dart';
@@ -40,6 +43,7 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
   List<Map<String, Object?>> _programDays = const [];
   int? _selectedDayId;
   String? _selectedDayName;
+  bool _handlingInput = false;
 
   @override
   void initState() {
@@ -52,6 +56,7 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     _calorieService = CalorieService(db);
     AppShellController.instance.appearanceProfileEnabled.addListener(_syncAppearancePrefsFromController);
     AppShellController.instance.appearanceProfileSex.addListener(_syncAppearancePrefsFromController);
+    AppShellController.instance.pendingInput.addListener(_handlePendingInput);
     _loadAppearancePrefs();
     _loadProgramDays();
   }
@@ -60,7 +65,128 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
   void dispose() {
     AppShellController.instance.appearanceProfileEnabled.removeListener(_syncAppearancePrefsFromController);
     AppShellController.instance.appearanceProfileSex.removeListener(_syncAppearancePrefsFromController);
+    AppShellController.instance.pendingInput.removeListener(_handlePendingInput);
     super.dispose();
+  }
+
+  Future<void> _handlePendingInput() async {
+    if (!mounted || _handlingInput) return;
+    final dispatch = AppShellController.instance.pendingInput.value;
+    if (dispatch == null) return;
+    if (dispatch.intent != InputIntent.trainingLog && dispatch.intent != InputIntent.programImport) {
+      return;
+    }
+    _handlingInput = true;
+    AppShellController.instance.clearPendingInput();
+    if (dispatch.intent == InputIntent.programImport && dispatch.event.file != null) {
+      await _confirmProgramImport(dispatch.event.file!);
+    } else if (dispatch.event.text != null && dispatch.event.text!.trim().isNotEmpty) {
+      await _confirmTrainingText(dispatch.entity ?? dispatch.event.text!.trim());
+    }
+    _handlingInput = false;
+  }
+
+  Future<void> _confirmTrainingText(String text) async {
+    final approved = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: GlassCard(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Training input'),
+                const SizedBox(height: 8),
+                Text(text),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Pick Day'),
+                    ),
+                    const SizedBox(width: 12),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(null),
+                      child: const Text('Exercise'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Dismiss'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (approved == null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ExerciseCatalogScreen(initialQuery: text)),
+      );
+      return;
+    }
+    if (approved != true) return;
+    if (_selectedProgramId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pick a program first.')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => DayPickerScreen(programId: _selectedProgramId!)),
+    );
+  }
+
+  Future<void> _confirmProgramImport(File file) async {
+    final approved = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: GlassCard(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Import program'),
+                const SizedBox(height: 8),
+                Text(file.path.split('/').last),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    icon: const Icon(Icons.file_download),
+                    label: const Text('Import'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (approved != true) return;
+    final service = ImportService(AppDatabase.instance);
+    final result = await service.importFromXlsxPath(file.path);
+    final missingCount = result.missingExercises.length;
+    final snack = missingCount == 0
+        ? 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises.'
+        : 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises. Missing $missingCount exercises.';
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(snack)),
+    );
+    await _loadProgramDays();
   }
 
   Future<void> _loadAppearancePrefs() async {

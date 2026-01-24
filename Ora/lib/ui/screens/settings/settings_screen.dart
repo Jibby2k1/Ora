@@ -24,7 +24,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _restDefault = 120;
   bool _voiceEnabled = true;
   bool _wakeWordEnabled = false;
-  bool _cloudEnabled = false;
   String _cloudProvider = 'gemini';
   bool _orbHidden = false;
 
@@ -56,7 +55,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final rest = await _settingsRepo.getRestDefault();
     final voiceEnabled = await _settingsRepo.getVoiceEnabled();
     final wakeWordEnabled = await _settingsRepo.getWakeWordEnabled();
-    final cloudEnabled = await _settingsRepo.getCloudEnabled();
     final cloudKey = await _settingsRepo.getCloudApiKey();
     final cloudModel = await _settingsRepo.getCloudModel();
     final cloudProvider = await _settingsRepo.getCloudProvider();
@@ -69,7 +67,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _wakeWordEnabled = wakeWordEnabled;
       _incrementController.text = increment.toStringAsFixed(2);
       _restController.text = rest.toString();
-      _cloudEnabled = cloudEnabled;
       _cloudKeyController.text = cloudKey ?? '';
       _cloudModelController.text = cloudModel;
       _cloudProvider = cloudProvider;
@@ -191,7 +188,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       Row(
                         children: [
-                          const Expanded(child: Text('Cloud Parsing (Optional)')),
+                          const Expanded(child: Text('Cloud Parsing (Required)')),
                           IconButton(
                             icon: const Icon(Icons.info_outline),
                             onPressed: () {
@@ -206,7 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       '4) Click “Create new secret key”.\n'
                                       '5) Copy the key immediately (you won’t see it again).\n'
                                       '6) Paste it into the “API Key” field and press Save.\n'
-                                      'Only transcript text is sent. No audio.'
+                                      'Text and file previews may be sent for classification. No audio is sent.'
                                   : 'To use Gemini, follow these steps:\n'
                                       '1) Go to aistudio.google.com\n'
                                       '2) Sign in with your Google account.\n'
@@ -214,7 +211,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       '4) Create a new key.\n'
                                       '5) Copy the key and paste it into the “API Key” field, then press Save.\n'
                                       'Note: the student Gemini plan for the consumer app does not automatically '
-                                      'include API access. Only transcript text is sent. No audio.';
+                                      'include API access. Text, file previews, and images may be sent for classification.';
                               showDialog<void>(
                                 context: context,
                                 builder: (context) {
@@ -263,16 +260,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         'API keys are stored securely on-device (Keychain/Keystore) and never uploaded.',
                       ),
                       const SizedBox(height: 8),
-                      SwitchListTile(
-                        value: _cloudEnabled,
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Enable cloud parsing'),
-                        subtitle: const Text('Sends transcript text only. No audio.'),
-                        onChanged: (value) async {
-                          setState(() => _cloudEnabled = value);
-                          await _settingsRepo.setCloudEnabled(value);
-                        },
-                      ),
+                      const Text('Cloud parsing is required for this app.'),
                       const SizedBox(height: 8),
                       TextField(
                         controller: _cloudKeyController,

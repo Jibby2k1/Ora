@@ -9,7 +9,9 @@ import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 
 class ExerciseCatalogScreen extends StatefulWidget {
-  const ExerciseCatalogScreen({super.key});
+  const ExerciseCatalogScreen({super.key, this.initialQuery});
+
+  final String? initialQuery;
 
   @override
   State<ExerciseCatalogScreen> createState() => _ExerciseCatalogScreenState();
@@ -27,7 +29,12 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
   void initState() {
     super.initState();
     _exerciseRepo = ExerciseRepo(AppDatabase.instance);
-    _loadAll();
+    if (widget.initialQuery != null && widget.initialQuery!.trim().isNotEmpty) {
+      _controller.text = widget.initialQuery!.trim();
+      _search(_controller.text);
+    } else {
+      _loadAll();
+    }
   }
 
   Future<void> _loadAll() async {

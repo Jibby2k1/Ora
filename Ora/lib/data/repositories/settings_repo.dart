@@ -85,6 +85,7 @@ class SettingsRepo {
 
   Future<bool> getCloudEnabled() async {
     final raw = await _get(keyCloudEnabled);
+    if (raw == null) return true;
     return raw == '1';
   }
 

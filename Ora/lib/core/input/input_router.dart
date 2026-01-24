@@ -7,10 +7,8 @@ import 'package:excel/excel.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 import '../../app.dart';
-import '../cloud/gemini_queue.dart';
 import '../../data/db/db.dart';
 import '../../data/repositories/settings_repo.dart';
-import '../../domain/services/import_service.dart';
 import '../../ui/screens/shell/app_shell_controller.dart';
 
 enum InputSource { mic, text, camera, upload }
@@ -117,10 +115,6 @@ class InputRouter {
 
     _selectTab(result.intent);
     _showSnack('Routed to ${_labelFor(result.intent)}');
-    if (result.intent == InputIntent.programImport && event.file != null) {
-      await _handleProgramImport(context, event.file!);
-      return;
-    }
     AppShellController.instance.setPendingInput(
       InputDispatch(
         intent: result.intent,
@@ -132,46 +126,11 @@ class InputRouter {
     );
   }
 
-  Future<void> _handleProgramImport(BuildContext context, File file) async {
-    final service = ImportService(_db);
-    try {
-      final result = await service.importFromXlsxPath(file.path);
-      final missingCount = result.missingExercises.length;
-      final snack = missingCount == 0
-          ? 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises.'
-          : 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises. Missing $missingCount exercises.';
-      _showSnack(snack);
-      if (missingCount > 0) {
-        if (!context.mounted) return;
-        await showDialog<void>(
-          context: context,
-          builder: (context) {
-            return AlertDialog(
-              title: const Text('Missing exercises'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: ListView(
-                  shrinkWrap: true,
-                  children: result.missingExercises.map((e) => Text('• $e')).toList(),
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
-              ],
-            );
-          },
-        );
-      }
-    } catch (e) {
-      _showSnack('Import failed: $e');
-    }
-  }
-
   Future<InputRouteResult?> _classifyOpenAi(String prompt, String apiKey, String model) async {
     final uri = Uri.https('api.openai.com', '/v1/chat/completions');
     final payload = {
       'model': model,
-      if (_openAiSupportsTemperature(model)) 'temperature': 0.1,
+      'temperature': 0.1,
       'messages': [
         {'role': 'system', 'content': prompt},
         {'role': 'user', 'content': 'Classify this input.'},
@@ -191,7 +150,6 @@ class InputRouter {
         .timeout(const Duration(seconds: 12));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      debugPrint('[OpenAI][classify] ${response.statusCode} ${_trimBody(response.body)}');
       _showSnack('OpenAI error: ${response.statusCode}');
       return null;
     }
@@ -246,7 +204,6 @@ class InputRouter {
         .timeout(const Duration(seconds: 12));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      debugPrint('[OpenAI][classify-image] ${response.statusCode} ${_trimBody(response.body)}');
       _showSnack('OpenAI error: ${response.statusCode}');
       return null;
     }
@@ -308,20 +265,15 @@ class InputRouter {
       },
     };
 
-    final response = await GeminiQueue.instance.run(
-      () => http
-          .post(
-            uri,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(payload),
-          )
-          .timeout(const Duration(seconds: 12)),
-      label: _pendingImageBytes != null ? 'classify-image' : 'classify-text',
-    );
+    final response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 12));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      final body = _trimGeminiBody(response.body);
-      debugPrint('[Gemini][classify] ${response.statusCode} $body');
       _showSnack('Gemini error: ${response.statusCode}');
       return null;
     }
@@ -378,20 +330,15 @@ class InputRouter {
         'maxOutputTokens': 256,
       },
     };
-    final response = await GeminiQueue.instance.run(
-      () => http
-          .post(
-            uri,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(payload),
-          )
-          .timeout(const Duration(seconds: 12)),
-      label: 'classify-image',
-    );
+    final response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 12));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      final body = _trimGeminiBody(response.body);
-      debugPrint('[Gemini][classify-image] ${response.statusCode} $body');
       _showSnack('Gemini error: ${response.statusCode}');
       return null;
     }
@@ -467,23 +414,6 @@ class InputRouter {
       return null;
     }
     return null;
-  }
-
-  String _trimGeminiBody(String body) {
-    final trimmed = body.trim();
-    if (trimmed.length <= 400) return trimmed;
-    return '${trimmed.substring(0, 400)}...';
-  }
-
-  String _trimBody(String body) {
-    final trimmed = body.trim();
-    if (trimmed.length <= 400) return trimmed;
-    return '${trimmed.substring(0, 400)}...';
-  }
-
-  bool _openAiSupportsTemperature(String model) {
-    final lower = model.toLowerCase();
-    return !lower.startsWith('gpt-5');
   }
 
   String _readTextPreview(File file) {
@@ -590,7 +520,7 @@ class InputRouter {
       InputIntent.dietLog => 1,
       InputIntent.appearanceLog => appearanceEnabled ? 2 : 0,
       InputIntent.leaderboard => appearanceEnabled ? 3 : 2,
-      InputIntent.settings => appearanceEnabled ? 3 : 2,
+      InputIntent.settings => appearanceEnabled ? 4 : 3,
       InputIntent.programImport => 0,
       InputIntent.unknown => 0,
     };
@@ -614,9 +544,9 @@ class InputRouter {
       case InputIntent.programImport:
         return 'Program Import';
       case InputIntent.leaderboard:
-        return 'Profile';
+        return 'Leaderboard';
       case InputIntent.settings:
-        return 'Profile';
+        return 'Settings';
       case InputIntent.unknown:
         return 'Training';
     }
