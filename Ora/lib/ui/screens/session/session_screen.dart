@@ -138,6 +138,7 @@ class _SessionScreenState extends State<SessionScreen> {
     super.initState();
     final db = AppDatabase.instance;
     AppShellController.instance.setActiveSession(true);
+    AppShellController.instance.setActiveSessionIndicatorHidden(false);
     _workoutRepo = WorkoutRepo(db);
     _exerciseRepo = ExerciseRepo(db);
     _programRepo = ProgramRepo(db);
@@ -1032,16 +1033,21 @@ class _SessionScreenState extends State<SessionScreen> {
     setState(() {
       _restRemaining = seconds;
     });
+    AppShellController.instance.setRestRemainingSeconds(seconds);
+    AppShellController.instance.setRestAlertActive(false);
     _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_restRemaining <= 1) {
         timer.cancel();
         setState(() {
           _restRemaining = 0;
         });
+        AppShellController.instance.setRestRemainingSeconds(0);
+        AppShellController.instance.setRestAlertActive(true);
       } else {
         setState(() {
           _restRemaining -= 1;
         });
+        AppShellController.instance.setRestRemainingSeconds(_restRemaining);
       }
     });
   }
@@ -1051,6 +1057,8 @@ class _SessionScreenState extends State<SessionScreen> {
     setState(() {
       _restRemaining = 0;
     });
+    AppShellController.instance.setRestRemainingSeconds(0);
+    AppShellController.instance.setRestAlertActive(false);
   }
 
   Future<void> _runVoice() async {
@@ -1284,6 +1292,8 @@ class _SessionScreenState extends State<SessionScreen> {
               await _workoutRepo.endSession(widget.contextData.sessionId);
               _sessionEnded = true;
               AppShellController.instance.setActiveSession(false);
+              AppShellController.instance.setRestRemainingSeconds(0);
+              AppShellController.instance.setRestAlertActive(false);
               if (!mounted) return;
               Navigator.of(context).pop();
             },

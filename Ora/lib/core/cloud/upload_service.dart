@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,6 +7,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app.dart';
+import '../../data/db/db.dart';
+import '../../data/repositories/appearance_repo.dart';
+import '../../domain/models/appearance_entry.dart';
 import '../../ui/screens/shell/app_shell_controller.dart';
 
 enum UploadType { diet, appearance }
@@ -144,8 +148,113 @@ class UploadService extends ChangeNotifier {
         summary: item.evaluationSummary ?? '',
       ));
       notifyListeners();
+      if (item.type == UploadType.appearance) {
+        _logAppearanceFeedback(item, item.evaluationSummary ?? 'Awaiting feedback.');
+      }
     });
   }
+
+  Future<void> _logAppearanceFeedback(UploadItem item, String summary) async {
+    final repo = AppearanceRepo(AppDatabase.instance);
+    final recent = await repo.getRecentEntries(limit: 200);
+    final scores = _latestScoresFromEntries(recent);
+    final now = DateTime.now();
+    await repo.addEntry(
+      createdAt: now,
+      measurements: _buildFeedbackPayload(
+        category: 'skin',
+        score: scores.skin,
+        delta: 0,
+        feedback: 'Skin review: ${summary.trim()}',
+        uploadName: item.name,
+      ),
+    );
+    await repo.addEntry(
+      createdAt: now,
+      measurements: _buildFeedbackPayload(
+        category: 'physique',
+        score: scores.physique,
+        delta: 0,
+        feedback: 'Physique review: ${summary.trim()}',
+        uploadName: item.name,
+      ),
+    );
+    await repo.addEntry(
+      createdAt: now,
+      measurements: _buildFeedbackPayload(
+        category: 'style',
+        score: scores.style,
+        delta: 0,
+        feedback: 'Style review: ${summary.trim()}',
+        uploadName: item.name,
+      ),
+    );
+  }
+
+  _FeedbackScores _latestScoresFromEntries(List<AppearanceEntry> entries) {
+    double skin = 50;
+    double physique = 50;
+    double style = 50;
+    for (final entry in entries) {
+      final raw = entry.measurements;
+      if (raw == null || raw.toString().trim().isEmpty) continue;
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map) continue;
+        if (decoded['type'] != 'feedback') continue;
+        final category = decoded['category']?.toString();
+        final score = _readScore(decoded['score']);
+        if (score == null) continue;
+        switch (category) {
+          case 'skin':
+            skin = score;
+            break;
+          case 'physique':
+            physique = score;
+            break;
+          case 'style':
+            style = score;
+            break;
+        }
+      } catch (_) {}
+    }
+    return _FeedbackScores(skin: skin, physique: physique, style: style);
+  }
+
+  double? _readScore(Object? raw) {
+    if (raw is int) return raw.toDouble();
+    if (raw is double) return raw;
+    return double.tryParse(raw?.toString() ?? '');
+  }
+
+  String _buildFeedbackPayload({
+    required String category,
+    required double score,
+    required int delta,
+    required String feedback,
+    required String uploadName,
+  }) {
+    return jsonEncode({
+      'type': 'feedback',
+      'category': category,
+      'score': score.round(),
+      'score_delta': delta,
+      'feedback': feedback,
+      'upload_name': uploadName,
+    });
+  }
+}
+
+class _FeedbackScores {
+  const _FeedbackScores({
+    required this.skin,
+    required this.physique,
+    required this.style,
+  });
+
+  final double skin;
+  final double physique;
+  final double style;
 }
 
 class UploadEvaluation {
