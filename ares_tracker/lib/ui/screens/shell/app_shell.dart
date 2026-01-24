@@ -4,6 +4,7 @@ import '../appearance/appearance_screen.dart';
 import '../diet/diet_screen.dart';
 import '../leaderboard/leaderboard_screen.dart';
 import '../programs/programs_screen.dart';
+import '../settings/settings_screen.dart';
 import 'app_shell_controller.dart';
 
 class AppShell extends StatefulWidget {
@@ -21,6 +22,7 @@ class _AppShellState extends State<AppShell> {
     DietScreen(),
     AppearanceScreen(),
     LeaderboardScreen(),
+    SettingsScreen(),
   ];
 
   @override
@@ -62,6 +64,10 @@ class _AppShellState extends State<AppShell> {
               BottomNavigationBarItem(
                 icon: Icon(Icons.emoji_events),
                 label: 'Leaderboard',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.settings),
+                label: 'Settings',
               ),
             ],
           ),

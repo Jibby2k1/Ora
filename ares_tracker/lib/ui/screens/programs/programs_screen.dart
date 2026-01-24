@@ -13,7 +13,6 @@ import '../day_picker/day_picker_screen.dart';
 import '../history/exercise_catalog_screen.dart';
 import '../history/history_screen.dart';
 import '../session/session_screen.dart';
-import '../settings/settings_screen.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 import 'program_editor_screen.dart';
@@ -305,14 +304,6 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: _createProgram,
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
-            },
           ),
         ],
       ),
