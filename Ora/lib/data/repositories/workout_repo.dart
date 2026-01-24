@@ -18,6 +18,23 @@ class WorkoutRepo {
     });
   }
 
+  Future<Map<String, Object?>?> getActiveSession({int? programId}) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'workout_session',
+      where: programId == null ? 'ended_at IS NULL' : 'ended_at IS NULL AND program_id = ?',
+      whereArgs: programId == null ? null : [programId],
+      orderBy: 'started_at DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<bool> hasActiveSession({int? programId}) async {
+    final row = await getActiveSession(programId: programId);
+    return row != null;
+  }
+
   Future<void> endSession(int sessionId) async {
     final db = await _db.database;
     await db.update('workout_session', {

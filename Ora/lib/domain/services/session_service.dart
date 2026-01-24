@@ -57,4 +57,60 @@ class SessionService {
       programDayId: programDayId,
     );
   }
+
+  Future<SessionContext> startFreeSession({int? programId}) async {
+    final workoutRepo = WorkoutRepo(_db);
+    final sessionId = await workoutRepo.startSession(programId: programId, programDayId: null);
+    return SessionContext(
+      sessionId: sessionId,
+      exercises: const [],
+      programId: programId,
+      programDayId: null,
+    );
+  }
+
+  Future<SessionContext?> resumeActiveSession() async {
+    final workoutRepo = WorkoutRepo(_db);
+    final programRepo = ProgramRepo(_db);
+    final active = await workoutRepo.getActiveSession();
+    if (active == null) return null;
+    final sessionId = active['id'] as int;
+    final programId = active['program_id'] as int?;
+    final programDayId = active['program_day_id'] as int?;
+    final sessionRows = await workoutRepo.getSessionExercises(sessionId);
+
+    final exerciseInfos = <SessionExerciseInfo>[];
+    for (final row in sessionRows) {
+      final sessionExerciseId = row['session_exercise_id'] as int;
+      final exerciseId = row['exercise_id'] as int;
+      final exerciseName = row['canonical_name'] as String? ?? 'Exercise';
+      final weightModeDefault = row['weight_mode_default'] as String? ?? 'TOTAL';
+      final orderIndex = row['order_index'] as int;
+      final planBlocks = <SetPlanBlock>[];
+      if (programDayId != null) {
+        final programDayExerciseId = await programRepo.getProgramDayExerciseIdByOrder(
+          programDayId: programDayId,
+          orderIndex: orderIndex,
+        );
+        if (programDayExerciseId != null) {
+          final blocks = await programRepo.getSetPlanBlocks(programDayExerciseId);
+          planBlocks.addAll(blocks.map((b) => SetPlanBlock.fromRow(b)));
+        }
+      }
+      exerciseInfos.add(SessionExerciseInfo(
+        sessionExerciseId: sessionExerciseId,
+        exerciseId: exerciseId,
+        exerciseName: exerciseName,
+        weightModeDefault: weightModeDefault,
+        planBlocks: planBlocks,
+      ));
+    }
+
+    return SessionContext(
+      sessionId: sessionId,
+      exercises: exerciseInfos,
+      programId: programId,
+      programDayId: programDayId,
+    );
+  }
 }
