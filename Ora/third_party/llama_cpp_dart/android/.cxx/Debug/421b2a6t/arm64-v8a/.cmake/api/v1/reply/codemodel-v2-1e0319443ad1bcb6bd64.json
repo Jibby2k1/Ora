@@ -1,0 +1,196 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Debug-f5ebdc15457944623624.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.10"
+					},
+					"projectIndex" : 0,
+					"source" : "."
+				},
+				{
+					"build" : "llama_cpp_build",
+					"childIndexes" : 
+					[
+						2,
+						5
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-llama_cpp_build-Debug-eb3356f28ec6778753ed.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 1,
+					"source" : "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/third_party/llama.cpp"
+				},
+				{
+					"build" : "llama_cpp_build/ggml",
+					"childIndexes" : 
+					[
+						3
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-llama_cpp_build.ggml-Debug-31002f144c00efd1aa12.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 2,
+					"source" : "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml"
+				},
+				{
+					"build" : "llama_cpp_build/ggml/src",
+					"childIndexes" : 
+					[
+						4
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-llama_cpp_build.ggml.src-Debug-7d6bec6632c91eec6db5.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"parentIndex" : 2,
+					"projectIndex" : 2,
+					"source" : "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/src",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				},
+				{
+					"build" : "llama_cpp_build/ggml/src/ggml-cpu",
+					"jsonFile" : "directory-llama_cpp_build.ggml.src.ggml-cpu-Debug-a5cef8abc00affed0cf2.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"parentIndex" : 3,
+					"projectIndex" : 2,
+					"source" : "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/src/ggml-cpu"
+				},
+				{
+					"build" : "llama_cpp_build/src",
+					"jsonFile" : "directory-llama_cpp_build.src-Debug-0a706450fff8c63719c7.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 1,
+					"source" : "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/src",
+					"targetIndexes" : 
+					[
+						3
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"childIndexes" : 
+					[
+						1
+					],
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "Project"
+				},
+				{
+					"childIndexes" : 
+					[
+						2
+					],
+					"directoryIndexes" : 
+					[
+						1,
+						5
+					],
+					"name" : "llama.cpp",
+					"parentIndex" : 0,
+					"targetIndexes" : 
+					[
+						3
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						2,
+						3,
+						4
+					],
+					"name" : "ggml",
+					"parentIndex" : 1,
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 3,
+					"id" : "ggml::@37023a418018fcfa0571",
+					"jsonFile" : "target-ggml-Debug-754803f4f5e2a140a89b.json",
+					"name" : "ggml",
+					"projectIndex" : 2
+				},
+				{
+					"directoryIndex" : 3,
+					"id" : "ggml-base::@37023a418018fcfa0571",
+					"jsonFile" : "target-ggml-base-Debug-2c5d781e85257dcb7765.json",
+					"name" : "ggml-base",
+					"projectIndex" : 2
+				},
+				{
+					"directoryIndex" : 3,
+					"id" : "ggml-cpu::@37023a418018fcfa0571",
+					"jsonFile" : "target-ggml-cpu-Debug-88497314f4d3929e77b3.json",
+					"name" : "ggml-cpu",
+					"projectIndex" : 2
+				},
+				{
+					"directoryIndex" : 5,
+					"id" : "llama::@ba3f00ef520dc9649554",
+					"jsonFile" : "target-llama-Debug-df3d265e6d44e18f1129.json",
+					"name" : "llama",
+					"projectIndex" : 1
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/421b2a6t/arm64-v8a",
+		"source" : "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/src"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

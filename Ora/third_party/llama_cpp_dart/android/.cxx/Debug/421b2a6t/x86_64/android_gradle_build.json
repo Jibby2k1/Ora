@@ -1,0 +1,76 @@
+{
+  "buildFiles": [
+    "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/src/CMakeLists.txt",
+    "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/CMakeLists.txt",
+    "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/CMakeLists.txt",
+    "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/src/CMakeLists.txt",
+    "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/src/ggml-cpu/CMakeLists.txt",
+    "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/src/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/home/jibby2k1/Android/Sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/421b2a6t/x86_64",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/home/jibby2k1/Android/Sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/421b2a6t/x86_64",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "ggml::@37023a418018fcfa0571": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "ggml",
+      "output": "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/421b2a6t/x86_64/bin/libggml.so",
+      "runtimeFiles": [
+        "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/421b2a6t/x86_64/bin/libggml-cpu.so",
+        "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/421b2a6t/x86_64/bin/libggml-base.so"
+      ]
+    },
+    "ggml-base::@37023a418018fcfa0571": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "ggml-base",
+      "output": "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/421b2a6t/x86_64/bin/libggml-base.so",
+      "runtimeFiles": []
+    },
+    "ggml-cpu::@37023a418018fcfa0571": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "ggml-cpu",
+      "output": "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/421b2a6t/x86_64/bin/libggml-cpu.so",
+      "runtimeFiles": [
+        "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/421b2a6t/x86_64/bin/libggml-base.so",
+        "/home/jibby2k1/Android/Sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/18/lib/linux/x86_64/libomp.so"
+      ]
+    },
+    "llama::@ba3f00ef520dc9649554": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "llama",
+      "output": "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/421b2a6t/x86_64/bin/libllama.so",
+      "runtimeFiles": [
+        "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/421b2a6t/x86_64/bin/libggml.so",
+        "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/421b2a6t/x86_64/bin/libggml-cpu.so",
+        "/home/jibby2k1/Documents/SPS/Ares/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/421b2a6t/x86_64/bin/libggml-base.so"
+      ]
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "/home/jibby2k1/Android/Sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/clang.lld",
+      "cppCompilerExecutable": "/home/jibby2k1/Android/Sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++.lld"
+    }
+  },
+  "cFileExtensions": [
+    "c"
+  ],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}
