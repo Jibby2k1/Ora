@@ -2,22 +2,16 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../../data/db/db.dart';
 import '../../../data/repositories/appearance_repo.dart';
 import '../../../data/repositories/settings_repo.dart';
 import '../../../core/cloud/upload_service.dart';
-import '../../../domain/services/calorie_service.dart';
 import '../../../domain/models/appearance_entry.dart';
-import '../../widgets/consent/cloud_consent.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 import '../shell/app_shell_controller.dart';
 import '../../../core/input/input_router.dart';
-
-enum AppearanceAssessment { face, physique, style }
 
 class AppearanceScreen extends StatefulWidget {
   const AppearanceScreen({super.key});
@@ -28,28 +22,12 @@ class AppearanceScreen extends StatefulWidget {
 
 class _AppearanceScreenState extends State<AppearanceScreen> {
   late final SettingsRepo _settingsRepo;
-  late final CalorieService _calorieService;
   late final AppearanceRepo _appearanceRepo;
   final _uploadService = UploadService.instance;
-  final _imagePicker = ImagePicker();
   bool _accessReady = false;
-  AppearanceAssessment _assessment = AppearanceAssessment.physique;
-  _CalorieRange _calorieRange = _CalorieRange.day;
-  double _fitScore = 7;
-  String _fitFeedback = 'Submit a fit to get feedback.';
-  final _fitNotesController = TextEditingController();
-  final _styleNotesController = TextEditingController();
-  final _routineNotesController = TextEditingController();
-  final _confidenceNotesController = TextEditingController();
-  double _confidenceScore = 7;
-  double _faceScore = 72;
-  double _physiqueScore = 68;
-  double _styleScore = 70;
-  final _measurementWaist = TextEditingController();
-  final _measurementHips = TextEditingController();
-  final _measurementChest = TextEditingController();
-  final _measurementWeight = TextEditingController();
-  String _styleSummary = 'No summary yet.';
+  double _skinScore = 0;
+  double _physiqueScore = 0;
+  double _styleScore = 0;
   Future<List<AppearanceEntry>>? _timelineFuture;
   bool _handlingInput = false;
 
@@ -57,11 +35,9 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   void initState() {
     super.initState();
     _settingsRepo = SettingsRepo(AppDatabase.instance);
-    _calorieService = CalorieService(AppDatabase.instance);
     _appearanceRepo = AppearanceRepo(AppDatabase.instance);
     _ensureAccess();
     _refreshTimeline();
-    Future.microtask(_rebuildStyleSummary);
     _uploadService.addListener(_onUploadsChanged);
     AppShellController.instance.pendingInput.addListener(_handlePendingInput);
   }
@@ -70,14 +46,6 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   void dispose() {
     _uploadService.removeListener(_onUploadsChanged);
     AppShellController.instance.pendingInput.removeListener(_handlePendingInput);
-    _fitNotesController.dispose();
-    _styleNotesController.dispose();
-    _routineNotesController.dispose();
-    _confidenceNotesController.dispose();
-    _measurementWaist.dispose();
-    _measurementHips.dispose();
-    _measurementChest.dispose();
-    _measurementWeight.dispose();
     super.dispose();
   }
 
@@ -91,44 +59,11 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     if (event.file != null) {
       await _confirmAppearanceUpload(event.file!);
     } else if ((dispatch.entity ?? event.text)?.trim().isNotEmpty == true) {
-      await _confirmAppearanceNote((dispatch.entity ?? event.text!).trim());
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Appearance logs come from Orb uploads.')),
+      );
     }
     _handlingInput = false;
-  }
-
-  Future<void> _confirmAppearanceNote(String note) async {
-    if (!mounted) return;
-    final approved = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: GlassCard(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Add appearance note'),
-                const SizedBox(height: 8),
-                Text(note),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: ElevatedButton.icon(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    icon: const Icon(Icons.check),
-                    label: const Text('Save'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    if (approved != true) return;
-    await _saveAppearanceEntry(type: 'style_notes', notes: note);
   }
 
   Future<void> _confirmAppearanceUpload(File file) async {
@@ -184,6 +119,18 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     setState(() {
       _timelineFuture = _appearanceRepo.getRecentEntries(limit: 30);
     });
+    _refreshScores();
+  }
+
+  Future<void> _refreshScores() async {
+    final entries = await _appearanceRepo.getRecentEntries(limit: 200);
+    final scores = _latestScoresFromEntries(entries);
+    if (!mounted) return;
+    setState(() {
+      _skinScore = scores.skin;
+      _physiqueScore = scores.physique;
+      _styleScore = scores.style;
+    });
   }
 
   Future<void> _saveAppearanceEntry({
@@ -220,63 +167,89 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     return '${date.year}-$mm-$dd';
   }
 
-  String _dailyQuote() {
-    const quotes = [
-      'Small steps, sharp details.',
-      'Consistency beats intensity.',
-      'Show up, then level up.',
-      'Discipline, then confidence.',
-      'Progress looks good on you.',
-      'Strong is a style choice.',
-      'You are the mood board.',
-    ];
-    final day = DateTime.now().day + DateTime.now().month * 31;
-    return quotes[day % quotes.length];
-  }
-
-  Future<void> _rebuildStyleSummary() async {
-    final entries = await _appearanceRepo.getRecentEntries(limit: 50);
-    final now = DateTime.now();
-    final weekStart = now.subtract(const Duration(days: 7));
-    final notes = entries
-        .where((entry) => entry.createdAt.isAfter(weekStart))
-        .where((entry) => _decodeMeasurements(entry.measurements)['type'] == 'style_notes')
-        .map((entry) => entry.notes ?? '')
-        .where((note) => note.trim().isNotEmpty)
-        .toList();
-    if (!mounted) return;
-    if (notes.isEmpty) {
-      setState(() => _styleSummary = 'No summary yet.');
-      return;
-    }
-    final last = notes.first;
-    final preview = last.length > 80 ? '${last.substring(0, 80)}...' : last;
-    setState(() {
-      _styleSummary = '${notes.length} notes this week. Latest: $preview';
-    });
-  }
-
-  String _fitFeedbackFor(double score) {
-    if (score >= 9) return 'Elite fit. Try a bolder accent or texture.';
-    if (score >= 7) return 'Strong fit. Consider a sharper silhouette or accessory.';
-    if (score >= 5) return 'Solid base. Improve contrast and layering.';
-    return 'Start simple: clean lines, neutral base, one statement piece.';
-  }
-
-  String _confidenceLabel(double value) {
-    if (value >= 9) return 'Unstoppable';
-    if (value >= 7) return 'Confident';
-    if (value >= 5) return 'Steady';
-    return 'Rebuilding';
-  }
-
-  Future<DateTime?> _latestEntryDate(String type) async {
-    final entries = await _appearanceRepo.getRecentEntries(limit: 50);
+  _FeedbackScores _latestScoresFromEntries(List<AppearanceEntry> entries) {
+    double skin = 0;
+    double physique = 0;
+    double style = 0;
     for (final entry in entries) {
       final data = _decodeMeasurements(entry.measurements);
-      if (data['type'] == type) return entry.createdAt;
+      if (data['type'] != 'feedback') continue;
+      final category = data['category']?.toString();
+      final score = _readScore(data['score']);
+      if (score == null) continue;
+      switch (category) {
+        case 'skin':
+          skin = score;
+          break;
+        case 'physique':
+          physique = score;
+          break;
+        case 'style':
+          style = score;
+          break;
+      }
     }
-    return null;
+    return _FeedbackScores(skin: skin, physique: physique, style: style);
+  }
+
+  double? _readScore(Object? raw) {
+    if (raw is int) return raw.toDouble();
+    if (raw is double) return raw;
+    final parsed = double.tryParse(raw?.toString() ?? '');
+    return parsed;
+  }
+
+  Widget _buildFeedbackHistoryCard(String title, String category) {
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title),
+          const SizedBox(height: 8),
+          FutureBuilder<List<AppearanceEntry>>(
+            future: _timelineFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final entries = snapshot.data ?? [];
+              final filtered = entries.where((entry) {
+                final data = _decodeMeasurements(entry.measurements);
+                return data['type'] == 'feedback' && data['category'] == category;
+              }).toList();
+              if (filtered.isEmpty) {
+                return const Text('No feedback yet.');
+              }
+              return Column(
+                children: filtered.take(6).map((entry) {
+                  final data = _decodeMeasurements(entry.measurements);
+                  final feedback = data['feedback']?.toString().trim();
+                  final delta = data['score_delta'];
+                  final score = data['score'];
+                  final uploadName = data['upload_name']?.toString();
+                  final deltaLabel = delta == null ? null : 'Δ ${delta.toString()}';
+                  final scoreLabel = score == null ? null : 'Score ${score.toString()}';
+                  final meta = [
+                    if (scoreLabel != null) scoreLabel,
+                    if (deltaLabel != null) deltaLabel,
+                    if (uploadName != null && uploadName.trim().isNotEmpty) uploadName.trim(),
+                  ].join(' • ');
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      feedback == null || feedback.isEmpty ? 'Feedback logged.' : feedback,
+                    ),
+                    subtitle: meta.isEmpty ? null : Text(meta),
+                    trailing: Text(_formatDate(entry.createdAt), style: Theme.of(context).textTheme.bodySmall),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildProgressRingsCard() {
@@ -290,414 +263,19 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
           Align(
             alignment: Alignment.center,
             child: _StackedRings(
-              face: _faceScore / 100.0,
+              skin: _skinScore / 100.0,
               physique: _physiqueScore / 100.0,
               style: _styleScore / 100.0,
             ),
           ),
-          const SizedBox(height: 12),
-          _ScoreSlider(
-            label: 'Face',
-            value: _faceScore,
-            onChanged: (value) => setState(() => _faceScore = value),
-          ),
-          _ScoreSlider(
-            label: 'Physique',
-            value: _physiqueScore,
-            onChanged: (value) => setState(() => _physiqueScore = value),
-          ),
-          _ScoreSlider(
-            label: 'Style',
-            value: _styleScore,
-            onChanged: (value) => setState(() => _styleScore = value),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton.icon(
-              onPressed: () async {
-                await _saveAppearanceEntry(
-                  type: 'checkin',
-                  payload: {
-                    'face': _faceScore.round(),
-                    'physique': _physiqueScore.round(),
-                    'style': _styleScore.round(),
-                  },
-                );
-              },
-              icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Save check-in'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFitSessionCard() {
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Fit Session'),
-          const SizedBox(height: 8),
-          Text('Rate the fit and get instant feedback.'),
-          const SizedBox(height: 12),
-          _ScoreSlider(
-            label: 'Fit score',
-            value: _fitScore,
-            onChanged: (value) => setState(() => _fitScore = value),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _fitNotesController,
-            maxLines: 2,
-            decoration: const InputDecoration(
-              labelText: 'Fit notes',
-              border: OutlineInputBorder(),
-            ),
-          ),
           const SizedBox(height: 8),
           Text(
-            _fitFeedback,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton.icon(
-              onPressed: () async {
-                final feedback = _fitFeedbackFor(_fitScore);
-                setState(() => _fitFeedback = feedback);
-                await _saveAppearanceEntry(
-                  type: 'fit_session',
-                  payload: {
-                    'score': _fitScore.round(),
-                    'feedback': feedback,
-                  },
-                  notes: _fitNotesController.text,
-                );
-                _fitNotesController.clear();
-              },
-              icon: const Icon(Icons.flash_on),
-              label: const Text('Submit fit'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRoutineCheckInCard() {
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Skin + Hair Routine'),
-          const SizedBox(height: 8),
-          FutureBuilder<DateTime?>(
-            future: _latestEntryDate('routine'),
-            builder: (context, snapshot) {
-              final date = snapshot.data;
-              final due = date == null || DateTime.now().difference(date).inDays >= 7;
-              return Text(
-                date == null
-                    ? 'No check-ins yet.'
-                    : 'Last check-in: ${_formatDate(date)}${due ? ' (due)' : ''}',
-                style: Theme.of(context).textTheme.bodySmall,
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _routineNotesController,
-            maxLines: 2,
-            decoration: const InputDecoration(
-              labelText: 'Routine feedback',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton.icon(
-              onPressed: () async {
-                await _saveAppearanceEntry(
-                  type: 'routine',
-                  payload: {'cadence': 'weekly'},
-                  notes: _routineNotesController.text,
-                );
-                _routineNotesController.clear();
-              },
-              icon: const Icon(Icons.spa_outlined),
-              label: const Text('Log check-in'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStyleNotesCard() {
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Style Notes'),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _styleNotesController,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Outfit + grooming reflections',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton.icon(
-              onPressed: () async {
-                await _saveAppearanceEntry(
-                  type: 'style_notes',
-                  notes: _styleNotesController.text,
-                );
-                _styleNotesController.clear();
-                await _rebuildStyleSummary();
-              },
-              icon: const Icon(Icons.note_add_outlined),
-              label: const Text('Save note'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _styleSummary,
+            'Scores update only from upload feedback.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
       ),
     );
-  }
-
-  Widget _buildMeasurementsCard() {
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Body Measurements'),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _measurementWaist,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Waist (in)'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _measurementHips,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Hips (in)'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _measurementChest,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Chest (in)'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _measurementWeight,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Weight (lb)'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton.icon(
-              onPressed: () async {
-                await _saveAppearanceEntry(
-                  type: 'measurements',
-                  payload: {
-                    'waist': _measurementWaist.text.trim(),
-                    'hips': _measurementHips.text.trim(),
-                    'chest': _measurementChest.text.trim(),
-                    'weight': _measurementWeight.text.trim(),
-                  },
-                );
-                _measurementWaist.clear();
-                _measurementHips.clear();
-                _measurementChest.clear();
-                _measurementWeight.clear();
-              },
-              icon: const Icon(Icons.straighten),
-              label: const Text('Save measurements'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildConfidenceCard() {
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Confidence Check-in'),
-          const SizedBox(height: 8),
-          Text('Quote of the day: "${_dailyQuote()}"'),
-          const SizedBox(height: 8),
-          Text('Today: ${_confidenceLabel(_confidenceScore)}'),
-          Slider(
-            value: _confidenceScore,
-            min: 1,
-            max: 10,
-            divisions: 9,
-            label: _confidenceScore.round().toString(),
-            onChanged: (value) => setState(() => _confidenceScore = value),
-          ),
-          TextField(
-            controller: _confidenceNotesController,
-            maxLines: 2,
-            decoration: const InputDecoration(
-              labelText: 'Reflection',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton.icon(
-              onPressed: () async {
-                await _saveAppearanceEntry(
-                  type: 'confidence',
-                  payload: {'score': _confidenceScore.round()},
-                  notes: _confidenceNotesController.text,
-                );
-                _confidenceNotesController.clear();
-              },
-              icon: const Icon(Icons.mood),
-              label: const Text('Save check-in'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimelineCard() {
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Appearance Timeline'),
-          const SizedBox(height: 8),
-          FutureBuilder<List<AppearanceEntry>>(
-            future: _timelineFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final entries = snapshot.data ?? [];
-              if (entries.isEmpty) {
-                return const Text('No entries yet.');
-              }
-              return Column(
-                children: entries.take(10).map((entry) {
-                  final data = _decodeMeasurements(entry.measurements);
-                  final type = (data['type'] ?? 'note').toString();
-                  final payload = data['payload'] is Map ? data['payload'] as Map : const {};
-                  final label = _timelineLabel(type);
-                  final detail = _timelineDetail(type, payload, entry.notes);
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(label),
-                    subtitle: Text(detail),
-                    trailing: Text(_formatDate(entry.createdAt), style: Theme.of(context).textTheme.bodySmall),
-                  );
-                }).toList(),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _timelineLabel(String type) {
-    switch (type) {
-      case 'checkin':
-        return 'Progress Check-in';
-      case 'fit_session':
-        return 'Fit Session';
-      case 'routine':
-        return 'Routine Check-in';
-      case 'style_notes':
-        return 'Style Notes';
-      case 'measurements':
-        return 'Measurements';
-      case 'confidence':
-        return 'Confidence';
-      default:
-        return 'Entry';
-    }
-  }
-
-  String _timelineDetail(String type, Map payload, String? notes) {
-    if (type == 'checkin') {
-      final face = payload['face'] ?? '-';
-      final physique = payload['physique'] ?? '-';
-      final style = payload['style'] ?? '-';
-      return 'Face $face • Physique $physique • Style $style';
-    }
-    if (type == 'fit_session') {
-      final score = payload['score'] ?? '-';
-      return 'Score $score • ${notes ?? 'No notes'}';
-    }
-    if (type == 'measurements') {
-      final waist = payload['waist'] ?? '-';
-      final hips = payload['hips'] ?? '-';
-      final chest = payload['chest'] ?? '-';
-      return 'W $waist • H $hips • C $chest';
-    }
-    if (notes != null && notes.trim().isNotEmpty) {
-      return notes.trim();
-    }
-    return 'No notes';
-  }
-
-  DateTimeRange _rangeFor(_CalorieRange range) {
-    final now = DateTime.now();
-    final startOfToday = DateTime(now.year, now.month, now.day);
-    switch (range) {
-      case _CalorieRange.day:
-        return DateTimeRange(start: startOfToday, end: startOfToday.add(const Duration(days: 1)));
-      case _CalorieRange.week:
-        return DateTimeRange(start: startOfToday.subtract(const Duration(days: 6)), end: startOfToday.add(const Duration(days: 1)));
-      case _CalorieRange.month:
-        return DateTimeRange(start: startOfToday.subtract(const Duration(days: 29)), end: startOfToday.add(const Duration(days: 1)));
-    }
   }
 
   Future<void> _ensureAccess() async {
@@ -741,56 +319,6 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     }
   }
 
-  Future<void> _pickMedia() async {
-    final ok = await CloudConsent.ensureAppearanceConsent(context, _settingsRepo);
-    if (!ok || !context.mounted) return;
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-      type: FileType.media,
-    );
-    if (result == null || result.files.isEmpty) return;
-    setState(() {
-      for (final file in result.files) {
-        if (file.path == null) continue;
-        _uploadService.enqueue(
-          UploadItem(
-            type: UploadType.appearance,
-            name: file.name,
-            path: file.path!,
-          ),
-        );
-      }
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Queued for upload.')),
-    );
-  }
-
-  Future<void> _useCamera() async {
-    if (!(Platform.isAndroid || Platform.isIOS)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Camera is available on mobile devices.')),
-      );
-      return;
-    }
-    final ok = await CloudConsent.ensureAppearanceConsent(context, _settingsRepo);
-    if (!ok || !context.mounted) return;
-    final file = await _imagePicker.pickImage(source: ImageSource.camera);
-    if (file == null) return;
-    setState(() {
-      _uploadService.enqueue(
-        UploadItem(
-          type: UploadType.appearance,
-          name: file.name,
-          path: file.path,
-        ),
-      );
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Captured and queued.')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (!_accessReady) {
@@ -809,101 +337,13 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
           ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              GlassCard(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Assessment'),
-                    const SizedBox(height: 12),
-                    SegmentedButton<AppearanceAssessment>(
-                      segments: const [
-                        ButtonSegment(value: AppearanceAssessment.face, label: Text('Face')),
-                        ButtonSegment(value: AppearanceAssessment.physique, label: Text('Physique')),
-                        ButtonSegment(value: AppearanceAssessment.style, label: Text('Style')),
-                      ],
-                      selected: {_assessment},
-                      onSelectionChanged: (value) {
-                        setState(() => _assessment = value.first);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
               _buildProgressRingsCard(),
               const SizedBox(height: 12),
-              _buildFitSessionCard(),
+              _buildFeedbackHistoryCard('Skin Feedback History', 'skin'),
               const SizedBox(height: 12),
-              _buildRoutineCheckInCard(),
+              _buildFeedbackHistoryCard('Physique Feedback History', 'physique'),
               const SizedBox(height: 12),
-              _buildStyleNotesCard(),
-              const SizedBox(height: 12),
-              _buildMeasurementsCard(),
-              const SizedBox(height: 12),
-              _buildConfidenceCard(),
-              const SizedBox(height: 12),
-              GlassCard(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Energy Balance'),
-                    const SizedBox(height: 12),
-                    SegmentedButton<_CalorieRange>(
-                      segments: const [
-                        ButtonSegment(value: _CalorieRange.day, label: Text('Day')),
-                        ButtonSegment(value: _CalorieRange.week, label: Text('Week')),
-                        ButtonSegment(value: _CalorieRange.month, label: Text('Month')),
-                      ],
-                      selected: {_calorieRange},
-                      onSelectionChanged: (value) {
-                        setState(() => _calorieRange = value.first);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    FutureBuilder<CalorieAggregate>(
-                      future: _calorieService.aggregateCaloriesForRange(
-                        _rangeFor(_calorieRange).start,
-                        _rangeFor(_calorieRange).end,
-                      ),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState != ConnectionState.done) {
-                          return const Center(child: CircularProgressIndicator());
-                        }
-                        final data = snapshot.data;
-                        if (data == null) {
-                          return const Text('No calorie data yet.');
-                        }
-                        final net = data.netCalories;
-                        final netLabel = net >= 0 ? 'Surplus' : 'Deficit';
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${net.abs().toStringAsFixed(0)} kcal $netLabel',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            const SizedBox(height: 8),
-                            Text('Added ${data.caloriesAdded.toStringAsFixed(0)} kcal'),
-                            Text('Consumed ${(data.caloriesConsumed).toStringAsFixed(0)} kcal'),
-                            const SizedBox(height: 8),
-                            Text('Workout ${data.workoutCalories.toStringAsFixed(0)} kcal'),
-                            Text('BMR ${data.bmrCalories.toStringAsFixed(0)} kcal'),
-                            if (!data.bmrAvailable) ...[
-                              const SizedBox(height: 6),
-                              Text(
-                                'Add age/height/weight in Profile for BMR.',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ],
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
+              _buildFeedbackHistoryCard('Style Feedback History', 'style'),
               const SizedBox(height: 12),
               if (_uploadService.queue.where((e) => e.type == UploadType.appearance).isNotEmpty)
                 ...[
@@ -916,13 +356,12 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                         const SizedBox(height: 8),
                         ..._uploadService.queue
                             .where((e) => e.type == UploadType.appearance)
-                            .map((item) => _uploadTile(item, _assessment)),
+                            .map(_uploadTile),
                       ],
                     ),
                   ),
                   const SizedBox(height: 12),
                 ],
-              _buildTimelineCard(),
             ],
           ),
         ],
@@ -930,7 +369,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     );
   }
 
-  Widget _uploadTile(UploadItem item, AppearanceAssessment assessment) {
+  Widget _uploadTile(UploadItem item) {
     final statusText = item.status == UploadStatus.queued
         ? 'Queued'
         : item.status == UploadStatus.uploading
@@ -938,17 +377,12 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             : item.status == UploadStatus.done
                 ? 'Uploaded'
                 : 'Error';
-    final assessmentLabel = switch (assessment) {
-      AppearanceAssessment.face => 'Face',
-      AppearanceAssessment.physique => 'Physique',
-      AppearanceAssessment.style => 'Style',
-    };
     return Column(
       children: [
         ListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(item.name),
-          subtitle: Text('$assessmentLabel • $statusText'),
+          subtitle: Text('Appearance • $statusText'),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -980,45 +414,14 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   }
 }
 
-enum _CalorieRange { day, week, month }
-
-class _ScoreSlider extends StatelessWidget {
-  const _ScoreSlider({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String label;
-  final double value;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('$label ${value.round()}'),
-        Slider(
-          value: value,
-          min: 0,
-          max: 100,
-          divisions: 20,
-          onChanged: onChanged,
-        ),
-      ],
-    );
-  }
-}
-
 class _StackedRings extends StatelessWidget {
   const _StackedRings({
-    required this.face,
+    required this.skin,
     required this.physique,
     required this.style,
   });
 
-  final double face;
+  final double skin;
   final double physique;
   final double style;
 
@@ -1046,7 +449,7 @@ class _StackedRings extends StatelessWidget {
             height: 120,
             width: 120,
             child: CircularProgressIndicator(
-              value: face.clamp(0.0, 1.0),
+              value: skin.clamp(0.0, 1.0),
               strokeWidth: 10,
               backgroundColor: secondary.withOpacity(0.12),
               color: secondary.withOpacity(0.75),
@@ -1065,7 +468,7 @@ class _StackedRings extends StatelessWidget {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Face ${((face) * 100).round()}'),
+              Text('Skin ${((skin) * 100).round()}'),
               Text('Phys ${((physique) * 100).round()}'),
               Text('Style ${((style) * 100).round()}'),
             ],
@@ -1074,4 +477,16 @@ class _StackedRings extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FeedbackScores {
+  const _FeedbackScores({
+    required this.skin,
+    required this.physique,
+    required this.style,
+  });
+
+  final double skin;
+  final double physique;
+  final double style;
 }
