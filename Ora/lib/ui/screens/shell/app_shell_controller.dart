@@ -12,6 +12,7 @@ class AppShellController {
   final ValueNotifier<bool> appearanceProfileEnabled = ValueNotifier<bool>(false);
   final ValueNotifier<String> appearanceProfileSex = ValueNotifier<String>('neutral');
   final ValueNotifier<bool> orbHidden = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> activeSession = ValueNotifier<bool>(false);
   final ValueNotifier<InputDispatch?> pendingInput = ValueNotifier<InputDispatch?>(null);
 
   void selectTab(int index) {
@@ -37,6 +38,11 @@ class AppShellController {
   void setOrbHidden(bool value) {
     if (orbHidden.value == value) return;
     orbHidden.value = value;
+  }
+
+  void setActiveSession(bool value) {
+    if (activeSession.value == value) return;
+    activeSession.value = value;
   }
 
   void setPendingInput(InputDispatch? input) {

@@ -24,6 +24,7 @@ import '../../../domain/models/last_logged_set.dart';
 import '../../../domain/models/session_context.dart';
 import '../../../domain/models/session_exercise_info.dart';
 import '../../../domain/services/exercise_matcher.dart';
+import '../shell/app_shell_controller.dart';
 import '../../widgets/confirmation_card/confirmation_card.dart';
 import '../../widgets/exercise_modal/exercise_modal.dart';
 import '../../widgets/glass/glass_background.dart';
@@ -130,11 +131,13 @@ class _SessionScreenState extends State<SessionScreen> {
   String _cloudModel = 'gemini-2.5-pro';
   String _cloudProvider = 'gemini';
   bool _wakeWordEnabled = false;
+  bool _sessionEnded = false;
 
   @override
   void initState() {
     super.initState();
     final db = AppDatabase.instance;
+    AppShellController.instance.setActiveSession(true);
     _workoutRepo = WorkoutRepo(db);
     _exerciseRepo = ExerciseRepo(db);
     _programRepo = ProgramRepo(db);
@@ -161,6 +164,9 @@ class _SessionScreenState extends State<SessionScreen> {
   void dispose() {
     _voiceController.dispose();
     _restTimer?.cancel();
+    if (_sessionEnded) {
+      AppShellController.instance.setActiveSession(false);
+    }
     super.dispose();
   }
 
@@ -190,10 +196,11 @@ class _SessionScreenState extends State<SessionScreen> {
     try {
       final programId = widget.contextData.programId;
       final programDayId = widget.contextData.programDayId;
+      if (programId == null) return;
       final byDay = await _programRepo.getExerciseNamesByDayForProgram(programId);
       final other = <String>[];
       byDay.forEach((dayId, names) {
-        if (dayId != programDayId) {
+        if (programDayId == null || dayId != programDayId) {
           other.addAll(names);
         }
       });
@@ -1275,6 +1282,8 @@ class _SessionScreenState extends State<SessionScreen> {
             icon: const Icon(Icons.stop_circle_outlined),
             onPressed: () async {
               await _workoutRepo.endSession(widget.contextData.sessionId);
+              _sessionEnded = true;
+              AppShellController.instance.setActiveSession(false);
               if (!mounted) return;
               Navigator.of(context).pop();
             },

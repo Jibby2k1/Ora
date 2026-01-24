@@ -1,7 +1,4 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
 
@@ -10,7 +7,6 @@ import '../../../data/repositories/program_repo.dart';
 import '../../../data/repositories/settings_repo.dart';
 import '../../../data/repositories/workout_repo.dart';
 import '../../../domain/services/calorie_service.dart';
-import '../../../domain/services/import_service.dart';
 import '../../../domain/services/session_service.dart';
 import '../day_picker/day_picker_screen.dart';
 import '../history/exercise_catalog_screen.dart';
@@ -21,6 +17,30 @@ import '../../../core/input/input_router.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 import 'program_editor_screen.dart';
+
+class _ProgramDayMatch {
+  const _ProgramDayMatch({
+    required this.dayId,
+    required this.dayIndex,
+    required this.dayName,
+    required this.matchingExercises,
+  });
+
+  final int dayId;
+  final int dayIndex;
+  final String dayName;
+  final List<String> matchingExercises;
+}
+
+enum _VoiceDayChoiceType { freeStyle, programDay }
+
+class _VoiceDayChoice {
+  const _VoiceDayChoice.freeStyle() : type = _VoiceDayChoiceType.freeStyle, programDayId = null;
+  const _VoiceDayChoice.programDay(this.programDayId) : type = _VoiceDayChoiceType.programDay;
+
+  final _VoiceDayChoiceType type;
+  final int? programDayId;
+}
 
 class ProgramsScreen extends StatefulWidget {
   const ProgramsScreen({super.key});
@@ -73,15 +93,23 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     if (!mounted || _handlingInput) return;
     final dispatch = AppShellController.instance.pendingInput.value;
     if (dispatch == null) return;
-    if (dispatch.intent != InputIntent.trainingLog && dispatch.intent != InputIntent.programImport) {
+    if (dispatch.intent != InputIntent.trainingLog) {
       return;
     }
     _handlingInput = true;
     AppShellController.instance.clearPendingInput();
-    if (dispatch.intent == InputIntent.programImport && dispatch.event.file != null) {
-      await _confirmProgramImport(dispatch.event.file!);
-    } else if (dispatch.event.text != null && dispatch.event.text!.trim().isNotEmpty) {
-      await _confirmTrainingText(dispatch.entity ?? dispatch.event.text!.trim());
+    if (dispatch.event.text != null && dispatch.event.text!.trim().isNotEmpty) {
+      final text = dispatch.event.text!.trim();
+      if (dispatch.event.source == InputSource.mic && _selectedProgramId != null) {
+        final hasActive = await _workoutRepo.hasActiveSession(programId: _selectedProgramId);
+        if (hasActive) {
+          await _confirmTrainingText(dispatch.entity ?? text);
+        } else {
+          await _promptVoiceLogDaySelection(text, entity: dispatch.entity);
+        }
+      } else {
+        await _confirmTrainingText(dispatch.entity ?? text);
+      }
     }
     _handlingInput = false;
   }
@@ -145,8 +173,19 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     );
   }
 
-  Future<void> _confirmProgramImport(File file) async {
-    final approved = await showModalBottomSheet<bool>(
+  Future<void> _promptVoiceLogDaySelection(String text, {String? entity}) async {
+    final programId = _selectedProgramId;
+    if (programId == null) {
+      await _confirmTrainingText(entity ?? text);
+      return;
+    }
+    final matches = await _findMatchingProgramDays(
+      programId: programId,
+      text: text,
+      entity: entity,
+    );
+    if (!mounted) return;
+    final choice = await showModalBottomSheet<_VoiceDayChoice>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) {
@@ -157,36 +196,121 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Import program'),
+                const Text('Select day for logging'),
                 const SizedBox(height: 8),
-                Text(file.path.split('/').last),
+                Text(text),
                 const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
+                SizedBox(
+                  width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    icon: const Icon(Icons.file_download),
-                    label: const Text('Import'),
+                    onPressed: () => Navigator.of(context).pop(const _VoiceDayChoice.freeStyle()),
+                    icon: const Icon(Icons.bolt),
+                    label: const Text('Free Style'),
                   ),
                 ),
+                const SizedBox(height: 12),
+                if (matches.isEmpty)
+                  Text(
+                    'No matching program day found.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  )
+                else
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 240),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: matches.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final match = matches[index];
+                        final preview = match.matchingExercises.take(3).join(', ');
+                        final dayLabel = 'Day ${match.dayIndex + 1}';
+                        final subtitle = preview.isEmpty ? dayLabel : '$dayLabel • $preview';
+                        return ListTile(
+                          tileColor: Theme.of(context).colorScheme.surface.withOpacity(0.2),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          title: Text(match.dayName),
+                          subtitle: Text(subtitle),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => Navigator.of(context).pop(_VoiceDayChoice.programDay(match.dayId)),
+                        );
+                      },
+                    ),
+                  ),
               ],
             ),
           ),
         );
       },
     );
-    if (approved != true) return;
-    final service = ImportService(AppDatabase.instance);
-    final result = await service.importFromXlsxPath(file.path);
-    final missingCount = result.missingExercises.length;
-    final snack = missingCount == 0
-        ? 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises.'
-        : 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises. Missing $missingCount exercises.';
+    if (choice == null) return;
+    if (choice.type == _VoiceDayChoiceType.freeStyle) {
+      await _startFreeStyleSession(programId: programId);
+    } else if (choice.programDayId != null) {
+      await _startProgramDaySession(choice.programDayId!);
+    }
+  }
+
+  Future<List<_ProgramDayMatch>> _findMatchingProgramDays({
+    required int programId,
+    required String text,
+    String? entity,
+  }) async {
+    final days = await _programRepo.getProgramDays(programId);
+    final namesByDay = await _programRepo.getExerciseNamesByDayForProgram(programId);
+    final loweredText = text.toLowerCase();
+    final loweredEntity = (entity ?? '').toLowerCase().trim();
+    final matches = <_ProgramDayMatch>[];
+    for (final day in days) {
+      final dayId = day['id'] as int;
+      final dayIndex = day['day_index'] as int;
+      final dayName = day['day_name'] as String;
+      final names = namesByDay[dayId] ?? const <String>[];
+      final matched = <String>[];
+      for (final name in names) {
+        final loweredName = name.toLowerCase();
+        final entityMatch = loweredEntity.isNotEmpty &&
+            (loweredName == loweredEntity ||
+                loweredName.contains(loweredEntity) ||
+                loweredEntity.contains(loweredName));
+        final textMatch = loweredText.contains(loweredName);
+        if (entityMatch || textMatch) {
+          matched.add(name);
+        }
+      }
+      if (matched.isNotEmpty) {
+        matches.add(
+          _ProgramDayMatch(
+            dayId: dayId,
+            dayIndex: dayIndex,
+            dayName: dayName,
+            matchingExercises: matched,
+          ),
+        );
+      }
+    }
+    return matches;
+  }
+
+  Future<void> _startFreeStyleSession({int? programId}) async {
+    final contextData = await _sessionService.startFreeSession(programId: programId);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(snack)),
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => SessionScreen(contextData: contextData)),
     );
-    await _loadProgramDays();
+  }
+
+  Future<void> _startProgramDaySession(int programDayId) async {
+    final programId = _selectedProgramId;
+    if (programId == null) return;
+    final contextData = await _sessionService.startSessionForProgramDay(
+      programId: programId,
+      programDayId: programDayId,
+    );
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => SessionScreen(contextData: contextData)),
+    );
   }
 
   Future<void> _loadAppearancePrefs() async {
@@ -241,61 +365,6 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
       MaterialPageRoute(builder: (_) => ProgramEditorScreen(programId: programId)),
     );
     setState(() {});
-  }
-
-  Future<void> _importProgram() async {
-    final service = ImportService(AppDatabase.instance);
-    try {
-      final selection = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['xlsx'],
-        withData: true,
-      );
-      if (selection == null || selection.files.isEmpty) return;
-      final file = selection.files.first;
-      final result = file.bytes != null
-          ? await service.importFromXlsxBytes(
-              file.bytes!,
-              programNameOverride: file.name.replaceAll('.xlsx', ''),
-            )
-          : await service.importFromXlsxPath(
-              file.path ?? (throw Exception('No file path available')),
-            );
-      if (!context.mounted) return;
-      final missingCount = result.missingExercises.length;
-      final snack = missingCount == 0
-          ? 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises.'
-          : 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises. Missing $missingCount exercises.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(snack)),
-      );
-      if (missingCount > 0) {
-        await showDialog<void>(
-          context: context,
-          builder: (context) {
-            return AlertDialog(
-              title: const Text('Missing exercises'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: ListView(
-                  shrinkWrap: true,
-                  children: result.missingExercises.map((e) => Text('• $e')).toList(),
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
-              ],
-            );
-          },
-        );
-      }
-      setState(() {});
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Import failed: $e')),
-      );
-    }
   }
 
   DateTimeRange _todayRange() {
@@ -517,10 +586,6 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.file_download),
-            onPressed: _importProgram,
-          ),
-          IconButton(
             icon: const Icon(Icons.add),
             onPressed: _createProgram,
           ),
@@ -644,19 +709,24 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
                         GridView.count(
                           crossAxisCount: 2,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: 2.4,
+                          mainAxisSpacing: 8,
+                          crossAxisSpacing: 8,
+                          childAspectRatio: 3.0,
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           children: (_relevantMuscles.isEmpty ? _muscleOrder : _relevantMuscles)
                               .map(
                                 (muscle) => OutlinedButton(
                                   onPressed: () => _showMuscleStats(muscle),
-                                  child: Text(muscle),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    visualDensity: VisualDensity.compact,
+                                    textStyle: const TextStyle(fontSize: 12),
+                                  ),
+                                  child: Text(muscle, maxLines: 1, overflow: TextOverflow.ellipsis),
                                 ),
                               )
                               .toList(),

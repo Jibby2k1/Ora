@@ -226,6 +226,22 @@ class ProgramRepo {
     );
   }
 
+  Future<int?> getProgramDayExerciseIdByOrder({
+    required int programDayId,
+    required int orderIndex,
+  }) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'program_day_exercise',
+      columns: ['id'],
+      where: 'program_day_id = ? AND order_index = ?',
+      whereArgs: [programDayId, orderIndex],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['id'] as int?;
+  }
+
   Future<Map<int, List<String>>> getExerciseNamesByDayForProgram(int programId) async {
     final db = await _db.database;
     final rows = await db.rawQuery('''
