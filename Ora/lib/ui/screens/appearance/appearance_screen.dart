@@ -703,6 +703,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Appearance'),
+        actions: const [SizedBox(width: 72)],
       ),
       body: Stack(
         children: [

@@ -1279,6 +1279,7 @@ class _SessionScreenState extends State<SessionScreen> {
               Navigator.of(context).pop();
             },
           ),
+          const SizedBox(width: 72),
         ],
       ),
       floatingActionButton: GestureDetector(

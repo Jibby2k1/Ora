@@ -398,6 +398,7 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
             icon: const Icon(Icons.add),
             onPressed: _createProgram,
           ),
+          const SizedBox(width: 72),
         ],
       ),
       body: Stack(

@@ -31,6 +31,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Leaderboard'),
+        actions: const [SizedBox(width: 72)],
       ),
       body: Stack(
         children: [

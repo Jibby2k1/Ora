@@ -79,6 +79,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('History'),
+        actions: const [SizedBox(width: 72)],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(110),
           child: Padding(

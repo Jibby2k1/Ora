@@ -55,6 +55,7 @@ class _DayPickerScreenState extends State<DayPickerScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pick Day'),
+        actions: const [SizedBox(width: 72)],
       ),
       body: Stack(
         children: [

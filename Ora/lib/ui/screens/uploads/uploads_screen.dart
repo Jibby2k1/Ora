@@ -45,6 +45,7 @@ class _UploadsScreenState extends State<UploadsScreen> {
             onPressed: _uploadService.uploadAll,
             child: const Text('Upload all'),
           ),
+          const SizedBox(width: 72),
         ],
       ),
       body: Stack(
