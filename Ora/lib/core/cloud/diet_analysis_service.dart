@@ -87,6 +87,56 @@ class DietAnalysisService {
     return _parseGemini(response.body);
   }
 
+  Future<DietEstimate?> analyzeText({
+    required String text,
+    required String provider,
+    required String apiKey,
+    required String model,
+  }) async {
+    if (provider == 'openai') {
+      return _openAiAnalyzeText(text: text, apiKey: apiKey, model: model);
+    }
+    if (provider != 'gemini') {
+      return null;
+    }
+    final uri = Uri.https(
+      'generativelanguage.googleapis.com',
+      '/v1beta/models/$model:generateContent',
+      {'key': apiKey},
+    );
+    final prompt = _analysisTextPrompt();
+    final payload = {
+      'contents': [
+        {
+          'role': 'user',
+          'parts': [
+            {'text': prompt},
+            {'text': text},
+          ],
+        }
+      ],
+      'generationConfig': {
+        'temperature': 0.1,
+        'topP': 0.9,
+        'topK': 40,
+        'maxOutputTokens': 256,
+      },
+    };
+    final response = await GeminiQueue.instance.run(
+      () => http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      ),
+      label: 'diet-text',
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      debugPrint('[Gemini][diet-text] ${response.statusCode} ${_trimGeminiBody(response.body)}');
+      return null;
+    }
+    return _parseGemini(response.body);
+  }
+
   Future<DietEstimate?> _openAiAnalyzeImage({
     required File file,
     required String apiKey,
@@ -127,6 +177,48 @@ class DietAnalysisService {
     final jsonText = _extractJsonFromText(text);
     if (jsonText == null) return null;
     return _parseOpenAiJson(jsonText);
+  }
+
+  Future<DietEstimate?> _openAiAnalyzeText({
+    required String text,
+    required String apiKey,
+    required String model,
+  }) async {
+    final uri = Uri.https('api.openai.com', '/v1/chat/completions');
+    final prompt = _analysisTextPrompt();
+    final payload = {
+      'model': model,
+      if (_openAiSupportsTemperature(model)) 'temperature': 0.1,
+      'messages': [
+        {'role': 'system', 'content': prompt},
+        {'role': 'user', 'content': text},
+      ],
+      'response_format': {'type': 'json_object'},
+    };
+    final response = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $apiKey',
+      },
+      body: jsonEncode(payload),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      debugPrint('[OpenAI][diet-text] ${response.statusCode} ${_trimGeminiBody(response.body)}');
+      return null;
+    }
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final choices = data['choices'] as List<dynamic>? ?? [];
+      if (choices.isEmpty) return null;
+      final message = choices.first['message'] as Map<String, dynamic>?;
+      final content = message?['content']?.toString() ?? '';
+      final jsonText = _extractJsonFromText(content);
+      if (jsonText == null) return null;
+      return _parseOpenAiJson(jsonText);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<DietEstimate?> refineEstimate({
@@ -196,7 +288,7 @@ class DietAnalysisService {
     final prompt = _refinePrompt(current);
     final payload = {
       'model': model,
-      'temperature': 0.0,
+      if (_openAiSupportsTemperature(model)) 'temperature': 0.0,
       'messages': [
         {'role': 'system', 'content': prompt},
         {'role': 'user', 'content': userText},
@@ -359,6 +451,29 @@ Rules:
 ''';
   }
 
+  String _analysisTextPrompt() {
+    return '''
+You are estimating nutrition from a text food log.
+Return ONLY a single JSON object (no markdown, no extra text).
+Schema:
+{
+  "meal_name": string,
+  "calories": number,
+  "protein_g": number,
+  "carbs_g": number,
+  "fat_g": number,
+  "fiber_g": number,
+  "sodium_mg": number,
+  "micros": { "name": number },
+  "notes": string
+}
+Rules:
+- Use conservative, realistic estimates based on typical serving sizes.
+- If the text includes quantities (e.g., cups, grams, ounces), respect them.
+- Use numbers only; omit fields if unknown.
+''';
+  }
+
   String _refinePrompt(DietEstimate current) {
     final currentJson = jsonEncode({
       'meal_name': current.mealName,
@@ -395,5 +510,10 @@ Apply user corrections and return the updated estimate.
     final trimmed = body.trim();
     if (trimmed.length <= 400) return trimmed;
     return '${trimmed.substring(0, 400)}...';
+  }
+
+  bool _openAiSupportsTemperature(String model) {
+    final lower = model.toLowerCase();
+    return !lower.startsWith('gpt-5');
   }
 }

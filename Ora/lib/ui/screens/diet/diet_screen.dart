@@ -97,7 +97,7 @@ class _DietScreenState extends State<DietScreen> {
         }
       }
     } else if ((dispatch.entity ?? event.text)?.trim().isNotEmpty == true) {
-      await _addMeal(initialName: (dispatch.entity ?? event.text!).trim());
+      await _analyzeTextLog((dispatch.entity ?? event.text!).trim());
     }
     _handlingInput = false;
   }
@@ -374,6 +374,36 @@ class _DietScreenState extends State<DietScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Unable to analyze photo.')),
       );
+      return;
+    }
+    await _reviewEstimate(estimate);
+  }
+
+  Future<void> _analyzeTextLog(String text) async {
+    final ok = await CloudConsent.ensureDietConsent(context, _settingsRepo);
+    if (!ok || !context.mounted) return;
+    final enabled = await _settingsRepo.getCloudEnabled();
+    final apiKey = await _settingsRepo.getCloudApiKey();
+    final provider = await _settingsRepo.getCloudProvider();
+    final model = await _settingsRepo.getCloudModel();
+    if (!enabled || apiKey == null || apiKey.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cloud analysis requires an API key.')),
+      );
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Analyzing log...')),
+    );
+    final estimate = await _dietAnalysis.analyzeText(
+      text: text,
+      provider: provider,
+      apiKey: apiKey,
+      model: model,
+    );
+    if (!mounted) return;
+    if (estimate == null) {
+      await _addMeal(initialName: text);
       return;
     }
     await _reviewEstimate(estimate);
