@@ -9,6 +9,7 @@ import '../../../data/repositories/appearance_repo.dart';
 import '../../../data/repositories/settings_repo.dart';
 import '../../../domain/models/appearance_entry.dart';
 import '../../../core/cloud/upload_service.dart';
+import '../../../domain/services/calorie_service.dart';
 import '../uploads/uploads_screen.dart';
 import '../../widgets/consent/cloud_consent.dart';
 import '../../widgets/glass/glass_background.dart';
@@ -24,6 +25,7 @@ class AppearanceScreen extends StatefulWidget {
 class _AppearanceScreenState extends State<AppearanceScreen> {
   late final SettingsRepo _settingsRepo;
   late final AppearanceRepo _appearanceRepo;
+  late final CalorieService _calorieService;
   final _notesController = TextEditingController();
   final _measurementsController = TextEditingController();
   List<AppearanceEntry> _history = const [];
@@ -31,12 +33,14 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   final _imagePicker = ImagePicker();
   bool _appearanceProfileEnabled = false;
   String _appearanceSex = 'neutral';
+  _CalorieRange _calorieRange = _CalorieRange.day;
 
   @override
   void initState() {
     super.initState();
     _settingsRepo = SettingsRepo(AppDatabase.instance);
     _appearanceRepo = AppearanceRepo(AppDatabase.instance);
+    _calorieService = CalorieService(AppDatabase.instance);
     _loadHistory();
     _loadAppearanceProfilePrefs();
     _uploadService.addListener(_onUploadsChanged);
@@ -181,6 +185,19 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     await _uploadService.uploadAll();
   }
 
+  DateTimeRange _rangeFor(_CalorieRange range) {
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    switch (range) {
+      case _CalorieRange.day:
+        return DateTimeRange(start: startOfToday, end: startOfToday.add(const Duration(days: 1)));
+      case _CalorieRange.week:
+        return DateTimeRange(start: startOfToday.subtract(const Duration(days: 6)), end: startOfToday.add(const Duration(days: 1)));
+      case _CalorieRange.month:
+        return DateTimeRange(start: startOfToday.subtract(const Duration(days: 29)), end: startOfToday.add(const Duration(days: 1)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -253,6 +270,68 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                           ],
                         ),
                       ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              GlassCard(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Energy Balance'),
+                    const SizedBox(height: 12),
+                    SegmentedButton<_CalorieRange>(
+                      segments: const [
+                        ButtonSegment(value: _CalorieRange.day, label: Text('Day')),
+                        ButtonSegment(value: _CalorieRange.week, label: Text('Week')),
+                        ButtonSegment(value: _CalorieRange.month, label: Text('Month')),
+                      ],
+                      selected: {_calorieRange},
+                      onSelectionChanged: (value) {
+                        setState(() => _calorieRange = value.first);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    FutureBuilder<CalorieAggregate>(
+                      future: _calorieService.aggregateCaloriesForRange(
+                        _rangeFor(_calorieRange).start,
+                        _rangeFor(_calorieRange).end,
+                      ),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState != ConnectionState.done) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        final data = snapshot.data;
+                        if (data == null) {
+                          return const Text('No calorie data yet.');
+                        }
+                        final net = data.netCalories;
+                        final netLabel = net >= 0 ? 'Surplus' : 'Deficit';
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${net.abs().toStringAsFixed(0)} kcal $netLabel',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 8),
+                            Text('Added ${data.caloriesAdded.toStringAsFixed(0)} kcal'),
+                            Text('Consumed ${(data.caloriesConsumed).toStringAsFixed(0)} kcal'),
+                            const SizedBox(height: 8),
+                            Text('Workout ${data.workoutCalories.toStringAsFixed(0)} kcal'),
+                            Text('BMR ${data.bmrCalories.toStringAsFixed(0)} kcal'),
+                            if (!data.bmrAvailable) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                'Add age/height/weight in Profile for BMR.',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -433,3 +512,5 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
         .toList();
   }
 }
+
+enum _CalorieRange { day, week, month }
