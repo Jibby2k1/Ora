@@ -171,7 +171,7 @@ class InputRouter {
     final uri = Uri.https('api.openai.com', '/v1/chat/completions');
     final payload = {
       'model': model,
-      'temperature': 0.1,
+      if (_openAiSupportsTemperature(model)) 'temperature': 0.1,
       'messages': [
         {'role': 'system', 'content': prompt},
         {'role': 'user', 'content': 'Classify this input.'},
@@ -191,6 +191,7 @@ class InputRouter {
         .timeout(const Duration(seconds: 12));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      debugPrint('[OpenAI][classify] ${response.statusCode} ${_trimBody(response.body)}');
       _showSnack('OpenAI error: ${response.statusCode}');
       return null;
     }
@@ -245,6 +246,7 @@ class InputRouter {
         .timeout(const Duration(seconds: 12));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      debugPrint('[OpenAI][classify-image] ${response.statusCode} ${_trimBody(response.body)}');
       _showSnack('OpenAI error: ${response.statusCode}');
       return null;
     }
@@ -471,6 +473,17 @@ class InputRouter {
     final trimmed = body.trim();
     if (trimmed.length <= 400) return trimmed;
     return '${trimmed.substring(0, 400)}...';
+  }
+
+  String _trimBody(String body) {
+    final trimmed = body.trim();
+    if (trimmed.length <= 400) return trimmed;
+    return '${trimmed.substring(0, 400)}...';
+  }
+
+  bool _openAiSupportsTemperature(String model) {
+    final lower = model.toLowerCase();
+    return !lower.startsWith('gpt-5');
   }
 
   String _readTextPreview(File file) {
