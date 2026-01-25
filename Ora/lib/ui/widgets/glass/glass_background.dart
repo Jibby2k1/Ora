@@ -5,17 +5,27 @@ class GlassBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final gradientColors = isDark
+        ? const [
+            Color(0xFF0B0D12),
+            Color(0xFF101521),
+            Color(0xFF0B0F14),
+          ]
+        : const [
+            Color(0xFFF6F9FF),
+            Color(0xFFEAF1FB),
+            Color(0xFFF3F6FC),
+          ];
+    final glowPrimary = isDark ? const Color(0xFF7AC4FF) : const Color(0xFF2563EB);
+    final glowSecondary = isDark ? const Color(0xFFB6C2FF) : const Color(0xFF93B2FF);
     return Positioned.fill(
       child: Stack(
         children: [
           Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  Color(0xFF0B0D12),
-                  Color(0xFF101521),
-                  Color(0xFF0B0F14),
-                ],
+                colors: gradientColors,
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -25,7 +35,7 @@ class GlassBackground extends StatelessWidget {
             top: -120,
             right: -80,
             child: _GlowBlob(
-              color: const Color(0xFF7AC4FF).withOpacity(0.22),
+              color: glowPrimary.withOpacity(isDark ? 0.22 : 0.18),
               size: 260,
             ),
           ),
@@ -33,7 +43,7 @@ class GlassBackground extends StatelessWidget {
             bottom: -140,
             left: -80,
             child: _GlowBlob(
-              color: const Color(0xFFB6C2FF).withOpacity(0.16),
+              color: glowSecondary.withOpacity(isDark ? 0.16 : 0.12),
               size: 280,
             ),
           ),

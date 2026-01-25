@@ -26,11 +26,11 @@ class SettingsRepo {
   static const String keyAppearanceProfileEnabled = 'appearance_profile_enabled';
   static const String keyAppearanceProfileSex = 'appearance_profile_sex';
   static const String keyAppearanceAccessEnabled = 'appearance_access_enabled';
+  static const String keyThemeMode = 'theme_mode';
   static const String keyOrbHidden = 'orb_hidden';
   static const String keyOrbDocked = 'orb_docked';
   static const String keyOrbPosX = 'orb_pos_x';
   static const String keyOrbPosY = 'orb_pos_y';
-  static const String keyProfileAvatarPath = 'profile_avatar_path';
 
   Future<String> getUnit() async {
     return (await _get(keyUnit)) ?? 'lb';
@@ -198,21 +198,17 @@ class SettingsRepo {
     await _set(keyAppearanceAccessEnabled, value ? '1' : '0');
   }
 
+  Future<String> getThemeMode() async {
+    return (await _get(keyThemeMode)) ?? 'dark';
+  }
+
+  Future<void> setThemeMode(String mode) async {
+    await _set(keyThemeMode, mode.trim());
+  }
+
   Future<bool> getOrbHidden() async {
     final raw = await _get(keyOrbHidden);
     return raw == '1';
-  }
-
-  Future<String?> getProfileAvatarPath() async {
-    return _get(keyProfileAvatarPath);
-  }
-
-  Future<void> setProfileAvatarPath(String? path) async {
-    if (path == null || path.trim().isEmpty) {
-      await _delete(keyProfileAvatarPath);
-      return;
-    }
-    await _set(keyProfileAvatarPath, path.trim());
   }
 
   Future<void> setOrbHidden(bool value) async {

@@ -12,6 +12,8 @@ class OraApp extends StatefulWidget {
 
   static final GlobalKey<ScaffoldMessengerState> messengerKey =
       GlobalKey<ScaffoldMessengerState>();
+  static final ValueNotifier<ThemeMode> themeMode =
+      ValueNotifier<ThemeMode>(ThemeMode.dark);
 
   static Future<void> _initialize() async {
     final db = AppDatabase.instance;
@@ -36,6 +38,7 @@ class _OraAppState extends State<OraApp> {
     super.initState();
     _initFuture = OraApp._initialize();
     _cloudReadyFuture = _checkCloudReady();
+    _loadThemeMode();
   }
 
   Future<bool> _checkCloudReady() async {
@@ -50,59 +53,72 @@ class _OraAppState extends State<OraApp> {
     });
   }
 
+  Future<void> _loadThemeMode() async {
+    final settings = SettingsRepo(AppDatabase.instance);
+    final mode = await settings.getThemeMode();
+    if (!mounted) return;
+    OraApp.themeMode.value = mode == 'light' ? ThemeMode.light : ThemeMode.dark;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Ora',
-      debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.dark,
-      darkTheme: AppTheme.dark(),
-      scaffoldMessengerKey: OraApp.messengerKey,
-      home: FutureBuilder<void>(
-        future: _initFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return Scaffold(
-              backgroundColor: const Color(0xFF1D4ED8),
-              body: Center(
-                child: Image.asset(
-                  'assets/branding/ora.png',
-                  width: 180,
-                  height: 180,
-                ),
-              ),
-            );
-          }
-          if (snapshot.hasError) {
-            return Scaffold(
-              body: Center(
-                child: Text('Init failed: ${snapshot.error}'),
-              ),
-            );
-          }
-          return FutureBuilder<bool>(
-            future: _cloudReadyFuture,
-            builder: (context, cloudSnap) {
-              if (cloudSnap.connectionState != ConnectionState.done) {
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: OraApp.themeMode,
+      builder: (context, mode, _) {
+        return MaterialApp(
+          title: 'Ora',
+          debugShowCheckedModeBanner: false,
+          themeMode: mode,
+          theme: AppTheme.light(),
+          darkTheme: AppTheme.dark(),
+          scaffoldMessengerKey: OraApp.messengerKey,
+          home: FutureBuilder<void>(
+            future: _initFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
                 return Scaffold(
                   backgroundColor: const Color(0xFF1D4ED8),
                   body: Center(
                     child: Image.asset(
-                      'assets/branding/ora.png',
+                      'assets/branding/ora_logo_blue.png',
                       width: 180,
                       height: 180,
                     ),
                   ),
                 );
               }
-              if (cloudSnap.data != true) {
-                return CloudRequiredScreen(onRefresh: _refreshCloud);
+              if (snapshot.hasError) {
+                return Scaffold(
+                  body: Center(
+                    child: Text('Init failed: ${snapshot.error}'),
+                  ),
+                );
               }
-              return const AppShell();
+              return FutureBuilder<bool>(
+                future: _cloudReadyFuture,
+                builder: (context, cloudSnap) {
+                  if (cloudSnap.connectionState != ConnectionState.done) {
+                    return Scaffold(
+                      backgroundColor: const Color(0xFF1D4ED8),
+                      body: Center(
+                        child: Image.asset(
+                          'assets/branding/ora_logo_blue.png',
+                          width: 180,
+                          height: 180,
+                        ),
+                      ),
+                    );
+                  }
+                  if (cloudSnap.data != true) {
+                    return CloudRequiredScreen(onRefresh: _refreshCloud);
+                  }
+                  return const AppShell();
+                },
+              );
             },
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
