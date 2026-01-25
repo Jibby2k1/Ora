@@ -80,7 +80,8 @@ class _DietScreenState extends State<DietScreen> {
     final event = dispatch.event;
     if (event.file != null) {
       if (_isImageFile(event.file!.path)) {
-        await _analyzePhoto(event.file!);
+        final optimized = await ImageDownscaler.downscaleImageIfNeeded(event.file!);
+        await _analyzePhoto(optimized);
       } else {
         UploadService.instance.enqueue(
           UploadItem(
@@ -376,7 +377,7 @@ class _DietScreenState extends State<DietScreen> {
       );
       return;
     }
-    await _reviewEstimate(estimate);
+    await _reviewEstimate(estimate, imagePath: file.path);
   }
 
   Future<void> _analyzeTextLog(String text) async {
@@ -409,7 +410,7 @@ class _DietScreenState extends State<DietScreen> {
     await _reviewEstimate(estimate);
   }
 
-  Future<void> _reviewEstimate(DietEstimate estimate) async {
+  Future<void> _reviewEstimate(DietEstimate estimate, {String? imagePath}) async {
     final refineController = TextEditingController();
     final servingsController = TextEditingController(text: '1');
     final servingSizeController = TextEditingController(text: '100');
@@ -494,6 +495,17 @@ class _DietScreenState extends State<DietScreen> {
                 return ListView(
                   shrinkWrap: true,
                   children: [
+                    if (imagePath != null)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          File(imagePath),
+                          height: 180,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    if (imagePath != null) const SizedBox(height: 12),
                     Text(current.mealName, style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 12),
                     infoRow('Calories', current.calories),
@@ -648,6 +660,7 @@ class _DietScreenState extends State<DietScreen> {
                               sodiumMg: current.sodiumMg,
                               micros: current.micros,
                               notes: current.notes,
+                              imagePath: imagePath,
                             );
                             if (context.mounted) Navigator.of(context).pop();
                             await _load();
@@ -1045,7 +1058,10 @@ class _DietScreenState extends State<DietScreen> {
                           goals.sodiumMg * goalMultiplier,
                         ),
                       ] else ...[
-                        ..._buildMicroRows(vitaminsOnly: _nutrientView == DietNutrientView.vitamins),
+                        ..._buildMicroRows(
+                          vitaminsOnly: _nutrientView == DietNutrientView.vitamins,
+                          goalMultiplier: goalMultiplier,
+                        ),
                       ],
                     ],
                   ),
@@ -1066,6 +1082,18 @@ class _DietScreenState extends State<DietScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  if (meal.imagePath != null && File(meal.imagePath!).existsSync())
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.file(
+                                        File(meal.imagePath!),
+                                        height: 200,
+                                        width: double.infinity,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  if (meal.imagePath != null && File(meal.imagePath!).existsSync())
+                                    const SizedBox(height: 10),
                                   Row(
                                     children: [
                                       Expanded(
@@ -1113,11 +1141,6 @@ class _DietScreenState extends State<DietScreen> {
                                     '${meal.loggedAt.month}/${meal.loggedAt.day} • ${meal.loggedAt.hour.toString().padLeft(2, '0')}:${meal.loggedAt.minute.toString().padLeft(2, '0')}',
                                     style: Theme.of(context).textTheme.bodySmall,
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    _formatEntry(meal),
-                                    style: Theme.of(context).textTheme.bodySmall,
-                                  ),
                                   if (meal.notes != null && meal.notes!.trim().isNotEmpty) ...[
                                     const SizedBox(height: 6),
                                     Text(
@@ -1125,6 +1148,11 @@ class _DietScreenState extends State<DietScreen> {
                                       style: Theme.of(context).textTheme.bodySmall,
                                     ),
                                   ],
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _formatEntry(meal),
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  ),
                                 ],
                               ),
                             )),
@@ -1342,7 +1370,10 @@ class _DietScreenState extends State<DietScreen> {
     );
   }
 
-  List<Widget> _buildMicroRows({required bool vitaminsOnly}) {
+  List<Widget> _buildMicroRows({
+    required bool vitaminsOnly,
+    required int goalMultiplier,
+  }) {
     final entries = _filterMicros(vitaminsOnly: vitaminsOnly);
     final defaults = vitaminsOnly ? _defaultVitamins : _defaultMicros;
     final goals = vitaminsOnly ? _defaultVitaminGoals : _defaultMicroGoals;
@@ -1367,7 +1398,7 @@ class _DietScreenState extends State<DietScreen> {
           child: Text('${entry.key}: ${entry.value.toStringAsFixed(1)}'),
         );
       }
-      return _summaryRow(entry.key, entry.value, goal);
+      return _summaryRow(entry.key, entry.value, goal * goalMultiplier);
     }).toList();
   }
 

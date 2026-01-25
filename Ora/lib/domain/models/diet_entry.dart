@@ -11,6 +11,7 @@ class DietEntry {
     this.sodiumMg,
     this.micros,
     this.notes,
+    this.imagePath,
   });
 
   final int id;
@@ -24,4 +25,5 @@ class DietEntry {
   final double? sodiumMg;
   final Map<String, double>? micros;
   final String? notes;
+  final String? imagePath;
 }
