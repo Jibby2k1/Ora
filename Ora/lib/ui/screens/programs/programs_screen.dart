@@ -669,7 +669,7 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                               child: ElevatedButton.icon(
                                 onPressed: _startManualDay,
                                 icon: const Icon(Icons.view_list),
-                                label: const Text('Manual day'),
+                                label: const Text('Manual Day'),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -677,7 +677,7 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                               child: ElevatedButton.icon(
                                 onPressed: _startSmartDay,
                                 icon: const Icon(Icons.auto_awesome),
-                                label: const Text('Smart day'),
+                                label: const Text('Smart Day'),
                               ),
                             ),
                           ],
@@ -685,10 +685,10 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
-                          child: OutlinedButton.icon(
+                          child: ElevatedButton.icon(
                             onPressed: () => _startFreeStyleSession(),
                             icon: const Icon(Icons.bolt),
-                            label: const Text('Free day'),
+                            label: const Text('Empty Day'),
                           ),
                         ),
                       ],

@@ -4,14 +4,20 @@ import '../../../data/db/db.dart';
 import '../../../data/repositories/exercise_repo.dart';
 import '../../../data/repositories/settings_repo.dart';
 import '../../../core/voice/muscle_enricher.dart';
+import '../../../domain/services/exercise_matcher.dart';
 import 'history_screen.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 
 class ExerciseCatalogScreen extends StatefulWidget {
-  const ExerciseCatalogScreen({super.key, this.initialQuery});
+  const ExerciseCatalogScreen({
+    super.key,
+    this.initialQuery,
+    this.selectionMode = false,
+  });
 
   final String? initialQuery;
+  final bool selectionMode;
 
   @override
   State<ExerciseCatalogScreen> createState() => _ExerciseCatalogScreenState();
@@ -30,6 +36,9 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
   void initState() {
     super.initState();
     _exerciseRepo = ExerciseRepo(AppDatabase.instance);
+    if (widget.selectionMode) {
+      _activeView = 0;
+    }
     if (widget.initialQuery != null && widget.initialQuery!.trim().isNotEmpty) {
       _controller.text = widget.initialQuery!.trim();
       _search(_controller.text);
@@ -137,14 +146,16 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Exercise Catalog'),
+        title: Text(widget.selectionMode ? 'Select Exercise' : 'Exercise Catalog'),
         actions: [
-          IconButton(
-            tooltip: 'Fill missing muscles (cloud)',
-            onPressed: _isFilling ? null : _fillMissingMuscles,
-            icon: _isFilling ? const Icon(Icons.sync) : const Icon(Icons.auto_fix_high),
-          ),
-          const SizedBox(width: 72),
+          if (!widget.selectionMode) ...[
+            IconButton(
+              tooltip: 'Fill missing muscles (cloud)',
+              onPressed: _isFilling ? null : _fillMissingMuscles,
+              icon: _isFilling ? const Icon(Icons.sync) : const Icon(Icons.auto_fix_high),
+            ),
+            const SizedBox(width: 72),
+          ],
         ],
       ),
       body: Stack(
@@ -152,37 +163,38 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
           const GlassBackground(),
           Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _activeView == 0
-                          ? ElevatedButton(
-                              onPressed: () => setState(() => _activeView = 0),
-                              child: const Text('Catalog'),
-                            )
-                          : OutlinedButton(
-                              onPressed: () => setState(() => _activeView = 0),
-                              child: const Text('Catalog'),
-                            ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _activeView == 1
-                          ? ElevatedButton(
-                              onPressed: () => setState(() => _activeView = 1),
-                              child: const Text('History'),
-                            )
-                          : OutlinedButton(
-                              onPressed: () => setState(() => _activeView = 1),
-                              child: const Text('History'),
-                            ),
-                    ),
-                  ],
+              if (!widget.selectionMode)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _activeView == 0
+                            ? ElevatedButton(
+                                onPressed: () => setState(() => _activeView = 0),
+                                child: const Text('Catalog'),
+                              )
+                            : OutlinedButton(
+                                onPressed: () => setState(() => _activeView = 0),
+                                child: const Text('Catalog'),
+                              ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _activeView == 1
+                            ? ElevatedButton(
+                                onPressed: () => setState(() => _activeView = 1),
+                                child: const Text('History'),
+                              )
+                            : OutlinedButton(
+                                onPressed: () => setState(() => _activeView = 1),
+                                child: const Text('History'),
+                              ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              if (_activeView == 0) ...[
+              if (_activeView == 0 || widget.selectionMode) ...[
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: TextField(
@@ -211,19 +223,29 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
                                 ? (item['equipment_type'] as String)
                                 : '${item['equipment_type']} • $primary',
                           ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.show_chart),
-                            onPressed: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => HistoryScreen(
-                                    initialExerciseId: item['id'] as int,
-                                    mode: HistoryMode.exercise,
-                                  ),
+                          onTap: widget.selectionMode
+                              ? () => Navigator.of(context).pop(
+                                    ExerciseMatch(
+                                      id: item['id'] as int,
+                                      name: item['canonical_name'] as String,
+                                    ),
+                                  )
+                              : null,
+                          trailing: widget.selectionMode
+                              ? const Icon(Icons.add_circle_outline)
+                              : IconButton(
+                                  icon: const Icon(Icons.show_chart),
+                                  onPressed: () async {
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => HistoryScreen(
+                                          initialExerciseId: item['id'] as int,
+                                          mode: HistoryMode.exercise,
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
-                              );
-                            },
-                          ),
                         ),
                       );
                     },
@@ -249,7 +271,7 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
                       ),
                     ),
                   ),
-              ] else
+              ] else if (!widget.selectionMode)
                 Expanded(
                   child: HistoryScreen(embedded: true),
                 ),
