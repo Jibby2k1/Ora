@@ -198,7 +198,7 @@
 				},
 				{
 					"backtrace" : 0,
-					"define" : "GGML_COMMIT=\"5118ab4\""
+					"define" : "GGML_COMMIT=\"a65cdd5\""
 				},
 				{
 					"backtrace" : 9,
@@ -321,7 +321,7 @@
 				},
 				{
 					"backtrace" : 0,
-					"define" : "GGML_COMMIT=\"5118ab4\""
+					"define" : "GGML_COMMIT=\"a65cdd5\""
 				},
 				{
 					"backtrace" : 9,

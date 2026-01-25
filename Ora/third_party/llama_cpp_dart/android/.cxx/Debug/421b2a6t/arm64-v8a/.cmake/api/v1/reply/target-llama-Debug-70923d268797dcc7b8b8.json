@@ -327,15 +327,15 @@
 	[
 		{
 			"backtrace" : 4,
-			"id" : "ggml::@37023a418018fcfa0571"
-		},
-		{
-			"backtrace" : 4,
 			"id" : "ggml-cpu::@37023a418018fcfa0571"
 		},
 		{
 			"backtrace" : 4,
 			"id" : "ggml-base::@37023a418018fcfa0571"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "ggml::@37023a418018fcfa0571"
 		}
 	],
 	"id" : "llama::@ba3f00ef520dc9649554",
