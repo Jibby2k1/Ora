@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../../../data/db/db.dart';
 import '../../../data/repositories/appearance_repo.dart';
@@ -12,6 +13,8 @@ import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 import '../shell/app_shell_controller.dart';
 import '../../../core/input/input_router.dart';
+
+enum AppearanceAssessment { skin, physique, style }
 
 class AppearanceScreen extends StatefulWidget {
   const AppearanceScreen({super.key});
@@ -25,11 +28,21 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   late final AppearanceRepo _appearanceRepo;
   final _uploadService = UploadService.instance;
   bool _accessReady = false;
+  AppearanceAssessment _assessment = AppearanceAssessment.physique;
   double _skinScore = 0;
   double _physiqueScore = 0;
   double _styleScore = 0;
+  Color _physiqueColor = Colors.blue;
+  Color _skinColor = Colors.purple;
+  Color _styleColor = Colors.teal;
   Future<List<AppearanceEntry>>? _timelineFuture;
   bool _handlingInput = false;
+  
+  // Gemini API state
+  String? _geminiResponse;
+  bool _geminiLoading = false;
+  String? _geminiError;
+  final TextEditingController _adviceInputController = TextEditingController();
 
   @override
   void initState() {
@@ -46,6 +59,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   void dispose() {
     _uploadService.removeListener(_onUploadsChanged);
     AppShellController.instance.pendingInput.removeListener(_handlePendingInput);
+    _adviceInputController.dispose();
     super.dispose();
   }
 
@@ -199,6 +213,207 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     return parsed;
   }
 
+  Future<void> _requestGeminiAdvice(String category, String userInput) async {
+    if (!mounted || userInput.trim().isEmpty) return;
+    setState(() {
+      _geminiLoading = true;
+      _geminiError = null;
+      _geminiResponse = null;
+    });
+
+    try {
+      final prompt = '''You are a fitness and personal development coach.
+The user wants advice on how to improve their $category.
+User's request: "$userInput"
+
+Provide a brief, practical assessment (2-3 sentences maximum) on how they can improve their $category.
+Do NOT give advice on ways to change appearance in illegal, immoral, or unethical ways.
+Focus only on practical, health-based improvements.
+Remember: you are only giving guidance, the user will determine their own score.''';
+
+      // For now, we'll use a simple HTTP request to Gemini API
+      // In production, you'd want to get the API key from settings/secure storage
+      final apiKey = ''; // TODO: Get from settings
+      if (apiKey.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _geminiError = 'Gemini API key not configured. Please set it in settings.';
+            _geminiLoading = false;
+          });
+        }
+        return;
+      }
+
+      final uri = Uri.https(
+        'generativelanguage.googleapis.com',
+        '/v1beta/models/gemini-2.5-flash:generateContent',
+        {'key': apiKey},
+      );
+
+      final payload = {
+        'contents': [
+          {
+            'role': 'user',
+            'parts': [
+              {'text': prompt}
+            ],
+          }
+        ],
+        'generationConfig': {
+          'temperature': 0.7,
+          'maxOutputTokens': 200,
+        },
+      };
+
+      final response = await http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (!mounted) return;
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        try {
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          final candidates = data['candidates'] as List<dynamic>? ?? [];
+          if (candidates.isNotEmpty) {
+            final content = candidates.first['content'] as Map<String, dynamic>?;
+            final parts = content?['parts'] as List<dynamic>? ?? [];
+            if (parts.isNotEmpty) {
+              final text = parts.first['text']?.toString() ?? '';
+              setState(() {
+                _geminiResponse = text;
+                _geminiLoading = false;
+              });
+              return;
+            }
+          }
+          setState(() {
+            _geminiError = 'No response from Gemini API.';
+            _geminiLoading = false;
+          });
+        } catch (e) {
+          setState(() {
+            _geminiError = 'Failed to parse Gemini response: $e';
+            _geminiLoading = false;
+          });
+        }
+      } else {
+        setState(() {
+          _geminiError = 'Gemini API error: ${response.statusCode}';
+          _geminiLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _geminiError = 'Request failed: $e';
+          _geminiLoading = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildAssessmentCard() {
+    final categoryName = _assessment.toString().split('.').last;
+    final categoryDisplay = categoryName[0].toUpperCase() + categoryName.substring(1);
+
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Advice for $categoryDisplay'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _adviceInputController,
+            decoration: InputDecoration(
+              hintText: 'What advice would you like to improve your $categoryDisplay?',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+            maxLines: 3,
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: _geminiLoading
+                  ? null
+                  : () => _requestGeminiAdvice(categoryName, _adviceInputController.text),
+              child: _geminiLoading
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Get Advice'),
+            ),
+          ),
+          if (_geminiError != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withOpacity(0.3)),
+              ),
+              child: Text(
+                _geminiError!,
+                style: TextStyle(color: Colors.red[700], fontSize: 13),
+              ),
+            ),
+          ],
+          if (_geminiResponse != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Advice:',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _geminiResponse!,
+                    style: const TextStyle(fontSize: 13, height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.amber.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              'ⓘ This AI will not give advice on illegal, immoral, or unethical ways to change appearance. Focus is on treatable improvements only.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontSize: 11,
+                    color: Colors.amber[900],
+                    height: 1.4,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFeedbackHistoryCard(String title, String category) {
     return GlassCard(
       padding: const EdgeInsets.all(16),
@@ -266,6 +481,14 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               skin: _skinScore / 100.0,
               physique: _physiqueScore / 100.0,
               style: _styleScore / 100.0,
+              physiqueColor: _physiqueColor,
+              skinColor: _skinColor,
+              styleColor: _styleColor,
+              selectedAssessment: _assessment,
+              onPhysiqueColorChanged: (color) => setState(() => _physiqueColor = color),
+              onSkinColorChanged: (color) => setState(() => _skinColor = color),
+              onStyleColorChanged: (color) => setState(() => _styleColor = color),
+              onAssessmentChanged: (assessment) => setState(() => _assessment = assessment),
             ),
           ),
           const SizedBox(height: 8),
@@ -337,6 +560,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
           ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              _buildAssessmentCard(),
+              const SizedBox(height: 12),
               _buildProgressRingsCard(),
               const SizedBox(height: 12),
               _buildFeedbackHistoryCard('Skin Feedback History', 'skin'),
@@ -414,71 +639,6 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   }
 }
 
-class _StackedRings extends StatelessWidget {
-  const _StackedRings({
-    required this.skin,
-    required this.physique,
-    required this.style,
-  });
-
-  final double skin;
-  final double physique;
-  final double style;
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    final secondary = Theme.of(context).colorScheme.secondary;
-    return SizedBox(
-      height: 160,
-      width: 160,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          SizedBox(
-            height: 150,
-            width: 150,
-            child: CircularProgressIndicator(
-              value: physique.clamp(0.0, 1.0),
-              strokeWidth: 10,
-              backgroundColor: primary.withOpacity(0.12),
-              color: primary.withOpacity(0.8),
-            ),
-          ),
-          SizedBox(
-            height: 120,
-            width: 120,
-            child: CircularProgressIndicator(
-              value: skin.clamp(0.0, 1.0),
-              strokeWidth: 10,
-              backgroundColor: secondary.withOpacity(0.12),
-              color: secondary.withOpacity(0.75),
-            ),
-          ),
-          SizedBox(
-            height: 90,
-            width: 90,
-            child: CircularProgressIndicator(
-              value: style.clamp(0.0, 1.0),
-              strokeWidth: 10,
-              backgroundColor: Theme.of(context).colorScheme.tertiary.withOpacity(0.12),
-              color: Theme.of(context).colorScheme.tertiary.withOpacity(0.75),
-            ),
-          ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Skin ${((skin) * 100).round()}'),
-              Text('Phys ${((physique) * 100).round()}'),
-              Text('Style ${((style) * 100).round()}'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _FeedbackScores {
   const _FeedbackScores({
     required this.skin,
@@ -489,4 +649,483 @@ class _FeedbackScores {
   final double skin;
   final double physique;
   final double style;
+}
+
+class _StackedRings extends StatelessWidget {
+  const _StackedRings({
+    required this.skin,
+    required this.physique,
+    required this.style,
+    required this.physiqueColor,
+    required this.skinColor,
+    required this.styleColor,
+    required this.selectedAssessment,
+    required this.onPhysiqueColorChanged,
+    required this.onSkinColorChanged,
+    required this.onStyleColorChanged,
+    required this.onAssessmentChanged,
+  });
+
+  final double skin;
+  final double physique;
+  final double style;
+  final Color physiqueColor;
+  final Color skinColor;
+  final Color styleColor;
+  final AppearanceAssessment selectedAssessment;
+  final ValueChanged<Color> onPhysiqueColorChanged;
+  final ValueChanged<Color> onSkinColorChanged;
+  final ValueChanged<Color> onStyleColorChanged;
+  final ValueChanged<AppearanceAssessment> onAssessmentChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Rings
+        SizedBox(
+          height: 140,
+          width: 140,
+          child: CustomPaint(
+            painter: _RingsPainter(
+              skin: skin.clamp(0.0, 1.0),
+              physique: physique.clamp(0.0, 1.0),
+              style: style.clamp(0.0, 1.0),
+              skinColor: skinColor,
+              physiqueColor: physiqueColor,
+              styleColor: styleColor,
+              selectedAssessment: selectedAssessment,
+            ),
+          ),
+        ),
+        const SizedBox(width: 24),
+        // Legend
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _LegendItem(
+              color: physiqueColor,
+              label: 'Physique',
+              value: (physique * 100).round(),
+              onColorChanged: onPhysiqueColorChanged,
+              isHighlighted: selectedAssessment == AppearanceAssessment.physique,
+              onButtonPressed: () => onAssessmentChanged(AppearanceAssessment.physique),
+            ),
+            const SizedBox(height: 12),
+            _LegendItem(
+              color: skinColor,
+              label: 'Skin',
+              value: (skin * 100).round(),
+              onColorChanged: onSkinColorChanged,
+              isHighlighted: selectedAssessment == AppearanceAssessment.skin,
+              onButtonPressed: () => onAssessmentChanged(AppearanceAssessment.skin),
+            ),
+            const SizedBox(height: 12),
+            _LegendItem(
+              color: styleColor,
+              label: 'Style',
+              value: (style * 100).round(),
+              onColorChanged: onStyleColorChanged,
+              isHighlighted: selectedAssessment == AppearanceAssessment.style,
+              onButtonPressed: () => onAssessmentChanged(AppearanceAssessment.style),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  const _LegendItem({
+    required this.color,
+    required this.label,
+    required this.value,
+    required this.onColorChanged,
+    required this.onButtonPressed,
+    this.isHighlighted = false,
+  });
+
+  final Color color;
+  final String label;
+  final int value;
+  final ValueChanged<Color> onColorChanged;
+  final VoidCallback onButtonPressed;
+  final bool isHighlighted;
+
+  void _showColorPicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _ColorPickerSheet(
+        initialColor: color,
+        label: label,
+        onColorSelected: onColorChanged,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      padding: EdgeInsets.all(isHighlighted ? 4 : 0),
+      decoration: BoxDecoration(
+        color: isHighlighted ? color.withOpacity(0.1) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Color value box (clickable)
+          GestureDetector(
+            onTap: () => _showColorPicker(context),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withOpacity(isHighlighted ? 1.0 : 0.85),
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: isHighlighted
+                    ? [BoxShadow(color: color.withOpacity(0.4), blurRadius: 8, spreadRadius: 1)]
+                    : null,
+              ),
+              child: Text(
+                '$value',
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Label + Button (same width as value box)
+          GestureDetector(
+            onTap: onButtonPressed,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isHighlighted ? color.withOpacity(0.2) : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: isHighlighted ? color : Colors.grey.withOpacity(0.3),
+                  width: isHighlighted ? 1.5 : 1,
+                ),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 13,
+                  color: isHighlighted ? color : Theme.of(context).textTheme.bodyMedium?.color,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ColorPickerSheet extends StatefulWidget {
+  const _ColorPickerSheet({
+    required this.initialColor,
+    required this.label,
+    required this.onColorSelected,
+  });
+
+  final Color initialColor;
+  final String label;
+  final ValueChanged<Color> onColorSelected;
+
+  @override
+  State<_ColorPickerSheet> createState() => _ColorPickerSheetState();
+}
+
+class _ColorPickerSheetState extends State<_ColorPickerSheet> {
+  late Color _selectedColor;
+  late TextEditingController _valueController;
+  late TextEditingController _notesController;
+
+  static const List<Color> _presetColors = [
+    Colors.red,
+    Colors.pink,
+    Colors.purple,
+    Colors.deepPurple,
+    Colors.indigo,
+    Colors.blue,
+    Colors.lightBlue,
+    Colors.cyan,
+    Colors.teal,
+    Colors.green,
+    Colors.lightGreen,
+    Colors.lime,
+    Colors.yellow,
+    Colors.amber,
+    Colors.orange,
+    Colors.deepOrange,
+    Colors.brown,
+    Colors.grey,
+    Colors.blueGrey,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedColor = widget.initialColor;
+    _valueController = TextEditingController(text: '50');
+    _notesController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _valueController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return Container(
+      height: screenHeight * 0.85,
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${widget.label} Color',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: _selectedColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Scrollable content
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                // Preset colors
+                const Text(
+                  'Select Color',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: _presetColors.map((color) {
+                    final isSelected = _selectedColor.value == color.value;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedColor = color;
+                        });
+                      },
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(8),
+                          border: isSelected
+                              ? Border.all(color: Colors.white, width: 3)
+                              : Border.all(color: Colors.grey.withOpacity(0.3)),
+                          boxShadow: isSelected
+                              ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 8)]
+                              : null,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 24),
+                // Enter Value input
+                const Text(
+                  'Enter Value (0-100)',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _valueController,
+                  decoration: InputDecoration(
+                    hintText: 'Enter value',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    counterText: '',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: false),
+                  maxLength: 3,
+                  onChanged: (value) {
+                    final parsed = int.tryParse(value);
+                    if (parsed != null && parsed >= 0 && parsed <= 100) {
+                      // Value is valid
+                    }
+                  },
+                ),
+                const SizedBox(height: 20),
+                // Notes section
+                const Text(
+                  'Notes',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _notesController,
+                  decoration: InputDecoration(
+                    hintText: 'Add personal notes about your ${widget.label}...',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    alignLabelWithHint: true,
+                  ),
+                  maxLines: 6,
+                  minLines: 4,
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+          // Buttons
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Close'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () {
+                      widget.onColorSelected(_selectedColor);
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text('Save'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RingsPainter extends CustomPainter {
+  _RingsPainter({
+    required this.skin,
+    required this.physique,
+    required this.style,
+    required this.skinColor,
+    required this.physiqueColor,
+    required this.styleColor,
+    required this.selectedAssessment,
+  });
+
+  final double skin;
+  final double physique;
+  final double style;
+  final Color skinColor;
+  final Color physiqueColor;
+  final Color styleColor;
+  final AppearanceAssessment selectedAssessment;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    const startAngle = -3.14159 / 2; // Start from top
+
+    // Ring configurations (outermost to innermost)
+    final rings = [
+      (radius: size.width / 2 - 8, value: physique, color: physiqueColor, assessment: AppearanceAssessment.physique),
+      (radius: size.width / 2 - 28, value: skin, color: skinColor, assessment: AppearanceAssessment.skin),
+      (radius: size.width / 2 - 48, value: style, color: styleColor, assessment: AppearanceAssessment.style),
+    ];
+
+    for (final ring in rings) {
+      final isSelected = ring.assessment == selectedAssessment;
+      final strokeWidth = isSelected ? 18.0 : 12.0;
+      final bgOpacity = isSelected ? 0.2 : 0.1;
+      final progressOpacity = isSelected ? 1.0 : 0.7;
+
+      // Background track
+      final bgPaint = Paint()
+        ..color = ring.color.withOpacity(bgOpacity)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawCircle(center, ring.radius, bgPaint);
+
+      // Progress arc
+      if (ring.value > 0) {
+        final progressPaint = Paint()
+          ..color = ring.color.withOpacity(progressOpacity)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = strokeWidth
+          ..strokeCap = StrokeCap.round;
+
+        final sweepAngle = 2 * 3.14159 * ring.value;
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: ring.radius),
+          startAngle,
+          sweepAngle,
+          false,
+          progressPaint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingsPainter oldDelegate) {
+    return skin != oldDelegate.skin ||
+        physique != oldDelegate.physique ||
+        style != oldDelegate.style ||
+        skinColor != oldDelegate.skinColor ||
+        physiqueColor != oldDelegate.physiqueColor ||
+        styleColor != oldDelegate.styleColor ||
+        selectedAssessment != oldDelegate.selectedAssessment;
+  }
 }

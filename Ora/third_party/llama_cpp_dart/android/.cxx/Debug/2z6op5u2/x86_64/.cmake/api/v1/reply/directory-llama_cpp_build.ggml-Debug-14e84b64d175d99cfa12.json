@@ -1,0 +1,105 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 333,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 334,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 402,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"bin/libggml.so"
+			],
+			"targetId" : "ggml::@37023a418018fcfa0571",
+			"targetIndex" : 0,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "include",
+			"paths" : 
+			[
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-cpu.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-alloc.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-backend.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-blas.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-cann.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-cpp.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-cuda.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-opt.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-metal.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-rpc.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-sycl.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-vulkan.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-webgpu.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/ggml-zendnn.h",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml/include/gguf.h"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"bin/libggml-base.so"
+			],
+			"targetId" : "ggml-base::@37023a418018fcfa0571",
+			"targetIndex" : 1,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "lib/cmake/ggml",
+			"paths" : 
+			[
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/2z6op5u2/x86_64/llama_cpp_build/ggml/ggml-config.cmake",
+				"C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/android/.cxx/Debug/2z6op5u2/x86_64/llama_cpp_build/ggml/ggml-version.cmake"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "llama_cpp_build/ggml",
+		"source" : "C:/Users/roblo/projects/Ora/Ora/third_party/llama_cpp_dart/third_party/llama.cpp/ggml"
+	}
+}
