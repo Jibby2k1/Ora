@@ -315,6 +315,7 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     );
   }
 
+
   Future<void> _loadAppearancePrefs() async {
     final enabled = await _settingsRepo.getAppearanceProfileEnabled();
     final sex = await _settingsRepo.getAppearanceProfileSex();
