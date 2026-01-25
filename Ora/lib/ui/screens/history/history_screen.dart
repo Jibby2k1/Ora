@@ -164,7 +164,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         }
         return ListView.separated(
           itemCount: rows.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
           itemBuilder: (context, index) {
             final row = rows[index];
             final startedAt = DateTime.tryParse(row['started_at'] as String? ?? '');
@@ -178,9 +178,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
             final customTitle = notes == null || notes.trim().isEmpty ? null : notes.trim();
             final title = customTitle ??
-                ((dayName != null && dayName.trim().isNotEmpty) ? dayName : (programName ?? 'Free day'));
+                ((dayName != null && dayName.trim().isNotEmpty) ? dayName : (programName ?? 'Empty Day'));
             final programLabel = programName == null || programName.trim().isEmpty
-                ? 'Free day'
+                ? 'Empty Day'
                 : (dayIndex == null ? programName : '$programName • Day ${dayIndex + 1}');
             final dateLabel =
                 startedAt == null ? 'Unknown date' : _formatDate(startedAt);
@@ -188,16 +188,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ? _formatDuration(startedAt, endedAt)
                 : '—';
             final statLabel = '$setCount sets • $exerciseCount exercises';
-            final metaParts = <String>[
-              if (customTitle != null) programLabel,
-              dateLabel,
-              durationLabel,
-              statLabel,
-            ];
-            final subtitle = metaParts.join(' • ');
+            final showProgramLabel = programLabel != title;
+            final titleStyle = Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(fontWeight: FontWeight.w600);
+            final metaStyle =
+                Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white70);
+            final subStyle =
+                Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white60, height: 1.2);
 
             return GlassCard(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: InkWell(
                 onTap: () async {
                   await Navigator.of(context).push(
@@ -213,25 +215,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            title,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w600),
+                          Row(
+                            children: [
+                              Expanded(child: Text(title, style: titleStyle)),
+                              Text(dateLabel, style: metaStyle),
+                            ],
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            subtitle,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: Colors.white70),
-                          ),
+                          if (showProgramLabel) ...[
+                            const SizedBox(height: 4),
+                            Text(programLabel, style: subStyle),
+                          ],
+                          const SizedBox(height: 2),
+                          Text('$durationLabel • $statLabel', style: subStyle),
                         ],
                       ),
                     ),
                     PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_horiz, size: 18),
                       onSelected: (value) {
                         if (value == 'edit') {
                           _openSessionEditor(row);
@@ -680,8 +680,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     if (set.rir != null) parts.add('RIR ${set.rir!.toStringAsFixed(1)}');
     if (set.restSecActual != null) parts.add('Rest ${set.restSecActual}s');
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Text(parts.join(' • ')),
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Text(
+        parts.join(' • '),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.white70,
+              height: 1.2,
+            ),
+      ),
     );
   }
 
@@ -715,9 +721,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
 
               final title = (dayName != null && dayName.trim().isNotEmpty)
                   ? dayName
-                  : (programName ?? 'Free day');
+                  : (programName ?? 'Empty Day');
               final programLabel = programName == null || programName.trim().isEmpty
-                  ? 'Free day'
+                  ? 'Empty Day'
                   : (dayIndex == null ? programName : '$programName • Day ${dayIndex + 1}');
               final dateLabel =
                   startedAt == null ? 'Unknown date' : _formatDate(startedAt);
@@ -727,29 +733,60 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
               final volumeLabel = data.totalVolume == 0
                   ? '—'
                   : data.totalVolume.toStringAsFixed(0);
+              final titleStyle = Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700);
+              final metaStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Colors.white70,
+                    letterSpacing: 0.2,
+                  );
+              final pillTextStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                  );
+              final showProgramLabel = programLabel != title;
+
+              Widget statPill(String label) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.12),
+                    ),
+                  ),
+                  child: Text(label, style: pillTextStyle),
+                );
+              }
 
               return ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
                   GlassCard(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                          style: titleStyle,
                         ),
-                        const SizedBox(height: 6),
-                        Text('$programLabel • $dateLabel • $durationLabel'),
-                        const SizedBox(height: 12),
+                        if (showProgramLabel) ...[
+                          const SizedBox(height: 4),
+                          Text(programLabel, style: metaStyle),
+                        ],
+                        const SizedBox(height: 2),
+                        Text('$dateLabel • $durationLabel', style: metaStyle),
+                        const SizedBox(height: 10),
                         Wrap(
-                          spacing: 12,
+                          spacing: 8,
                           runSpacing: 8,
                           children: [
-                            Text('${data.totalExercises} exercises'),
-                            Text('${data.totalSets} sets'),
-                            Text('Volume $volumeLabel'),
+                            statPill('${data.totalExercises} exercises'),
+                            statPill('${data.totalSets} sets'),
+                            statPill('Volume $volumeLabel'),
                           ],
                         ),
                       ],
@@ -758,32 +795,39 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                   const SizedBox(height: 16),
                   for (final exercise in data.exercises) ...[
                     GlassCard(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(14),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             exercise.name,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
                           ),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 6,
-                            children: [
-                              Text('${exercise.setCount} sets'),
-                              if (exercise.maxWeight != null)
-                                Text('Top ${_formatWeight(exercise.maxWeight)}'),
-                              if (exercise.volume > 0)
-                                Text('Vol ${exercise.volume.toStringAsFixed(0)}'),
-                            ],
+                          const SizedBox(height: 4),
+                          Builder(
+                            builder: (context) {
+                              final summaryParts = <String>['${exercise.setCount} sets'];
+                              if (exercise.maxWeight != null) {
+                                summaryParts.add('Top ${_formatWeight(exercise.maxWeight)}');
+                              }
+                              if (exercise.volume > 0) {
+                                summaryParts.add('Vol ${exercise.volume.toStringAsFixed(0)}');
+                              }
+                              return Text(
+                                summaryParts.join(' • '),
+                                style: metaStyle,
+                              );
+                            },
                           ),
                           const SizedBox(height: 8),
                           for (final set in exercise.sets) _buildSetLine(set),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                   ],
                 ],
               );

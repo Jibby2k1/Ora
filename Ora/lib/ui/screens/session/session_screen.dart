@@ -26,11 +26,11 @@ import '../../../domain/models/session_exercise_info.dart';
 import '../../../domain/services/exercise_matcher.dart';
 import '../../../domain/services/set_plan_service.dart';
 import '../shell/app_shell_controller.dart';
+import '../history/exercise_catalog_screen.dart';
 import '../../widgets/confirmation_card/confirmation_card.dart';
 import '../../widgets/exercise_modal/exercise_modal.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
-import '../../widgets/timer_bar/timer_bar.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key, required this.contextData, this.isEditing = false});
@@ -131,14 +131,8 @@ class _SessionScreenState extends State<SessionScreen> {
   final Map<int, int> _restSecondsByExerciseId = {};
   Timer? _inlineRestTicker;
   DateTime _inlineRestNow = DateTime.now();
-  int? _activeRestSetId;
-  int? _activeRestExerciseId;
-  DateTime? _activeRestStartedAt;
-  int _activeRestSeconds = 0;
   DateTime? _sessionStartedAt;
   DateTime? _sessionEndedAt;
-  Timer? _restTimer;
-  int _restRemaining = 0;
   bool _listening = false;
   String? _voicePartial;
   final Map<int, List<_DraftSet>> _draftSetsByExerciseId = {};
@@ -199,25 +193,12 @@ class _SessionScreenState extends State<SessionScreen> {
     Future.microtask(_loadSessionMuscles);
     Future.microtask(_loadUnitPref);
     Future.microtask(_loadSessionHeader);
+    Future.microtask(_seedInitialDraftSets);
     _inlineRestNow = DateTime.now();
     _inlineRestTicker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() {
         _inlineRestNow = DateTime.now();
-        if (_activeRestSetId != null && _activeRestStartedAt != null && _activeRestSeconds > 0) {
-          final elapsed = _inlineRestNow.difference(_activeRestStartedAt!).inSeconds;
-          final remaining = (_activeRestSeconds - elapsed).clamp(0, _activeRestSeconds);
-          AppShellController.instance.setRestRemainingSeconds(remaining);
-          if (remaining == 0) {
-            _activeRestSetId = null;
-            _activeRestExerciseId = null;
-            _activeRestStartedAt = null;
-            _activeRestSeconds = 0;
-            AppShellController.instance.setRestRemainingSeconds(0);
-          }
-        } else {
-          AppShellController.instance.setRestRemainingSeconds(0);
-        }
       });
     });
   }
@@ -225,7 +206,6 @@ class _SessionScreenState extends State<SessionScreen> {
   @override
   void dispose() {
     _voiceController.dispose();
-    _restTimer?.cancel();
     _inlineRestTicker?.cancel();
     for (final drafts in _draftSetsByExerciseId.values) {
       for (final draft in drafts) {
@@ -267,6 +247,21 @@ class _SessionScreenState extends State<SessionScreen> {
       _sessionStartedAt = DateTime.tryParse(header?['started_at'] as String? ?? '');
       _sessionEndedAt = DateTime.tryParse(header?['ended_at'] as String? ?? '');
     });
+  }
+
+  Future<void> _seedInitialDraftSets() async {
+    if (widget.isEditing) return;
+    if (widget.contextData.programDayId == null) return;
+    var added = false;
+    for (final info in _sessionExercises) {
+      if (_draftSetsByExerciseId.containsKey(info.sessionExerciseId)) continue;
+      final sets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+      if (sets.isNotEmpty) continue;
+      _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []).add(_DraftSet());
+      added = true;
+    }
+    if (!mounted || !added) return;
+    setState(() {});
   }
 
   Future<void> _loadExerciseHints() async {
@@ -431,25 +426,20 @@ class _SessionScreenState extends State<SessionScreen> {
     required int exerciseId,
   }) {
     if (restSeconds <= 0) return;
-    setState(() {
-      _activeRestSetId = setId;
-      _activeRestExerciseId = exerciseId;
-      _activeRestStartedAt = DateTime.now();
-      _activeRestSeconds = restSeconds;
-    });
-    AppShellController.instance.setRestAlertActive(false);
-    AppShellController.instance.setRestRemainingSeconds(restSeconds);
+    AppShellController.instance.startRestTimer(
+      seconds: restSeconds,
+      setId: setId,
+      exerciseId: exerciseId,
+    );
+    if (!mounted) return;
+    setState(() {});
   }
 
   void _completeInlineRest() {
-    if (_activeRestSetId == null) return;
-    setState(() {
-      _activeRestSetId = null;
-      _activeRestExerciseId = null;
-      _activeRestStartedAt = null;
-      _activeRestSeconds = 0;
-    });
-    AppShellController.instance.setRestRemainingSeconds(0);
+    if (AppShellController.instance.restActiveSetId == null) return;
+    AppShellController.instance.completeRestTimer();
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _undoCompletedSet(SessionExerciseInfo info, Map<String, Object?> row) async {
@@ -722,6 +712,10 @@ class _SessionScreenState extends State<SessionScreen> {
           fontWeight: FontWeight.w700,
           letterSpacing: 0.4,
         );
+    final restController = AppShellController.instance;
+    final activeRestSetId = restController.restActiveSetId;
+    final activeRestStartedAt = restController.restStartedAt;
+    final activeRestDuration = restController.restDurationSeconds;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -797,15 +791,17 @@ class _SessionScreenState extends State<SessionScreen> {
                     (row['rest_sec_actual'] as int?) ?? _restSecondsForExercise(info);
                 final createdAt = DateTime.tryParse((row['created_at'] as String?) ?? '');
                 final rowId = row['id'] as int?;
-                final isActive = rowId != null && rowId == _activeRestSetId;
-                final hasRest = restSecondsActual > 0;
-                final startedAt = isActive ? _activeRestStartedAt ?? createdAt : null;
+                final isActive = rowId != null && rowId == activeRestSetId;
+                final effectiveRestSeconds =
+                    isActive && activeRestDuration > 0 ? activeRestDuration : restSecondsActual;
+                final hasRest = effectiveRestSeconds > 0;
+                final startedAt = isActive ? activeRestStartedAt ?? createdAt : null;
                 final elapsed = startedAt == null ? 0 : _inlineRestNow.difference(startedAt).inSeconds;
                 final remaining = isActive && hasRest
-                    ? (restSecondsActual - elapsed).clamp(0, restSecondsActual)
+                    ? (effectiveRestSeconds - elapsed).clamp(0, effectiveRestSeconds)
                     : 0;
-                final progress = isActive && hasRest && restSecondsActual > 0
-                    ? remaining / restSecondsActual
+                final progress = isActive && hasRest && effectiveRestSeconds > 0
+                    ? remaining / effectiveRestSeconds
                     : 0.0;
                 final displayProgress = hasRest ? (isActive ? progress : 1.0) : 0.0;
                 final rowContent = Column(
@@ -1900,7 +1896,7 @@ class _SessionScreenState extends State<SessionScreen> {
       'rows=${_summarizeSetRows(afterSets)}',
     );
     _refreshInlineSetData(info);
-    if (_activeRestSetId == id) {
+    if (AppShellController.instance.restActiveSetId == id) {
       _completeInlineRest();
     }
     if (!mounted) return;
@@ -1938,36 +1934,13 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   void _startRestTimer([int seconds = 120]) {
-    _restTimer?.cancel();
-    setState(() {
-      _restRemaining = seconds;
-    });
-    AppShellController.instance.setRestRemainingSeconds(seconds);
-    AppShellController.instance.setRestAlertActive(false);
-    _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_restRemaining <= 1) {
-        timer.cancel();
-        setState(() {
-          _restRemaining = 0;
-        });
-        AppShellController.instance.setRestRemainingSeconds(0);
-        AppShellController.instance.setRestAlertActive(true);
-      } else {
-        setState(() {
-          _restRemaining -= 1;
-        });
-        AppShellController.instance.setRestRemainingSeconds(_restRemaining);
-      }
-    });
+    AppShellController.instance.startRestTimer(seconds: seconds);
   }
 
   void _stopRestTimer() {
-    _restTimer?.cancel();
-    setState(() {
-      _restRemaining = 0;
-    });
-    AppShellController.instance.setRestRemainingSeconds(0);
-    AppShellController.instance.setRestAlertActive(false);
+    AppShellController.instance.completeRestTimer();
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _runVoice() async {
@@ -2128,6 +2101,7 @@ class _SessionScreenState extends State<SessionScreen> {
       _sessionExercises.add(info);
       _exerciseById[info.exerciseId] = info;
       _sessionExerciseById[info.sessionExerciseId] = info;
+      _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []).add(_DraftSet());
     });
     return info;
   }
@@ -2189,6 +2163,20 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
+  Future<void> _promptAddExercise() async {
+    final match = await Navigator.of(context).push<ExerciseMatch>(
+      MaterialPageRoute(
+        builder: (_) => const ExerciseCatalogScreen(selectionMode: true),
+      ),
+    );
+    if (match == null || !mounted) return;
+    final existing = _exerciseById[match.id];
+    if (existing != null) {
+      return;
+    }
+    await _addExerciseToSession(match);
+  }
+
   @override
   Widget build(BuildContext context) {
     final startedAt = _sessionStartedAt;
@@ -2229,8 +2217,6 @@ class _SessionScreenState extends State<SessionScreen> {
                 await _workoutRepo.deleteSession(widget.contextData.sessionId);
                 _sessionEnded = true;
                 AppShellController.instance.setActiveSession(false);
-                AppShellController.instance.setRestRemainingSeconds(0);
-                AppShellController.instance.setRestAlertActive(false);
                 if (!mounted) return;
                 Navigator.of(context).pop();
               },
@@ -2242,8 +2228,6 @@ class _SessionScreenState extends State<SessionScreen> {
                 await _workoutRepo.endSession(widget.contextData.sessionId);
                 _sessionEnded = true;
                 AppShellController.instance.setActiveSession(false);
-                AppShellController.instance.setRestRemainingSeconds(0);
-                AppShellController.instance.setRestAlertActive(false);
                 if (!mounted) return;
                 Navigator.of(context).pop();
               },
@@ -2269,9 +2253,31 @@ class _SessionScreenState extends State<SessionScreen> {
               Expanded(
                 child: ListView.separated(
                   padding: const EdgeInsets.all(16),
-                  itemCount: _sessionExercises.length,
+                  itemCount: _sessionExercises.length + 1,
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
+                    if (index == _sessionExercises.length) {
+                      return GlassCard(
+                        padding: const EdgeInsets.all(12),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: _promptAddExercise,
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: Row(
+                              children: [
+                                const Icon(Icons.add_circle_outline, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Add Exercise',
+                                  style: Theme.of(context).textTheme.titleMedium,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }
                     final info = _sessionExercises[index];
                     final muscles = _musclesByExerciseId[info.exerciseId];
                     final tags = <String>[];
@@ -2391,10 +2397,6 @@ class _SessionScreenState extends State<SessionScreen> {
                     );
                   },
                 ),
-              ),
-              TimerBar(
-                remainingSeconds: _restRemaining,
-                onStop: _stopRestTimer,
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
