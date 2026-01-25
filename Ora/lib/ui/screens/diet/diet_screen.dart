@@ -970,7 +970,6 @@ class _DietScreenState extends State<DietScreen> {
             icon: const Icon(Icons.add),
             onPressed: _showMealPlanEditor,
           ),
-          const SizedBox(width: 72),
         ],
       ),
       body: Stack(
