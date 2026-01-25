@@ -218,7 +218,10 @@ class _DayEditorScreenState extends State<DayEditorScreen> {
                               if (!mounted) return;
                               await Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) => HistoryScreen(initialExerciseId: row['exercise_id'] as int),
+                                  builder: (_) => HistoryScreen(
+                                    initialExerciseId: row['exercise_id'] as int,
+                                    mode: HistoryMode.exercise,
+                                  ),
                                 ),
                               );
                             } else if (value == 'delete') {
@@ -336,7 +339,10 @@ class _ExerciseSearchSheetState extends State<_ExerciseSearchSheet> {
                       if (!mounted) return;
                       await Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => HistoryScreen(initialExerciseId: item['id'] as int),
+                          builder: (_) => HistoryScreen(
+                            initialExerciseId: item['id'] as int,
+                            mode: HistoryMode.exercise,
+                          ),
                         ),
                       );
                     },
