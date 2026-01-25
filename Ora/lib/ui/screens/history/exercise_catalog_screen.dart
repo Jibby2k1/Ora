@@ -24,6 +24,7 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
   bool _isFilling = false;
   int _fillTotal = 0;
   int _fillDone = 0;
+  int _activeView = 0;
 
   @override
   void initState() {
@@ -152,67 +153,105 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
           Column(
             children: [
               Padding(
-                padding: const EdgeInsets.all(16),
-                child: TextField(
-                  controller: _controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Search exercises',
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: _search,
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _activeView == 0
+                          ? ElevatedButton(
+                              onPressed: () => setState(() => _activeView = 0),
+                              child: const Text('Catalog'),
+                            )
+                          : OutlinedButton(
+                              onPressed: () => setState(() => _activeView = 0),
+                              child: const Text('Catalog'),
+                            ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _activeView == 1
+                          ? ElevatedButton(
+                              onPressed: () => setState(() => _activeView = 1),
+                              child: const Text('History'),
+                            )
+                          : OutlinedButton(
+                              onPressed: () => setState(() => _activeView = 1),
+                              child: const Text('History'),
+                            ),
+                    ),
+                  ],
                 ),
               ),
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _results.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final item = _results[index];
-                    final primary = item['primary_muscle'] as String?;
-                    return GlassCard(
-                      padding: EdgeInsets.zero,
-                      child: ListTile(
-                        title: Text(item['canonical_name'] as String),
-                        subtitle: Text(
-                          primary == null || primary.trim().isEmpty
-                              ? (item['equipment_type'] as String)
-                              : '${item['equipment_type']} • $primary',
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.show_chart),
-                          onPressed: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => HistoryScreen(initialExerciseId: item['id'] as int),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              if (_isFilling)
+              if (_activeView == 0) ...[
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                  child: GlassCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Row(
-                      children: [
-                        const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                  padding: const EdgeInsets.all(16),
+                  child: TextField(
+                    controller: _controller,
+                    decoration: const InputDecoration(
+                      labelText: 'Search exercises',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: _search,
+                  ),
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _results.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final item = _results[index];
+                      final primary = item['primary_muscle'] as String?;
+                      return GlassCard(
+                        padding: EdgeInsets.zero,
+                        child: ListTile(
+                          title: Text(item['canonical_name'] as String),
+                          subtitle: Text(
+                            primary == null || primary.trim().isEmpty
+                                ? (item['equipment_type'] as String)
+                                : '${item['equipment_type']} • $primary',
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.show_chart),
+                            onPressed: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => HistoryScreen(
+                                    initialExerciseId: item['id'] as int,
+                                    mode: HistoryMode.exercise,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text('Filling muscles: $_fillDone / $_fillTotal'),
-                        ),
-                      ],
+                      );
+                    },
+                  ),
+                ),
+                if (_isFilling)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: GlassCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Row(
+                        children: [
+                          const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text('Filling muscles: $_fillDone / $_fillTotal'),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
+              ] else
+                Expanded(
+                  child: HistoryScreen(embedded: true),
                 ),
             ],
           ),
