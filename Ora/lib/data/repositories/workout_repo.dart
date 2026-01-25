@@ -42,6 +42,49 @@ class WorkoutRepo {
     }, where: 'id = ?', whereArgs: [sessionId]);
   }
 
+  Future<void> updateSessionNotes({required int sessionId, String? notes}) async {
+    final db = await _db.database;
+    await db.update(
+      'workout_session',
+      {
+        'notes': notes,
+      },
+      where: 'id = ?',
+      whereArgs: [sessionId],
+    );
+  }
+
+  Future<void> deleteSession(int sessionId) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      final sessionExercises = await txn.query(
+        'session_exercise',
+        columns: ['id'],
+        where: 'workout_session_id = ?',
+        whereArgs: [sessionId],
+      );
+      if (sessionExercises.isNotEmpty) {
+        final ids = sessionExercises.map((row) => row['id'] as int).toList();
+        final placeholders = List.filled(ids.length, '?').join(',');
+        await txn.delete(
+          'set_entry',
+          where: 'session_exercise_id IN ($placeholders)',
+          whereArgs: ids,
+        );
+        await txn.delete(
+          'session_exercise',
+          where: 'workout_session_id = ?',
+          whereArgs: [sessionId],
+        );
+      }
+      await txn.delete(
+        'workout_session',
+        where: 'id = ?',
+        whereArgs: [sessionId],
+      );
+    });
+  }
+
   Future<int> addSessionExercise({
     required int workoutSessionId,
     required int exerciseId,
@@ -137,7 +180,15 @@ ORDER BY se.set_index ASC
     );
   }
 
-  Future<void> updateSetEntry({required int id, double? weightValue, int? reps, int? partialReps, double? rpe, double? rir}) async {
+  Future<void> updateSetEntry({
+    required int id,
+    double? weightValue,
+    int? reps,
+    int? partialReps,
+    double? rpe,
+    double? rir,
+    int? restSecActual,
+  }) async {
     final db = await _db.database;
     await db.update(
       'set_entry',
@@ -147,6 +198,7 @@ ORDER BY se.set_index ASC
         'partial_reps': partialReps ?? 0,
         'rpe': rpe,
         'rir': rir,
+        if (restSecActual != null) 'rest_sec_actual': restSecActual,
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -214,7 +266,7 @@ ORDER BY se.set_index ASC
 
   Future<List<Map<String, Object?>>> getCompletedSessions({int limit = 200}) async {
     final db = await _db.database;
-    return db.rawQuery('''\nSELECT ws.id,\n       ws.started_at,\n       ws.ended_at,\n       ws.program_id,\n       ws.program_day_id,\n       p.name as program_name,\n       pd.day_name,\n       pd.day_index,\n       COUNT(DISTINCT sx.id) as exercise_count,\n       COUNT(se.id) as set_count\nFROM workout_session ws\nLEFT JOIN program p ON p.id = ws.program_id\nLEFT JOIN program_day pd ON pd.id = ws.program_day_id\nLEFT JOIN session_exercise sx ON sx.workout_session_id = ws.id\nLEFT JOIN set_entry se ON se.session_exercise_id = sx.id\nWHERE ws.ended_at IS NOT NULL\nGROUP BY ws.id\nORDER BY ws.started_at DESC\nLIMIT ?\n''', [limit]);
+    return db.rawQuery('''\nSELECT ws.id,\n       ws.started_at,\n       ws.ended_at,\n       ws.program_id,\n       ws.program_day_id,\n       ws.notes,\n       p.name as program_name,\n       pd.day_name,\n       pd.day_index,\n       COUNT(DISTINCT sx.id) as exercise_count,\n       COUNT(se.id) as set_count\nFROM workout_session ws\nLEFT JOIN program p ON p.id = ws.program_id\nLEFT JOIN program_day pd ON pd.id = ws.program_day_id\nLEFT JOIN session_exercise sx ON sx.workout_session_id = ws.id\nLEFT JOIN set_entry se ON se.session_exercise_id = sx.id\nWHERE ws.ended_at IS NOT NULL\nGROUP BY ws.id\nORDER BY ws.started_at DESC\nLIMIT ?\n''', [limit]);
   }
 
   Future<Map<String, Object?>?> getSessionHeader(int sessionId) async {
@@ -231,6 +283,6 @@ ORDER BY se.set_index ASC
 
   Future<List<Map<String, Object?>>> getSessionSets(int sessionId) async {
     final db = await _db.database;
-    return db.rawQuery('''\nSELECT sx.id as session_exercise_id,\n       sx.order_index,\n       sx.exercise_id,\n       e.canonical_name,\n       se.id as set_id,\n       se.set_index,\n       se.weight_value,\n       se.weight_unit,\n       se.reps,\n       se.rpe,\n       se.rir,\n       se.flag_warmup,\n       se.flag_partials,\n       se.is_amrap\nFROM set_entry se\nJOIN session_exercise sx ON sx.id = se.session_exercise_id\nJOIN exercise e ON e.id = sx.exercise_id\nWHERE sx.workout_session_id = ?\nORDER BY sx.order_index ASC, se.set_index ASC\n''', [sessionId]);
+    return db.rawQuery('''\nSELECT sx.id as session_exercise_id,\n       sx.order_index,\n       sx.exercise_id,\n       e.canonical_name,\n       se.id as set_id,\n       se.set_index,\n       se.weight_value,\n       se.weight_unit,\n       se.reps,\n       se.rpe,\n       se.rir,\n       se.flag_warmup,\n       se.flag_partials,\n       se.is_amrap,\n       se.rest_sec_actual\nFROM set_entry se\nJOIN session_exercise sx ON sx.id = se.session_exercise_id\nJOIN exercise e ON e.id = sx.exercise_id\nWHERE sx.workout_session_id = ?\nORDER BY sx.order_index ASC, se.set_index ASC\n''', [sessionId]);
   }
 }

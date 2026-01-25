@@ -33,9 +33,10 @@ import '../../widgets/glass/glass_card.dart';
 import '../../widgets/timer_bar/timer_bar.dart';
 
 class SessionScreen extends StatefulWidget {
-  const SessionScreen({super.key, required this.contextData});
+  const SessionScreen({super.key, required this.contextData, this.isEditing = false});
 
   final SessionContext contextData;
+  final bool isEditing;
 
   @override
   State<SessionScreen> createState() => _SessionScreenState();
@@ -123,10 +124,19 @@ class _SessionScreenState extends State<SessionScreen> {
   final UndoRedoStack _undoRedo = UndoRedoStack();
   bool _isLoggingSet = false;
   final List<String> _setDebugNotes = [];
-  bool _showSetDebug = true;
+  bool _showSetDebug = false;
   final Map<int, _InlineSetData> _inlineSetCache = {};
   final Map<int, Future<_InlineSetData>> _inlineSetFutures = {};
   final Map<int, String> _inlineDebugSnapshot = {};
+  final Map<int, int> _restSecondsByExerciseId = {};
+  Timer? _inlineRestTicker;
+  DateTime _inlineRestNow = DateTime.now();
+  int? _activeRestSetId;
+  int? _activeRestExerciseId;
+  DateTime? _activeRestStartedAt;
+  int _activeRestSeconds = 0;
+  DateTime? _sessionStartedAt;
+  DateTime? _sessionEndedAt;
   Timer? _restTimer;
   int _restRemaining = 0;
   bool _listening = false;
@@ -163,8 +173,10 @@ class _SessionScreenState extends State<SessionScreen> {
   void initState() {
     super.initState();
     final db = AppDatabase.instance;
-    AppShellController.instance.setActiveSession(true);
-    AppShellController.instance.setActiveSessionIndicatorHidden(false);
+    if (!widget.isEditing) {
+      AppShellController.instance.setActiveSession(true);
+      AppShellController.instance.setActiveSessionIndicatorHidden(false);
+    }
     _workoutRepo = WorkoutRepo(db);
     _exerciseRepo = ExerciseRepo(db);
     _programRepo = ProgramRepo(db);
@@ -186,18 +198,41 @@ class _SessionScreenState extends State<SessionScreen> {
     Future.microtask(_loadExerciseHints);
     Future.microtask(_loadSessionMuscles);
     Future.microtask(_loadUnitPref);
+    Future.microtask(_loadSessionHeader);
+    _inlineRestNow = DateTime.now();
+    _inlineRestTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        _inlineRestNow = DateTime.now();
+        if (_activeRestSetId != null && _activeRestStartedAt != null && _activeRestSeconds > 0) {
+          final elapsed = _inlineRestNow.difference(_activeRestStartedAt!).inSeconds;
+          final remaining = (_activeRestSeconds - elapsed).clamp(0, _activeRestSeconds);
+          AppShellController.instance.setRestRemainingSeconds(remaining);
+          if (remaining == 0) {
+            _activeRestSetId = null;
+            _activeRestExerciseId = null;
+            _activeRestStartedAt = null;
+            _activeRestSeconds = 0;
+            AppShellController.instance.setRestRemainingSeconds(0);
+          }
+        } else {
+          AppShellController.instance.setRestRemainingSeconds(0);
+        }
+      });
+    });
   }
 
   @override
   void dispose() {
     _voiceController.dispose();
     _restTimer?.cancel();
+    _inlineRestTicker?.cancel();
     for (final drafts in _draftSetsByExerciseId.values) {
       for (final draft in drafts) {
         draft.dispose();
       }
     }
-    if (_sessionEnded) {
+    if (_sessionEnded && !widget.isEditing) {
       AppShellController.instance.setActiveSession(false);
     }
     super.dispose();
@@ -223,6 +258,15 @@ class _SessionScreenState extends State<SessionScreen> {
     } else {
       await _wakeWordEngine.stop();
     }
+  }
+
+  Future<void> _loadSessionHeader() async {
+    final header = await _workoutRepo.getSessionHeader(widget.contextData.sessionId);
+    if (!mounted) return;
+    setState(() {
+      _sessionStartedAt = DateTime.tryParse(header?['started_at'] as String? ?? '');
+      _sessionEndedAt = DateTime.tryParse(header?['ended_at'] as String? ?? '');
+    });
   }
 
   Future<void> _loadExerciseHints() async {
@@ -336,6 +380,152 @@ class _SessionScreenState extends State<SessionScreen> {
     return '${_formatSetWeight(weight)}$unitLabel × $reps';
   }
 
+  int? _planRestSeconds(SessionExerciseInfo info) {
+    int? restMax;
+    int? restMin;
+    for (final block in info.planBlocks) {
+      if (block.restSecMax != null) {
+        if (restMax == null || block.restSecMax! > restMax) {
+          restMax = block.restSecMax;
+        }
+      }
+      if (block.restSecMin != null) {
+        if (restMin == null || block.restSecMin! < restMin!) {
+          restMin = block.restSecMin;
+        }
+      }
+    }
+    return restMax ?? restMin;
+  }
+
+  int _restSecondsForExercise(SessionExerciseInfo info) {
+    final cached = _restSecondsByExerciseId[info.exerciseId];
+    if (cached != null) return cached;
+    const fallback = 90;
+    final value = _planRestSeconds(info) ?? fallback;
+    _restSecondsByExerciseId[info.exerciseId] = value;
+    return value;
+  }
+
+  String _formatRestShort(int seconds) {
+    if (seconds <= 0) return '0:00';
+    final mins = seconds ~/ 60;
+    final secs = seconds % 60;
+    return '${mins}:${secs.toString().padLeft(2, '0')}';
+  }
+
+  String _formatSessionTimer(Duration elapsed) {
+    final totalSeconds = elapsed.inSeconds.clamp(0, 86400 * 7);
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return '${hours}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  void _startInlineRest({
+    required int setId,
+    required int restSeconds,
+    required int exerciseId,
+  }) {
+    if (restSeconds <= 0) return;
+    setState(() {
+      _activeRestSetId = setId;
+      _activeRestExerciseId = exerciseId;
+      _activeRestStartedAt = DateTime.now();
+      _activeRestSeconds = restSeconds;
+    });
+    AppShellController.instance.setRestAlertActive(false);
+    AppShellController.instance.setRestRemainingSeconds(restSeconds);
+  }
+
+  void _completeInlineRest() {
+    if (_activeRestSetId == null) return;
+    setState(() {
+      _activeRestSetId = null;
+      _activeRestExerciseId = null;
+      _activeRestStartedAt = null;
+      _activeRestSeconds = 0;
+    });
+    AppShellController.instance.setRestRemainingSeconds(0);
+  }
+
+  Future<void> _undoCompletedSet(SessionExerciseInfo info, Map<String, Object?> row) async {
+    final id = row['id'] as int?;
+    if (id == null) return;
+    final weight = row['weight_value'] as num?;
+    final reps = row['reps'] as int?;
+    await _deleteSet(id, info);
+    final draft = _DraftSet();
+    if (weight != null) {
+      draft.weight.text = _formatSetWeight(weight);
+    }
+    if (reps != null) {
+      draft.reps.text = reps.toString();
+    }
+    _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []).add(draft);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _showRestPicker(SessionExerciseInfo info, int currentSeconds) async {
+    final controller = TextEditingController(text: currentSeconds.toString());
+    final quickOptions = [30, 45, 60, 90, 120, 180];
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Rest Timer'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Seconds',
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final seconds in quickOptions)
+                    OutlinedButton(
+                      onPressed: () => controller.text = seconds.toString(),
+                      child: Text('${seconds}s'),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () {
+                final value = int.tryParse(controller.text.trim());
+                if (value == null || value < 0) {
+                  _showMessage('Enter a valid rest time.');
+                  return;
+                }
+                Navigator.of(context).pop(value);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _restSecondsByExerciseId[info.exerciseId] = selected;
+    });
+  }
+
   Future<_InlineSetData> _loadInlineSetData(SessionExerciseInfo info) async {
     try {
       final sets = List<Map<String, Object?>>.from(
@@ -440,6 +630,7 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   void _pushSetDebug(String message) {
+    if (!_showSetDebug) return;
     final stamp = DateTime.now().toIso8601String().split('T').last;
     final entry = '$stamp $message';
     _setDebugNotes.add(entry);
@@ -518,21 +709,8 @@ class _SessionScreenState extends State<SessionScreen> {
         volume += weight.toDouble() * reps;
       }
     }
-    final previousByIndex = <int, Map<String, Object?>>{};
-    for (final row in previousSets) {
-      final index = row['set_index'] as int?;
-      if (index != null) {
-        previousByIndex[index] = row;
-      }
-    }
-    var maxSetIndex = 0;
-    for (final row in sets) {
-      final index = row['set_index'] as int?;
-      if (index != null && index > maxSetIndex) {
-        maxSetIndex = index;
-      }
-    }
     _logInlineSnapshot(info, sets, previousSets, drafts, source: renderSource);
+    final restSeconds = _restSecondsForExercise(info);
     final volumeLabel = volume == 0 ? '—' : volume.toStringAsFixed(0);
     const setColWidth = 32.0;
     const prevColWidth = 96.0;
@@ -552,6 +730,18 @@ class _SessionScreenState extends State<SessionScreen> {
             Text('Sets ${sets.length + drafts.length}'),
             const SizedBox(width: 12),
             Text('Volume $volumeLabel'),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () => _showRestPicker(info, restSeconds),
+              icon: const Icon(Icons.timer, size: 16),
+              label: Text('Rest ${_formatRestShort(restSeconds)}'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -601,49 +791,140 @@ class _SessionScreenState extends State<SessionScreen> {
             Builder(
               builder: (context) {
                 final row = sets[i];
-                final setNumber = (row['set_index'] as int?) ?? (i + 1);
-                final previousRow = previousByIndex[setNumber];
-                final rowContent = Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: setColWidth,
-                        child: Center(child: Text('$setNumber')),
+                final setNumber = i + 1;
+                final previousRow = i < previousSets.length ? previousSets[i] : null;
+                final restSecondsActual =
+                    (row['rest_sec_actual'] as int?) ?? _restSecondsForExercise(info);
+                final createdAt = DateTime.tryParse((row['created_at'] as String?) ?? '');
+                final rowId = row['id'] as int?;
+                final isActive = rowId != null && rowId == _activeRestSetId;
+                final hasRest = restSecondsActual > 0;
+                final startedAt = isActive ? _activeRestStartedAt ?? createdAt : null;
+                final elapsed = startedAt == null ? 0 : _inlineRestNow.difference(startedAt).inSeconds;
+                final remaining = isActive && hasRest
+                    ? (restSecondsActual - elapsed).clamp(0, restSecondsActual)
+                    : 0;
+                final progress = isActive && hasRest && restSecondsActual > 0
+                    ? remaining / restSecondsActual
+                    : 0.0;
+                final displayProgress = hasRest ? (isActive ? progress : 1.0) : 0.0;
+                final rowContent = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      const SizedBox(width: colGap),
-                      SizedBox(
-                        width: prevColWidth,
-                        child: Center(child: Text(_formatPrevious(previousRow))),
-                      ),
-                      const SizedBox(width: colGap),
-                      SizedBox(
-                        width: weightColWidth,
-                        child: Center(
-                          child: Text(_formatSetWeight(row['weight_value'] as num?)),
-                        ),
-                      ),
-                      const SizedBox(width: colGap),
-                      SizedBox(
-                        width: repsColWidth,
-                        child: Center(
-                          child: Text((row['reps'] as int?)?.toString() ?? '—'),
-                        ),
-                      ),
-                      const SizedBox(width: colGap),
-                      SizedBox(
-                        width: checkColWidth,
-                        child: Center(
-                          child: Icon(
-                            Icons.check_circle,
-                            size: 18,
-                            color: Theme.of(context).colorScheme.primary,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: setColWidth,
+                            child: Center(child: Text('$setNumber')),
                           ),
+                          const SizedBox(width: colGap),
+                          SizedBox(
+                            width: prevColWidth,
+                            child: Center(child: Text(_formatPrevious(previousRow))),
+                          ),
+                          const SizedBox(width: colGap),
+                          SizedBox(
+                            width: weightColWidth,
+                            child: Center(
+                              child: Text(_formatSetWeight(row['weight_value'] as num?)),
+                            ),
+                          ),
+                          const SizedBox(width: colGap),
+                          SizedBox(
+                            width: repsColWidth,
+                            child: Center(
+                              child: Text((row['reps'] as int?)?.toString() ?? '—'),
+                            ),
+                          ),
+                          const SizedBox(width: colGap),
+                          SizedBox(
+                            width: checkColWidth,
+                            child: Center(
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                                icon: Icon(
+                                  Icons.check_circle,
+                                  size: 18,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                tooltip: 'Undo set',
+                                onPressed: () => _undoCompletedSet(info, row),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (hasRest)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TweenAnimationBuilder<double>(
+                                tween: Tween(begin: displayProgress, end: displayProgress),
+                                duration: const Duration(milliseconds: 250),
+                                builder: (context, value, _) {
+                                  return ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: LinearProgressIndicator(
+                                      value: value,
+                                      minHeight: 6,
+                                      backgroundColor:
+                                          Theme.of(context).colorScheme.surface.withOpacity(0.25),
+                                      color: isActive
+                                          ? Theme.of(context).colorScheme.primary
+                                          : Colors.greenAccent.shade400,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              isActive ? _formatRestShort(remaining) : 'Done',
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: isActive ? null : Colors.greenAccent.shade200,
+                                  ),
+                            ),
+                            if (isActive) ...[
+                              const SizedBox(width: 6),
+                              IconButton(
+                                onPressed: _completeInlineRest,
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.check_circle, size: 18),
+                                tooltip: 'Complete rest',
+                              ),
+                            ] else if (rowId != null) ...[
+                              const SizedBox(width: 6),
+                              TextButton(
+                                onPressed: () => _startInlineRest(
+                                  setId: rowId,
+                                  restSeconds: restSecondsActual,
+                                  exerciseId: info.exerciseId,
+                                ),
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                child: const Text('Undo'),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 );
                 final setId = row['id'] as int?;
                 if (setId == null) return rowContent;
@@ -675,8 +956,9 @@ class _SessionScreenState extends State<SessionScreen> {
           for (var i = 0; i < drafts.length; i++)
             Builder(
               builder: (context) {
-                final setNumber = maxSetIndex + i + 1;
-                final previousRow = previousByIndex[setNumber];
+                final setNumber = sets.length + i + 1;
+                final previousRow =
+                    (sets.length + i) < previousSets.length ? previousSets[sets.length + i] : null;
                 final rowContent = Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -777,15 +1059,6 @@ class _SessionScreenState extends State<SessionScreen> {
             child: const Text('+ Add Set'),
           ),
         ),
-        if (_showSetDebug && _setDebugNotes.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          ..._setDebugNotes.map(
-            (note) => Text(
-              note,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white70),
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -810,6 +1083,7 @@ class _SessionScreenState extends State<SessionScreen> {
     );
     final role = planResult?.nextRole ?? 'TOP';
     final isAmrap = planResult?.isAmrap ?? false;
+    final restSeconds = _restSecondsForExercise(info);
     _pushSetDebug(
       '[log] ex=${info.sessionExerciseId} setIndex=$setIndex role=$role reps=$reps weight=$weight',
     );
@@ -827,7 +1101,9 @@ class _SessionScreenState extends State<SessionScreen> {
       flagWarmup: role == 'WARMUP',
       flagPartials: false,
       isAmrap: isAmrap,
+      restSecActual: restSeconds,
     );
+    _startInlineRest(setId: id, restSeconds: restSeconds, exerciseId: info.exerciseId);
     _pushSetDebug('[log] inserted id=$id');
     final latest = await _workoutRepo.getSetEntryById(id);
     final setsForExercise = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
@@ -1537,6 +1813,7 @@ class _SessionScreenState extends State<SessionScreen> {
     double? rpe,
     double? rir,
   }) async {
+    final restSeconds = _restSecondsForExercise(info);
     final result = await _dispatcher.dispatch(
       LogSetEntry(
         sessionExerciseId: info.sessionExerciseId,
@@ -1547,6 +1824,7 @@ class _SessionScreenState extends State<SessionScreen> {
         partials: partials,
         rpe: rpe,
         rir: rir,
+        restSecActual: restSeconds,
       ),
     );
     if (result.inverse != null) {
@@ -1556,6 +1834,14 @@ class _SessionScreenState extends State<SessionScreen> {
     final setsForExercise = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
     final role = latest?['set_role'] as String? ?? 'TOP';
     final isAmrap = (latest?['is_amrap'] as int? ?? 0) == 1;
+    final latestId = latest?['id'] as int?;
+    if (latestId != null) {
+      _startInlineRest(
+        setId: latestId,
+        restSeconds: restSeconds,
+        exerciseId: info.exerciseId,
+      );
+    }
     setState(() {
       _lastLogged = LastLoggedSet(
         exerciseName: info.exerciseName,
@@ -1571,7 +1857,15 @@ class _SessionScreenState extends State<SessionScreen> {
     });
   }
 
-  Future<void> _updateSet(int id, {double? weight, int? reps, int? partials, double? rpe, double? rir}) async {
+  Future<void> _updateSet(
+    int id, {
+    double? weight,
+    int? reps,
+    int? partials,
+    double? rpe,
+    double? rir,
+    int? restSecActual,
+  }) async {
     final result = await _dispatcher.dispatch(
       UpdateSetEntry(
         id: id,
@@ -1580,6 +1874,7 @@ class _SessionScreenState extends State<SessionScreen> {
         partials: partials,
         rpe: rpe,
         rir: rir,
+        restSecActual: restSecActual,
       ),
     );
     if (result.inverse != null) {
@@ -1605,6 +1900,9 @@ class _SessionScreenState extends State<SessionScreen> {
       'rows=${_summarizeSetRows(afterSets)}',
     );
     _refreshInlineSetData(info);
+    if (_activeRestSetId == id) {
+      _completeInlineRest();
+    }
     if (!mounted) return;
     setState(() {});
   }
@@ -1893,23 +2191,66 @@ class _SessionScreenState extends State<SessionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final startedAt = _sessionStartedAt;
+    final endedAt = _sessionEndedAt;
+    final sessionTimer = startedAt == null
+        ? null
+        : _formatSessionTimer((endedAt ?? _inlineRestNow).difference(startedAt));
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Session'),
+        centerTitle: true,
+        title: sessionTimer == null
+            ? const Text('Session')
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Session'),
+                  Text(
+                    sessionTimer,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white70),
+                  ),
+                ],
+              ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.stop_circle_outlined),
-            onPressed: () async {
-              await _workoutRepo.endSession(widget.contextData.sessionId);
-              _sessionEnded = true;
-              AppShellController.instance.setActiveSession(false);
-              AppShellController.instance.setRestRemainingSeconds(0);
-              AppShellController.instance.setRestAlertActive(false);
-              if (!mounted) return;
-              Navigator.of(context).pop();
-            },
-          ),
-          const SizedBox(width: 72),
+          if (widget.isEditing) ...[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Finish'),
+            ),
+            const SizedBox(width: 12),
+          ] else ...[
+            TextButton(
+              onPressed: () async {
+                await _workoutRepo.deleteSession(widget.contextData.sessionId);
+                _sessionEnded = true;
+                AppShellController.instance.setActiveSession(false);
+                AppShellController.instance.setRestRemainingSeconds(0);
+                AppShellController.instance.setRestAlertActive(false);
+                if (!mounted) return;
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: () async {
+                await _workoutRepo.endSession(widget.contextData.sessionId);
+                _sessionEnded = true;
+                AppShellController.instance.setActiveSession(false);
+                AppShellController.instance.setRestRemainingSeconds(0);
+                AppShellController.instance.setRestAlertActive(false);
+                if (!mounted) return;
+                Navigator.of(context).pop();
+              },
+              child: const Text('Finish'),
+            ),
+            const SizedBox(width: 12),
+          ],
         ],
       ),
       floatingActionButton: GestureDetector(
@@ -1991,9 +2332,21 @@ class _SessionScreenState extends State<SessionScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            info.exerciseName,
-                            style: Theme.of(context).textTheme.titleMedium,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  info.exerciseName,
+                                  style: Theme.of(context).textTheme.titleMedium,
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () => _openExerciseModal(info),
+                                icon: const Icon(Icons.edit, size: 18),
+                                tooltip: 'Edit sets',
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ],
                           ),
                           if (muscleChips.isNotEmpty)
                             Padding(
@@ -2039,18 +2392,6 @@ class _SessionScreenState extends State<SessionScreen> {
                   },
                 ),
               ),
-              if (_lastLogged != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: ConfirmationCard(
-                    lastLogged: _lastLogged!,
-                    onUndo: _undo,
-                    onRedo: _redo,
-                    onStartRest: _startRestTimer,
-                    undoCount: _undoRedo.undoCount,
-                    redoCount: _undoRedo.redoCount,
-                  ),
-                ),
               TimerBar(
                 remainingSeconds: _restRemaining,
                 onStop: _stopRestTimer,
