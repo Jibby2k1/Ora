@@ -101,6 +101,42 @@ class WorkoutRepo {
     );
   }
 
+  Future<List<Map<String, Object?>>> getPreviousSetsForExercise({
+    required int exerciseId,
+    int? excludeSessionId,
+  }) async {
+    final db = await _db.database;
+    final whereExtra = excludeSessionId == null ? '' : 'AND ws.id != ?';
+    final args = excludeSessionId == null ? [exerciseId] : [exerciseId, excludeSessionId];
+    final sessionRows = await db.rawQuery(
+      '''
+SELECT ws.id
+FROM workout_session ws
+JOIN session_exercise sx ON sx.workout_session_id = ws.id
+WHERE sx.exercise_id = ? $whereExtra
+ORDER BY ws.started_at DESC
+LIMIT 1
+''',
+      args,
+    );
+    if (sessionRows.isEmpty) return [];
+    final previousSessionId = sessionRows.first['id'] as int?;
+    if (previousSessionId == null) return [];
+    return db.rawQuery(
+      '''
+SELECT se.set_index,
+       se.weight_value,
+       se.weight_unit,
+       se.reps
+FROM set_entry se
+JOIN session_exercise sx ON sx.id = se.session_exercise_id
+WHERE sx.exercise_id = ? AND sx.workout_session_id = ?
+ORDER BY se.set_index ASC
+''',
+      [exerciseId, previousSessionId],
+    );
+  }
+
   Future<void> updateSetEntry({required int id, double? weightValue, int? reps, int? partialReps, double? rpe, double? rir}) async {
     final db = await _db.database;
     await db.update(

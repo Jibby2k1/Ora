@@ -24,6 +24,7 @@ import '../../../domain/models/last_logged_set.dart';
 import '../../../domain/models/session_context.dart';
 import '../../../domain/models/session_exercise_info.dart';
 import '../../../domain/services/exercise_matcher.dart';
+import '../../../domain/services/set_plan_service.dart';
 import '../shell/app_shell_controller.dart';
 import '../../widgets/confirmation_card/confirmation_card.dart';
 import '../../widgets/exercise_modal/exercise_modal.dart';
@@ -38,6 +39,23 @@ class SessionScreen extends StatefulWidget {
 
   @override
   State<SessionScreen> createState() => _SessionScreenState();
+}
+
+class _DraftSet {
+  final TextEditingController weight = TextEditingController();
+  final TextEditingController reps = TextEditingController();
+
+  void dispose() {
+    weight.dispose();
+    reps.dispose();
+  }
+}
+
+class _InlineSetData {
+  _InlineSetData({required this.sets, required this.previousSets});
+
+  final List<Map<String, Object?>> sets;
+  final List<Map<String, Object?>> previousSets;
 }
 
 enum _PendingField { weight, reps }
@@ -103,10 +121,17 @@ class _SessionScreenState extends State<SessionScreen> {
   List<String> _otherDayExerciseNames = [];
   List<String> _catalogExerciseNames = [];
   final UndoRedoStack _undoRedo = UndoRedoStack();
+  bool _isLoggingSet = false;
+  final List<String> _setDebugNotes = [];
+  bool _showSetDebug = true;
+  final Map<int, _InlineSetData> _inlineSetCache = {};
+  final Map<int, Future<_InlineSetData>> _inlineSetFutures = {};
+  final Map<int, String> _inlineDebugSnapshot = {};
   Timer? _restTimer;
   int _restRemaining = 0;
   bool _listening = false;
   String? _voicePartial;
+  final Map<int, List<_DraftSet>> _draftSetsByExerciseId = {};
 
   _PendingLogSet? _pending;
   LastLoggedSet? _lastLogged;
@@ -132,6 +157,7 @@ class _SessionScreenState extends State<SessionScreen> {
   String _cloudProvider = 'gemini';
   bool _wakeWordEnabled = false;
   bool _sessionEnded = false;
+  String _weightUnit = 'lb';
 
   @override
   void initState() {
@@ -159,12 +185,18 @@ class _SessionScreenState extends State<SessionScreen> {
     Future.microtask(_loadCloudSettings);
     Future.microtask(_loadExerciseHints);
     Future.microtask(_loadSessionMuscles);
+    Future.microtask(_loadUnitPref);
   }
 
   @override
   void dispose() {
     _voiceController.dispose();
     _restTimer?.cancel();
+    for (final drafts in _draftSetsByExerciseId.values) {
+      for (final draft in drafts) {
+        draft.dispose();
+      }
+    }
     if (_sessionEnded) {
       AppShellController.instance.setActiveSession(false);
     }
@@ -271,6 +303,554 @@ class _SessionScreenState extends State<SessionScreen> {
       }
       if (mounted) setState(() {});
     } catch (_) {}
+  }
+
+  Future<void> _loadUnitPref() async {
+    final unit = await _settingsRepo.getUnit();
+    if (!mounted) return;
+    setState(() {
+      _weightUnit = unit;
+    });
+  }
+
+  Future<void> _showQuickAddSet(SessionExerciseInfo info) async {
+    final list = _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []);
+    list.add(_DraftSet());
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  String _formatSetWeight(num? weight) {
+    if (weight == null) return '—';
+    final value = weight.toDouble();
+    return value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(1);
+  }
+
+  String _formatPrevious(Map<String, Object?>? row) {
+    if (row == null) return '—';
+    final weight = row['weight_value'] as num?;
+    final reps = row['reps'] as int?;
+    if (weight == null || reps == null) return '—';
+    final unit = (row['weight_unit'] as String?)?.trim();
+    final unitLabel = unit == null || unit.isEmpty ? '' : ' $unit';
+    return '${_formatSetWeight(weight)}$unitLabel × $reps';
+  }
+
+  Future<_InlineSetData> _loadInlineSetData(SessionExerciseInfo info) async {
+    try {
+      final sets = List<Map<String, Object?>>.from(
+        await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId),
+      );
+      sets.sort((a, b) {
+        final aIndex = (a['set_index'] as int?) ?? 0;
+        final bIndex = (b['set_index'] as int?) ?? 0;
+        if (aIndex != bIndex) return aIndex.compareTo(bIndex);
+        final aId = (a['id'] as int?) ?? 0;
+        final bId = (b['id'] as int?) ?? 0;
+        return aId.compareTo(bId);
+      });
+      final previousSets = List<Map<String, Object?>>.from(
+        await _workoutRepo.getPreviousSetsForExercise(
+          exerciseId: info.exerciseId,
+          excludeSessionId: widget.contextData.sessionId,
+        ),
+      );
+      final drafts = _draftSetsByExerciseId[info.sessionExerciseId] ?? const [];
+      _logInlineSnapshot(info, sets, previousSets, drafts, source: 'load');
+      return _InlineSetData(sets: sets, previousSets: previousSets);
+    } catch (error, stack) {
+      _pushSetDebug(
+        '[load] ex=${info.sessionExerciseId} error=${error.runtimeType} '
+        '${error.toString().split('\n').first}',
+      );
+      debugPrint(stack.toString());
+      final cached = _inlineSetCache[info.sessionExerciseId];
+      if (cached != null) return cached;
+      return _InlineSetData(sets: const [], previousSets: const []);
+    }
+  }
+
+  Future<_InlineSetData> _getInlineSetFuture(SessionExerciseInfo info) {
+    final existing = _inlineSetFutures[info.sessionExerciseId];
+    if (existing != null) {
+      _pushSetDebug(
+        '[future] ex=${info.sessionExerciseId} reuse future=${existing.hashCode}',
+      );
+      return existing;
+    }
+    final future = _loadInlineSetData(info).then((data) {
+      _inlineSetCache[info.sessionExerciseId] = data;
+      return data;
+    });
+    _inlineSetFutures[info.sessionExerciseId] = future;
+    _pushSetDebug(
+      '[future] ex=${info.sessionExerciseId} create future=${future.hashCode}',
+    );
+    return future;
+  }
+
+  void _refreshInlineSetData(SessionExerciseInfo info) {
+    final previous = _inlineSetFutures[info.sessionExerciseId];
+    final future = _loadInlineSetData(info).then((data) {
+      _inlineSetCache[info.sessionExerciseId] = data;
+      _pushSetDebug(
+        '[refresh] ex=${info.sessionExerciseId} done sets=${data.sets.length} '
+        'rows=${_summarizeSetRows(data.sets)}',
+      );
+      return data;
+    });
+    _inlineSetFutures[info.sessionExerciseId] = future;
+    _pushSetDebug(
+      '[refresh] ex=${info.sessionExerciseId} start future=${future.hashCode} '
+      'prev=${previous?.hashCode}',
+    );
+  }
+
+  Future<void> _commitDraftSet(SessionExerciseInfo info, _DraftSet draft) async {
+    final reps = int.tryParse(draft.reps.text.trim());
+    if (reps == null || reps <= 0) {
+      _showMessage('Enter valid reps.');
+      return;
+    }
+    final weightRaw = draft.weight.text.trim();
+    final weight = weightRaw.isEmpty ? null : double.tryParse(weightRaw);
+    _pushSetDebug(
+      '[commit] start ex=${info.sessionExerciseId} reps=$reps weight=$weight',
+    );
+    _isLoggingSet = true;
+    try {
+      final beforeSets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+      _pushSetDebug('[commit] beforeCount=${beforeSets.length} rows=${_summarizeSetRows(beforeSets)}');
+      await _logInlineSet(info, reps: reps, weight: weight);
+      final afterSets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+      _pushSetDebug('[commit] afterCount=${afterSets.length} rows=${_summarizeSetRows(afterSets)}');
+      if (afterSets.length <= beforeSets.length) {
+        _showMessage('Set not saved. Try again.');
+        return;
+      }
+      final list = _draftSetsByExerciseId[info.sessionExerciseId];
+      list?.remove(draft);
+      draft.dispose();
+      _refreshInlineSetData(info);
+      if (!mounted) return;
+      setState(() {});
+    } finally {
+      _isLoggingSet = false;
+    }
+  }
+
+  void _pushSetDebug(String message) {
+    final stamp = DateTime.now().toIso8601String().split('T').last;
+    final entry = '$stamp $message';
+    _setDebugNotes.add(entry);
+    if (_setDebugNotes.length > 12) {
+      _setDebugNotes.removeRange(0, _setDebugNotes.length - 12);
+    }
+    debugPrint(entry);
+  }
+
+  String _summarizeParts(List<String> parts, {int max = 6}) {
+    if (parts.isEmpty) return '—';
+    if (parts.length <= max) return parts.join(', ');
+    final preview = parts.take(max).join(', ');
+    return '$preview, …+${parts.length - max}';
+  }
+
+  String _summarizeSetRows(List<Map<String, Object?>> rows) {
+    final parts = <String>[];
+    for (final row in rows) {
+      final id = row['id'] as int?;
+      final index = row['set_index'] as int?;
+      final reps = row['reps'] as int?;
+      final weight = row['weight_value'] as num?;
+      final weightLabel = _formatSetWeight(weight);
+      parts.add('${id ?? '?'}:${index ?? '?'} ${weightLabel}x${reps ?? '?'}');
+    }
+    return _summarizeParts(parts);
+  }
+
+  String _summarizePreviousRows(List<Map<String, Object?>> rows) {
+    final parts = <String>[];
+    for (final row in rows) {
+      final index = row['set_index'] as int?;
+      final reps = row['reps'] as int?;
+      final weight = row['weight_value'] as num?;
+      final weightLabel = _formatSetWeight(weight);
+      parts.add('${index ?? '?'}:${weightLabel}x${reps ?? '?'}');
+    }
+    return _summarizeParts(parts);
+  }
+
+  void _logInlineSnapshot(
+    SessionExerciseInfo info,
+    List<Map<String, Object?>> sets,
+    List<Map<String, Object?>> previousSets,
+    List<_DraftSet> drafts, {
+    required String source,
+  }) {
+    if (!_showSetDebug) return;
+    final draftCount = drafts.length;
+    final summary =
+        '[snapshot:$source] ex=${info.sessionExerciseId} sets=${sets.length} '
+        '(${_summarizeSetRows(sets)}) '
+        'prev=${previousSets.length} (${_summarizePreviousRows(previousSets)}) '
+        'drafts=$draftCount';
+    final last = _inlineDebugSnapshot[info.sessionExerciseId];
+    if (last == summary) return;
+    _inlineDebugSnapshot[info.sessionExerciseId] = summary;
+    _pushSetDebug(summary);
+  }
+
+  Widget _buildInlineSets(
+    BuildContext context,
+    SessionExerciseInfo info,
+    List<Map<String, Object?>> sets,
+    List<Map<String, Object?>> previousSets,
+    List<_DraftSet> drafts, {
+    String renderSource = 'render',
+  }
+  ) {
+    var volume = 0.0;
+    for (final row in sets) {
+      final weight = row['weight_value'] as num?;
+      final reps = row['reps'] as int?;
+      if (weight != null && reps != null) {
+        volume += weight.toDouble() * reps;
+      }
+    }
+    final previousByIndex = <int, Map<String, Object?>>{};
+    for (final row in previousSets) {
+      final index = row['set_index'] as int?;
+      if (index != null) {
+        previousByIndex[index] = row;
+      }
+    }
+    var maxSetIndex = 0;
+    for (final row in sets) {
+      final index = row['set_index'] as int?;
+      if (index != null && index > maxSetIndex) {
+        maxSetIndex = index;
+      }
+    }
+    _logInlineSnapshot(info, sets, previousSets, drafts, source: renderSource);
+    final volumeLabel = volume == 0 ? '—' : volume.toStringAsFixed(0);
+    const setColWidth = 32.0;
+    const prevColWidth = 96.0;
+    const weightColWidth = 64.0;
+    const repsColWidth = 52.0;
+    const checkColWidth = 32.0;
+    const colGap = 10.0;
+    final headerStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.4,
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Sets ${sets.length + drafts.length}'),
+            const SizedBox(width: 12),
+            Text('Volume $volumeLabel'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (sets.isEmpty && drafts.isEmpty)
+          Text(
+            'No sets yet.',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else ...[
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: setColWidth,
+                  child: Center(child: Text('Set', style: headerStyle)),
+                ),
+                const SizedBox(width: colGap),
+                SizedBox(
+                  width: prevColWidth,
+                  child: Center(child: Text('Previous', style: headerStyle)),
+                ),
+                const SizedBox(width: colGap),
+                SizedBox(
+                  width: weightColWidth,
+                  child: Center(child: Text(_weightUnit, style: headerStyle)),
+                ),
+                const SizedBox(width: colGap),
+                SizedBox(
+                  width: repsColWidth,
+                  child: Center(child: Text('Reps', style: headerStyle)),
+                ),
+                const SizedBox(width: colGap),
+                SizedBox(
+                  width: checkColWidth,
+                  child: Text('', style: headerStyle),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          for (var i = 0; i < sets.length; i++)
+            Builder(
+              builder: (context) {
+                final row = sets[i];
+                final setNumber = (row['set_index'] as int?) ?? (i + 1);
+                final previousRow = previousByIndex[setNumber];
+                final rowContent = Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: setColWidth,
+                        child: Center(child: Text('$setNumber')),
+                      ),
+                      const SizedBox(width: colGap),
+                      SizedBox(
+                        width: prevColWidth,
+                        child: Center(child: Text(_formatPrevious(previousRow))),
+                      ),
+                      const SizedBox(width: colGap),
+                      SizedBox(
+                        width: weightColWidth,
+                        child: Center(
+                          child: Text(_formatSetWeight(row['weight_value'] as num?)),
+                        ),
+                      ),
+                      const SizedBox(width: colGap),
+                      SizedBox(
+                        width: repsColWidth,
+                        child: Center(
+                          child: Text((row['reps'] as int?)?.toString() ?? '—'),
+                        ),
+                      ),
+                      const SizedBox(width: colGap),
+                      SizedBox(
+                        width: checkColWidth,
+                        child: Center(
+                          child: Icon(
+                            Icons.check_circle,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+                final setId = row['id'] as int?;
+                if (setId == null) return rowContent;
+                return Dismissible(
+                  key: ValueKey('set-$setId'),
+                  direction: DismissDirection.startToEnd,
+                  dismissThresholds: const {
+                    DismissDirection.startToEnd: 0.35,
+                  },
+                  confirmDismiss: (_) async {
+                    _pushSetDebug('[swipe] saved id=$setId');
+                    return !_isLoggingSet;
+                  },
+                  background: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    alignment: Alignment.centerLeft,
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.delete_outline),
+                  ),
+                  onDismissed: (_) => _deleteSet(setId, info),
+                  child: rowContent,
+                );
+              },
+            ),
+          for (var i = 0; i < drafts.length; i++)
+            Builder(
+              builder: (context) {
+                final setNumber = maxSetIndex + i + 1;
+                final previousRow = previousByIndex[setNumber];
+                final rowContent = Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: setColWidth,
+                        child: Center(child: Text('$setNumber')),
+                      ),
+                      const SizedBox(width: colGap),
+                      SizedBox(
+                        width: prevColWidth,
+                        child: Center(child: Text(_formatPrevious(previousRow))),
+                      ),
+                      const SizedBox(width: colGap),
+                      SizedBox(
+                        width: weightColWidth,
+                        child: TextField(
+                          controller: drafts[i].weight,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          textAlign: TextAlign.center,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: colGap),
+                      SizedBox(
+                        width: repsColWidth,
+                        child: TextField(
+                          controller: drafts[i].reps,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: colGap),
+                      SizedBox(
+                        width: checkColWidth,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(
+                            Icons.check_circle,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          onPressed: () => _commitDraftSet(info, drafts[i]),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+                return Dismissible(
+                  key: ValueKey('draft-${info.sessionExerciseId}-$i-${drafts[i].hashCode}'),
+                  direction: DismissDirection.startToEnd,
+                  dismissThresholds: const {
+                    DismissDirection.startToEnd: 0.45,
+                  },
+                  confirmDismiss: (_) async {
+                    _pushSetDebug('[swipe] draft ex=${info.sessionExerciseId} idx=$i');
+                    return !_isLoggingSet;
+                  },
+                  background: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    alignment: Alignment.centerLeft,
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.delete_outline),
+                  ),
+                  onDismissed: (_) => _removeDraftSet(info, drafts[i]),
+                  child: rowContent,
+                );
+              },
+            ),
+        ],
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () => _showQuickAddSet(info),
+            style: OutlinedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.surface.withOpacity(0.2),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text('+ Add Set'),
+          ),
+        ),
+        if (_showSetDebug && _setDebugNotes.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          ..._setDebugNotes.map(
+            (note) => Text(
+              note,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white70),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _logInlineSet(
+    SessionExerciseInfo info, {
+    required int reps,
+    double? weight,
+  }) async {
+    final existing = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+    var maxIndex = 0;
+    for (final row in existing) {
+      final value = row['set_index'] as int?;
+      if (value != null && value > maxIndex) {
+        maxIndex = value;
+      }
+    }
+    final setIndex = maxIndex + 1;
+    final planResult = SetPlanService().nextExpected(
+      blocks: info.planBlocks,
+      existingSets: existing,
+    );
+    final role = planResult?.nextRole ?? 'TOP';
+    final isAmrap = planResult?.isAmrap ?? false;
+    _pushSetDebug(
+      '[log] ex=${info.sessionExerciseId} setIndex=$setIndex role=$role reps=$reps weight=$weight',
+    );
+    final id = await _workoutRepo.addSetEntry(
+      sessionExerciseId: info.sessionExerciseId,
+      setIndex: setIndex,
+      setRole: role,
+      weightValue: weight,
+      weightUnit: _weightUnit,
+      weightMode: info.weightModeDefault,
+      reps: reps,
+      partialReps: 0,
+      rpe: null,
+      rir: null,
+      flagWarmup: role == 'WARMUP',
+      flagPartials: false,
+      isAmrap: isAmrap,
+    );
+    _pushSetDebug('[log] inserted id=$id');
+    final latest = await _workoutRepo.getSetEntryById(id);
+    final setsForExercise = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+    _pushSetDebug(
+      '[log] ex=${info.sessionExerciseId} nowCount=${setsForExercise.length} '
+      'rows=${_summarizeSetRows(setsForExercise)}',
+    );
+    final roleLabel = latest?['set_role'] as String? ?? 'TOP';
+    final isAmrapLabel = (latest?['is_amrap'] as int? ?? 0) == 1;
+    if (!mounted) return;
+    setState(() {
+      _lastLogged = LastLoggedSet(
+        exerciseName: info.exerciseName,
+        reps: reps,
+        weight: weight,
+        role: roleLabel,
+        isAmrap: isAmrapLabel,
+        sessionSetCount: setsForExercise.length,
+      );
+      _lastExerciseInfo = info;
+      _prompt = null;
+      _pending = null;
+    });
   }
 
   List<String> _dedupeList(List<String> values) {
@@ -1008,6 +1588,37 @@ class _SessionScreenState extends State<SessionScreen> {
     setState(() {});
   }
 
+  Future<void> _deleteSet(int id, SessionExerciseInfo info) async {
+    if (_isLoggingSet) return;
+    final beforeSets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+    _pushSetDebug(
+      '[delete] ex=${info.sessionExerciseId} id=$id beforeCount=${beforeSets.length} '
+      'rows=${_summarizeSetRows(beforeSets)}',
+    );
+    final result = await _dispatcher.dispatch(DeleteSetEntry(id));
+    if (result.inverse != null) {
+      _undoRedo.pushUndo(result.inverse!);
+    }
+    final afterSets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+    _pushSetDebug(
+      '[delete] ex=${info.sessionExerciseId} id=$id afterCount=${afterSets.length} '
+      'rows=${_summarizeSetRows(afterSets)}',
+    );
+    _refreshInlineSetData(info);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  void _removeDraftSet(SessionExerciseInfo info, _DraftSet draft) {
+    final list = _draftSetsByExerciseId[info.sessionExerciseId];
+    if (list == null) return;
+    _pushSetDebug('[draft-delete] ex=${info.sessionExerciseId}');
+    list.remove(draft);
+    draft.dispose();
+    if (!mounted) return;
+    setState(() {});
+  }
+
   Future<void> _undo() async {
     final cmd = _undoRedo.popUndo();
     if (cmd == null) return;
@@ -1334,10 +1945,16 @@ class _SessionScreenState extends State<SessionScreen> {
                       muscleChips.add(
                         Chip(
                           label: Text(primary),
-                          visualDensity: VisualDensity.compact,
+                          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
                           backgroundColor: primaryColor.withOpacity(0.22),
-                          labelStyle: TextStyle(color: primaryColor, fontWeight: FontWeight.w600),
+                          labelStyle: TextStyle(
+                            color: primaryColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                          ),
                           side: BorderSide(color: primaryColor.withOpacity(0.6)),
+                          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       );
                     }
@@ -1345,38 +1962,78 @@ class _SessionScreenState extends State<SessionScreen> {
                       muscleChips.add(
                         Chip(
                           label: Text(secondary),
-                          visualDensity: VisualDensity.compact,
+                          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
                           backgroundColor: secondaryColor.withOpacity(0.18),
-                          labelStyle: TextStyle(color: secondaryColor, fontWeight: FontWeight.w500),
+                          labelStyle: TextStyle(
+                            color: secondaryColor,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 11,
+                          ),
                           side: BorderSide(color: secondaryColor.withOpacity(0.5)),
+                          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       );
                     }
                     for (final tag in tags) {
                       muscleChips.add(
                         Chip(
-                          label: Text(tag),
-                          visualDensity: VisualDensity.compact,
+                          label: Text(tag, style: const TextStyle(fontSize: 11)),
+                          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
                           backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       );
                     }
                     return GlassCard(
-                      padding: EdgeInsets.zero,
-                      child: ListTile(
-                        title: Text(info.exerciseName),
-                        subtitle: muscleChips.isEmpty
-                            ? const Text('Tap to log sets')
-                            : Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Wrap(
-                                  spacing: 6,
-                                  runSpacing: 6,
-                                  children: muscleChips,
-                                ),
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            info.exerciseName,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          if (muscleChips.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: muscleChips,
                               ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => _openExerciseModal(info),
+                            ),
+                          const SizedBox(height: 8),
+                          FutureBuilder<_InlineSetData>(
+                            future: _getInlineSetFuture(info),
+                            builder: (context, snapshot) {
+                              final cached = _inlineSetCache[info.sessionExerciseId];
+                              if (snapshot.hasError) {
+                                _pushSetDebug(
+                                  '[builder] ex=${info.sessionExerciseId} error=${snapshot.error}',
+                                );
+                              }
+                              final useCache = (snapshot.connectionState != ConnectionState.done ||
+                                      snapshot.hasError ||
+                                      snapshot.data == null) &&
+                                  cached != null;
+                              final sets = useCache ? cached!.sets : snapshot.data?.sets ?? [];
+                              final previousSets =
+                                  useCache ? cached!.previousSets : snapshot.data?.previousSets ?? [];
+                              final drafts =
+                                  _draftSetsByExerciseId[info.sessionExerciseId] ?? const <_DraftSet>[];
+                              return _buildInlineSets(
+                                context,
+                                info,
+                                sets,
+                                previousSets,
+                                drafts,
+                                renderSource: useCache ? 'render-cache' : 'render-snapshot',
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     );
                   },
