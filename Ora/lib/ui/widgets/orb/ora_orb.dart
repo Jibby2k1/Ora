@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import '../../../app.dart';
 import '../../../core/voice/stt.dart';
@@ -31,6 +32,9 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
   static const double _edgePadding = 12;
   static const double _dragOverscroll = 24;
   static const double _dockNavHeight = 68;
+  static const double _deckWidth = 220;
+  static const double _deckGap = 12;
+  static const double _deckFallbackHeight = 292;
   static const String _orbAsset = 'assets/branding/ora.png';
 
   final SettingsRepo _settingsRepo = SettingsRepo(AppDatabase.instance);
@@ -68,6 +72,7 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
   double _toolbarHeight = kToolbarHeight;
   double? _savedPosX;
   double? _savedPosY;
+  Size? _deckSize;
 
   Timer? _recordTimeout;
   Timer? _driftTimer;
@@ -218,7 +223,7 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
           _stopRecording();
           return;
         }
-        setState(() => _expanded = !_expanded);
+        _toggleExpanded();
       },
       onLongPress: () => _hideOrb(),
       onPanStart: (_) => _startDrag(),
@@ -273,61 +278,88 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     );
   }
 
+  void _toggleExpanded() {
+    if (_expanded) {
+      setState(() => _expanded = false);
+      return;
+    }
+
+    if (_layoutSize != null) {
+      final padding = MediaQuery.of(context).padding;
+      final adjusted = _clampOrbForDeck(_layoutSize!, padding, _position);
+      if (adjusted != _position) {
+        _position = adjusted;
+        _persistPosition();
+      }
+    }
+
+    setState(() {
+      _expanded = true;
+      _driftOffset = Offset.zero;
+    });
+  }
+
   Widget _buildDeck() {
-    return GlassCard(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      radius: 20,
-      child: SizedBox(
-        width: 220,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            GridView.count(
-              crossAxisCount: 2,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                _OrbActionButton(
-                  icon: Icons.photo_camera,
-                  label: 'Camera',
-                  onTap: _handleCameraTap,
-                ),
-                _OrbActionButton(
-                  icon: Icons.upload_file,
-                  label: 'Upload',
-                  onTap: _handleUploadTap,
-                ),
-                _OrbActionButton(
-                  icon: Icons.mic,
-                  label: _recording ? 'Stop' : 'Mic',
-                  onTap: _handleMicTap,
-                ),
-                _OrbActionButton(
-                  icon: Icons.edit_note,
-                  label: 'Text',
-                  onTap: _showTextSheet,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                TextButton.icon(
-                  onPressed: _hideOrb,
-                  icon: const Icon(Icons.visibility_off, size: 18),
-                  label: const Text('Hide'),
-                ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: _openUploads,
-                  icon: const Icon(Icons.cloud_upload, size: 18),
-                  label: const Text('Uploads'),
-                ),
-              ],
-            ),
-          ],
+    return _MeasureSize(
+      onChange: (size) {
+        if (_deckSize == size) return;
+        setState(() => _deckSize = size);
+      },
+      child: GlassCard(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        radius: 20,
+        child: SizedBox(
+          width: _deckWidth,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GridView.count(
+                crossAxisCount: 2,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _OrbActionButton(
+                    icon: Icons.photo_camera,
+                    label: 'Camera',
+                    onTap: _handleCameraTap,
+                  ),
+                  _OrbActionButton(
+                    icon: Icons.upload_file,
+                    label: 'Upload',
+                    onTap: _handleUploadTap,
+                  ),
+                  _OrbActionButton(
+                    icon: Icons.mic,
+                    label: _recording ? 'Stop' : 'Mic',
+                    onTap: _handleMicTap,
+                  ),
+                  _OrbActionButton(
+                    icon: Icons.edit_note,
+                    label: 'Text',
+                    onTap: _showTextSheet,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: _hideOrb,
+                    icon: const Icon(Icons.visibility_off, size: 18),
+                    label: const Text('Hide'),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: _openUploads,
+                    icon: const Icon(Icons.cloud_upload, size: 18),
+                    label: const Text('Uploads'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -532,6 +564,10 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
         _position = _clamp(_position, size, padding);
       }
     }
+
+    if (_expanded) {
+      _position = _clampOrbForDeck(size, padding, _position);
+    }
   }
 
   void _startDriftLoop() {
@@ -618,17 +654,96 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     return size.height - padding.bottom - _orbSize + 6;
   }
 
+  Size _currentDeckSize() {
+    final height = _deckSize?.height ?? _deckFallbackHeight;
+    return Size(_deckWidth, height);
+  }
+
+  Offset _clampOrbForDeck(Size size, EdgeInsets padding, Offset orbOffset) {
+    final deckHeight = _currentDeckSize().height;
+    final minX = _edgePadding;
+    final maxX = size.width - _orbSize - _edgePadding;
+    final minYOrb = padding.top + _edgePadding;
+    final maxYOrb = _maxY(size, padding);
+    final minYDeck = padding.top + _edgePadding;
+    final maxYDeck = size.height - padding.bottom - _dockNavHeight - deckHeight - _edgePadding;
+
+    final aboveMin = minYDeck + deckHeight + _deckGap;
+    final aboveMax = maxYDeck + deckHeight + _deckGap;
+    final belowMin = minYDeck - _orbSize - _deckGap;
+    final belowMax = maxYDeck - deckHeight - _orbSize - _deckGap;
+
+    final orbMin = minYOrb;
+    final orbMax = maxYOrb;
+
+    double dy = orbOffset.dy;
+    final aboveLow = math.max(orbMin, aboveMin);
+    final aboveHigh = math.min(orbMax, aboveMax);
+    final belowLow = math.max(orbMin, belowMin);
+    final belowHigh = math.min(orbMax, belowMax);
+
+    if (aboveLow <= aboveHigh) {
+      dy = dy.clamp(aboveLow, aboveHigh);
+    } else if (belowLow <= belowHigh) {
+      dy = dy.clamp(belowLow, belowHigh);
+    } else {
+      dy = dy.clamp(orbMin, orbMax);
+    }
+
+    final dx = orbOffset.dx.clamp(minX, maxX);
+    return Offset(dx, dy);
+  }
+
   Offset _deckOffset(Size size, EdgeInsets padding, Offset orbOffset) {
-    const deckWidth = 220.0;
-    const deckHeight = 170.0;
-    final isRightSide = orbOffset.dx > size.width * 0.55;
-    final dx = isRightSide
-        ? (orbOffset.dx - deckWidth - 12)
-        : (orbOffset.dx + _orbSize + 12);
-    final rawDy = orbOffset.dy + _orbSize / 2 - deckHeight / 2;
-    final dy = rawDy
-        .clamp(padding.top + 12, size.height - deckHeight - _edgePadding);
-    return Offset(dx.clamp(12, size.width - deckWidth - 12), dy);
+    final deckSize = _currentDeckSize();
+    final deckWidth = deckSize.width;
+    final deckHeight = deckSize.height;
+    final minX = _edgePadding;
+    final maxX = size.width - deckWidth - _edgePadding;
+    final minY = padding.top + _edgePadding;
+    final maxY = size.height - padding.bottom - _dockNavHeight - deckHeight - _edgePadding;
+    final safeMaxY = math.max(minY, maxY);
+    final centerX = orbOffset.dx + _orbSize / 2;
+    final left = (centerX - deckWidth / 2).clamp(minX, maxX);
+    final aboveTop = orbOffset.dy - deckHeight - _deckGap;
+    final belowTop = orbOffset.dy + _orbSize + _deckGap;
+    final above = Rect.fromLTWH(left, aboveTop, deckWidth, deckHeight);
+    final below = Rect.fromLTWH(left, belowTop, deckWidth, deckHeight);
+
+    final aboveFits = above.top >= minY && above.bottom <= safeMaxY;
+    final belowFits = below.top >= minY && below.bottom <= safeMaxY;
+
+    Rect chosen;
+    String reason;
+    if (aboveFits) {
+      chosen = above;
+      reason = 'above';
+    } else if (belowFits) {
+      chosen = below;
+      reason = 'below';
+    } else {
+      final clampedTop = aboveTop.clamp(minY, safeMaxY);
+      chosen = Rect.fromLTWH(left, clampedTop, deckWidth, deckHeight);
+      reason = 'clamped-above';
+      final orbRect = Rect.fromLTWH(orbOffset.dx, orbOffset.dy, _orbSize, _orbSize);
+      if (chosen.overlaps(orbRect)) {
+        final clampedBelow = Rect.fromLTWH(left, belowTop.clamp(minY, safeMaxY), deckWidth, deckHeight);
+        if (!clampedBelow.overlaps(orbRect)) {
+          chosen = clampedBelow;
+          reason = 'clamped-below';
+        }
+      }
+    }
+
+    assert(() {
+      if (kDebugMode) {
+        final orbRect = Rect.fromLTWH(orbOffset.dx, orbOffset.dy, _orbSize, _orbSize);
+        debugPrint('[OrbMenu][$reason] orb=$orbRect deck=$chosen size=$size padding=$padding');
+      }
+      return true;
+    }());
+
+    return chosen.topLeft;
   }
 
   Future<void> _handleCameraTap() async {
@@ -903,6 +1018,32 @@ class _DockTarget extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _MeasureSize extends StatefulWidget {
+  const _MeasureSize({required this.onChange, required this.child});
+
+  final ValueChanged<Size> onChange;
+  final Widget child;
+
+  @override
+  State<_MeasureSize> createState() => _MeasureSizeState();
+}
+
+class _MeasureSizeState extends State<_MeasureSize> {
+  Size? _oldSize;
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final size = context.size;
+      if (size == null || size == _oldSize) return;
+      _oldSize = size;
+      widget.onChange(size);
+    });
+    return widget.child;
   }
 }
 
