@@ -6,6 +6,7 @@ import '../../../data/repositories/exercise_repo.dart';
 import '../../../data/repositories/workout_repo.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
+import 'session_edit_screen.dart';
 
 enum HistoryMode { sessions, exercise }
 
@@ -112,6 +113,44 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return '${hours}h ${mins}m';
   }
 
+  Future<void> _openSessionEditor(Map<String, Object?> row) async {
+    final sessionId = row['id'] as int?;
+    if (sessionId == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SessionEditScreen(sessionId: sessionId),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _deleteSession(Map<String, Object?> row) async {
+    final sessionId = row['id'] as int?;
+    if (sessionId == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete Day?'),
+          content: const Text('This will permanently remove the workout day and all its sets.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+    await _workoutRepo.deleteSession(sessionId);
+    if (!mounted) return;
+    setState(() {});
+  }
+
   Widget _buildSessionHistoryContent({required bool includePadding}) {
     final content = FutureBuilder<List<Map<String, Object?>>>(
       future: _workoutRepo.getCompletedSessions(limit: 200),
@@ -133,12 +172,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
             final programName = row['program_name'] as String?;
             final dayName = row['day_name'] as String?;
             final dayIndex = row['day_index'] as int?;
+            final notes = row['notes'] as String?;
             final exerciseCount = (row['exercise_count'] as int?) ?? 0;
             final setCount = (row['set_count'] as int?) ?? 0;
 
-            final title = (dayName != null && dayName.trim().isNotEmpty)
-                ? dayName
-                : (programName ?? 'Free day');
+            final customTitle = notes == null || notes.trim().isEmpty ? null : notes.trim();
+            final title = customTitle ??
+                ((dayName != null && dayName.trim().isNotEmpty) ? dayName : (programName ?? 'Free day'));
             final programLabel = programName == null || programName.trim().isEmpty
                 ? 'Free day'
                 : (dayIndex == null ? programName : '$programName • Day ${dayIndex + 1}');
@@ -148,14 +188,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ? _formatDuration(startedAt, endedAt)
                 : '—';
             final statLabel = '$setCount sets • $exerciseCount exercises';
-            final subtitle = '$programLabel • $dateLabel • $durationLabel • $statLabel';
+            final metaParts = <String>[
+              if (customTitle != null) programLabel,
+              dateLabel,
+              durationLabel,
+              statLabel,
+            ];
+            final subtitle = metaParts.join(' • ');
 
             return GlassCard(
-              padding: EdgeInsets.zero,
-              child: ListTile(
-                title: Text(title),
-                subtitle: Text(subtitle),
-                trailing: const Icon(Icons.chevron_right),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: InkWell(
                 onTap: () async {
                   await Navigator.of(context).push(
                     MaterialPageRoute(
@@ -163,6 +206,52 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                   );
                 },
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            subtitle,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Colors.white70),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'edit') {
+                          _openSessionEditor(row);
+                        } else if (value == 'delete') {
+                          _deleteSession(row);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Text('Edit day'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Delete day'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -547,6 +636,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
           rir: (row['rir'] as num?)?.toDouble(),
           isWarmup: (row['flag_warmup'] as int?) == 1,
           isAmrap: (row['is_amrap'] as int?) == 1,
+          restSecActual: row['rest_sec_actual'] as int?,
         ),
       );
     }
@@ -588,6 +678,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     if (set.isAmrap) parts.add('AMRAP');
     if (set.rpe != null) parts.add('RPE ${set.rpe!.toStringAsFixed(1)}');
     if (set.rir != null) parts.add('RIR ${set.rir!.toStringAsFixed(1)}');
+    if (set.restSecActual != null) parts.add('Rest ${set.restSecActual}s');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Text(parts.join(' • ')),
@@ -750,6 +841,7 @@ class _SessionSetRow {
     required this.rir,
     required this.isWarmup,
     required this.isAmrap,
+    required this.restSecActual,
   });
 
   final int setIndex;
@@ -760,6 +852,7 @@ class _SessionSetRow {
   final double? rir;
   final bool isWarmup;
   final bool isAmrap;
+  final int? restSecActual;
 }
 
 class _Series {
