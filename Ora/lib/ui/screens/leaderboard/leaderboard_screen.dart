@@ -10,14 +10,31 @@ import '../../widgets/consent/cloud_consent.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 
-class LeaderboardScreen extends StatefulWidget {
+class LeaderboardScreen extends StatelessWidget {
   const LeaderboardScreen({super.key});
 
   @override
-  State<LeaderboardScreen> createState() => _LeaderboardScreenState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Leaderboard'),
+        actions: const [SizedBox(width: 72)],
+      ),
+      body: const LeaderboardContent(showBackground: true),
+    );
+  }
 }
 
-class _LeaderboardScreenState extends State<LeaderboardScreen> {
+class LeaderboardContent extends StatefulWidget {
+  const LeaderboardContent({super.key, required this.showBackground});
+
+  final bool showBackground;
+
+  @override
+  State<LeaderboardContent> createState() => _LeaderboardContentState();
+}
+
+class _LeaderboardContentState extends State<LeaderboardContent> {
   late final SettingsRepo _settingsRepo;
 
   @override
@@ -28,88 +45,88 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Leaderboard'),
-        actions: const [SizedBox(width: 72)],
-      ),
-      body: Stack(
+    final content = DefaultTabController(
+      length: 2,
+      child: Column(
         children: [
-          const GlassBackground(),
-          DefaultTabController(
-            length: 2,
-            child: Column(
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: GlassCard(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: const TabBar(
+                tabs: [
+                  Tab(text: 'Friends'),
+                  Tab(text: 'Global'),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: GlassCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: const TabBar(
-                      tabs: [
-                        Tab(text: 'Friends'),
-                        Tab(text: 'Global'),
-                      ],
-                    ),
-                  ),
+                _LeaderboardTab(
+                  title: 'Friends',
+                  subtitle: 'Requires account + consent',
+                  icon: Icons.group,
+                  audience: 'friends',
+                  onTap: () async {
+                    if (FirebaseAuth.instance.currentUser == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Sign in to access leaderboards.')),
+                      );
+                      return;
+                    }
+                    final ok = await CloudConsent.ensureLeaderboardConsent(context, _settingsRepo);
+                    if (!ok || !context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Friends leaderboard coming soon.')),
+                    );
+                  },
                 ),
-                Expanded(
-                  child: TabBarView(
-                    children: [
-                      _LeaderboardTab(
-                        title: 'Friends',
-                        subtitle: 'Requires account + consent',
-                        icon: Icons.group,
-                        audience: 'friends',
-                        onTap: () async {
-                          if (FirebaseAuth.instance.currentUser == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Sign in to access leaderboards.')),
-                            );
-                            return;
-                          }
-                          final ok = await CloudConsent.ensureLeaderboardConsent(context, _settingsRepo);
-                          if (!ok || !context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Friends leaderboard coming soon.')),
-                          );
-                        },
-                      ),
-                      _LeaderboardTab(
-                        title: 'Global',
-                        subtitle: 'Optional, with warning + consent',
-                        icon: Icons.public,
-                        audience: 'global',
-                        onTap: () async {
-                          if (FirebaseAuth.instance.currentUser == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Sign in to access leaderboards.')),
-                            );
-                            return;
-                          }
-                          final ok = await CloudConsent.ensureLeaderboardConsent(context, _settingsRepo);
-                          if (!ok || !context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Global leaderboard coming soon.')),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: GlassCard(
-                    child: const ListTile(
-                      title: Text('Scoring'),
-                      subtitle: Text('Geometric mean (placeholder)'),
-                    ),
-                  ),
+                _LeaderboardTab(
+                  title: 'Global',
+                  subtitle: 'Optional, with warning + consent',
+                  icon: Icons.public,
+                  audience: 'global',
+                  onTap: () async {
+                    if (FirebaseAuth.instance.currentUser == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Sign in to access leaderboards.')),
+                      );
+                      return;
+                    }
+                    final ok = await CloudConsent.ensureLeaderboardConsent(context, _settingsRepo);
+                    if (!ok || !context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Global leaderboard coming soon.')),
+                    );
+                  },
                 ),
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: GlassCard(
+              child: const ListTile(
+                title: Text('Scoring'),
+                subtitle: Text('Geometric mean (placeholder)'),
+              ),
+            ),
+          ),
         ],
       ),
+    );
+
+    if (!widget.showBackground) {
+      return content;
+    }
+
+    return Stack(
+      children: [
+        const GlassBackground(),
+        content,
+      ],
     );
   }
 }
@@ -198,28 +215,50 @@ class _TrainingLeaderboardState extends State<_TrainingLeaderboard> {
 
   @override
   Widget build(BuildContext context) {
-    final rows = _demoTrainingScores(
-      audience: widget.audience,
-      muscles: _selectedMuscles.isEmpty ? _muscleOptions : _selectedMuscles.toList(),
-      metric: _metric,
-    );
-
+    final scores = _demoScores();
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       children: [
         GlassCard(
-          child: ListTile(
-            title: Text(widget.title),
-            subtitle: Text(widget.subtitle),
-            trailing: Icon(widget.icon),
-            onTap: widget.onTap,
-          ),
-        ),
-        const SizedBox(height: 12),
-        const GlassCard(
-          child: ListTile(
-            title: Text('Status'),
-            subtitle: Text('Not connected yet'),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.title, style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 6),
+              Text(widget.subtitle, style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _MetricChip(
+                    label: 'PR',
+                    selected: _metric == _TrainingMetric.pr,
+                    onTap: () => setState(() => _metric = _TrainingMetric.pr),
+                  ),
+                  _MetricChip(
+                    label: 'Volume',
+                    selected: _metric == _TrainingMetric.volume,
+                    onTap: () => setState(() => _metric = _TrainingMetric.volume),
+                  ),
+                  _MetricChip(
+                    label: 'Consistency',
+                    selected: _metric == _TrainingMetric.consistency,
+                    onTap: () => setState(() => _metric = _TrainingMetric.consistency),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: ElevatedButton.icon(
+                  onPressed: widget.onTap,
+                  icon: const Icon(Icons.cloud_upload),
+                  label: const Text('Join leaderboard'),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 12),
@@ -228,149 +267,86 @@ class _TrainingLeaderboardState extends State<_TrainingLeaderboard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Training Focus (placeholder)'),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Expanded(child: Text('Metric')),
-                  DropdownButton<_TrainingMetric>(
-                    value: _metric,
-                    items: _TrainingMetric.values
-                        .map((metric) => DropdownMenuItem(
-                              value: metric,
-                              child: Text(metric.label),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => _metric = value);
-                    },
-                  ),
-                ],
-              ),
+              const Text('Filters'),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final muscle in _muscleOptions)
+                  for (final group in ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms'])
                     FilterChip(
-                      label: Text(muscle),
-                      selected: _selectedMuscles.contains(muscle),
-                      onSelected: (selected) {
+                      label: Text(group),
+                      selected: _selectedMuscles.contains(group),
+                      onSelected: (value) {
                         setState(() {
-                          if (selected) {
-                            _selectedMuscles.add(muscle);
+                          if (value) {
+                            _selectedMuscles.add(group);
                           } else {
-                            _selectedMuscles.remove(muscle);
+                            _selectedMuscles.remove(group);
                           }
                         });
                       },
                     ),
                 ],
               ),
-              const SizedBox(height: 12),
-              ...rows.map((row) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(child: Text(row.rank.toString())),
-                    title: Text(row.name),
-                    subtitle: Text('${_metric.label}: ${row.displayValue}'),
-                  )),
             ],
           ),
         ),
+        const SizedBox(height: 12),
+        GlassCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              for (final row in scores)
+                ListTile(
+                  leading: CircleAvatar(child: Text('${row.rank}')),
+                  title: Text(row.name),
+                  subtitle: Text('Workout ${row.workout.toInt()} · Diet ${row.diet.toInt()} · App ${row.appearance.toInt()}'),
+                  trailing: Text(row.score.toStringAsFixed(1)),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
       ],
     );
   }
 }
 
-enum _TrainingMetric {
-  pr('PR'),
-  volume('Volume'),
-  prCount('PR Count');
+class _MetricChip extends StatelessWidget {
+  const _MetricChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
-  const _TrainingMetric(this.label);
   final String label;
-}
+  final bool selected;
+  final VoidCallback onTap;
 
-class _TrainingRow {
-  _TrainingRow(this.name, this.value, this.rank, this.displayValue);
-
-  final String name;
-  final double value;
-  final int rank;
-  final String displayValue;
-}
-
-const _muscleOptions = [
-  'Chest',
-  'Back',
-  'Lats',
-  'Upper Back',
-  'Traps',
-  'Shoulders',
-  'Front Delts',
-  'Side Delts',
-  'Rear Delts',
-  'Biceps',
-  'Triceps',
-  'Forearms',
-  'Abs',
-  'Obliques',
-  'Quads',
-  'Hamstrings',
-  'Glutes',
-  'Calves',
-  'Adductors',
-  'Abductors',
-  'Hip Flexors',
-];
-
-List<_TrainingRow> _demoTrainingScores({
-  required String audience,
-  required List<String> muscles,
-  required _TrainingMetric metric,
-}) {
-  final names = ['You', 'Avery', 'Jordan', 'Taylor', 'Riley', 'Morgan'];
-  final rows = <_TrainingRow>[];
-  for (final name in names) {
-    final seed = _hash('$audience|${metric.name}|${muscles.join(',')}|$name');
-    double value;
-    String display;
-    switch (metric) {
-      case _TrainingMetric.pr:
-        value = 135 + (seed % 120);
-        display = '${value.toStringAsFixed(0)} lb';
-        break;
-      case _TrainingMetric.volume:
-        value = 8000 + (seed % 9000);
-        display = value.toStringAsFixed(0);
-        break;
-      case _TrainingMetric.prCount:
-        value = 2 + (seed % 12);
-        display = value.toStringAsFixed(0);
-        break;
-    }
-    rows.add(_TrainingRow(name, value, 0, display));
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? scheme.primary.withOpacity(0.2) : scheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: scheme.primary.withOpacity(selected ? 0.45 : 0.15)),
+        ),
+        child: Text(label),
+      ),
+    );
   }
-  rows.sort((a, b) => b.value.compareTo(a.value));
-  for (var i = 0; i < rows.length; i++) {
-    rows[i] = _TrainingRow(rows[i].name, rows[i].value, i + 1, rows[i].displayValue);
-  }
-  return rows;
 }
 
-int _hash(String input) {
-  var h = 0;
-  for (final code in input.codeUnits) {
-    h = (h * 31 + code) & 0x7fffffff;
-  }
-  return h;
-}
+enum _TrainingMetric { pr, volume, consistency }
 
 class MathHelper {
   static double nthRoot(double value, int n) {
-    if (value <= 0) return 0;
-    return value == 0 ? 0 : math.pow(value, 1 / n).toDouble();
+    return math.pow(value, 1 / n).toDouble();
   }
 }

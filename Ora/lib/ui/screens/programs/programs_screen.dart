@@ -580,7 +580,6 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
               );
             },
           ),
-          const SizedBox(width: 72),
         ],
       ),
       body: Stack(
@@ -593,11 +592,23 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
               final programs = snapshot.data ?? [];
-              if (_selectedProgramId == null && programs.isNotEmpty) {
-                final first = programs.first;
-                _selectedProgramId = first['id'] as int;
-                _selectedProgramName = first['name'] as String;
-                _loadProgramDays();
+              if (programs.isEmpty) {
+                _selectedProgramId = null;
+                _selectedProgramName = null;
+                _selectedDayId = null;
+                _selectedDayName = null;
+                _programDays = [];
+              } else {
+                final selectedExists = _selectedProgramId != null &&
+                    programs.any((program) => program['id'] == _selectedProgramId);
+                if (!selectedExists) {
+                  final first = programs.first;
+                  _selectedProgramId = first['id'] as int;
+                  _selectedProgramName = first['name'] as String;
+                  _selectedDayId = null;
+                  _selectedDayName = null;
+                  _loadProgramDays();
+                }
               }
               return ListView(
                 padding: const EdgeInsets.all(16),
