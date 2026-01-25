@@ -347,6 +347,53 @@ class _DietScreenState extends State<DietScreen> {
     await _analyzePhoto(optimized);
   }
 
+  Future<String?> _pickMealImage({required bool fromCamera}) async {
+    File? picked;
+    if (fromCamera) {
+      if (!(Platform.isAndroid || Platform.isIOS)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Camera is available on mobile devices.')),
+        );
+        return null;
+      }
+      final file = await _imagePicker.pickImage(source: ImageSource.camera);
+      if (file == null) return null;
+      picked = File(file.path);
+    } else {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: false,
+        type: FileType.image,
+      );
+      if (result == null || result.files.isEmpty) return null;
+      final file = result.files.first;
+      if (file.path == null) return null;
+      picked = File(file.path!);
+    }
+    final optimized = await ImageDownscaler.downscaleImageIfNeeded(picked);
+    final persisted = await ImageDownscaler.persistImage(optimized);
+    return persisted.path;
+  }
+
+  Future<String?> _persistMealImage(String path) async {
+    final persisted = await ImageDownscaler.persistImage(File(path));
+    return persisted.path;
+  }
+
+  Future<void> _deleteMeal(DietEntry entry) async {
+    final path = entry.imagePath;
+    if (path != null) {
+      final file = File(path);
+      try {
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {
+        // Ignore file deletion failures to avoid blocking the DB update.
+      }
+    }
+    await _dietRepo.deleteEntry(entry.id);
+  }
+
 
   Future<void> _analyzePhoto(File file) async {
     final ok = await CloudConsent.ensureDietConsent(context, _settingsRepo);
@@ -649,6 +696,10 @@ class _DietScreenState extends State<DietScreen> {
                         ),
                         ElevatedButton.icon(
                           onPressed: () async {
+                            String? persistedPath;
+                            if (imagePath != null) {
+                              persistedPath = await _persistMealImage(imagePath);
+                            }
                             await _dietRepo.addEntry(
                               mealName: current.mealName,
                               loggedAt: DateTime.now(),
@@ -660,7 +711,7 @@ class _DietScreenState extends State<DietScreen> {
                               sodiumMg: current.sodiumMg,
                               micros: current.micros,
                               notes: current.notes,
-                              imagePath: imagePath,
+                              imagePath: persistedPath,
                             );
                             if (context.mounted) Navigator.of(context).pop();
                             await _load();
@@ -690,6 +741,7 @@ class _DietScreenState extends State<DietScreen> {
     final sodiumController = TextEditingController(text: entry.sodiumMg?.toStringAsFixed(0) ?? '');
     final notesController = TextEditingController(text: entry.notes ?? '');
     final refineController = TextEditingController();
+    String? imagePath = entry.imagePath;
     var current = DietEstimate(
       mealName: entry.mealName,
       calories: entry.calories,
@@ -735,6 +787,43 @@ class _DietScreenState extends State<DietScreen> {
                   children: [
                     const Text('Edit meal'),
                     const SizedBox(height: 12),
+                    if (imagePath != null) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          File(imagePath!),
+                          height: 180,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ] else ...[
+                      Row(
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              final picked = await _pickMealImage(fromCamera: false);
+                              if (picked == null || !context.mounted) return;
+                              setModalState(() => imagePath = picked);
+                            },
+                            icon: const Icon(Icons.photo_library),
+                            label: const Text('Add photo'),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              final picked = await _pickMealImage(fromCamera: true);
+                              if (picked == null || !context.mounted) return;
+                              setModalState(() => imagePath = picked);
+                            },
+                            icon: const Icon(Icons.photo_camera),
+                            label: const Text('Camera'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     TextField(
                       controller: nameController,
                       decoration: const InputDecoration(labelText: 'Meal name'),
@@ -831,7 +920,7 @@ class _DietScreenState extends State<DietScreen> {
                                 ),
                               );
                               if (confirm != true) return;
-                              await _dietRepo.deleteEntry(entry.id);
+                              await _deleteMeal(entry);
                               if (context.mounted) Navigator.of(context).pop();
                               await _load();
                             },
@@ -841,6 +930,7 @@ class _DietScreenState extends State<DietScreen> {
                           const SizedBox(width: 8),
                           ElevatedButton.icon(
                             onPressed: () async {
+                              final canAttachImage = entry.imagePath == null && imagePath != null;
                               await _dietRepo.updateEntry(
                                 id: entry.id,
                                 mealName: nameController.text.trim().isEmpty
@@ -854,6 +944,7 @@ class _DietScreenState extends State<DietScreen> {
                                 sodiumMg: _parseAndClamp(sodiumController.text, max: 10000),
                                 micros: current.micros,
                                 notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+                                imagePath: canAttachImage ? imagePath : null,
                               );
                               if (context.mounted) Navigator.of(context).pop();
                               await _load();
@@ -1130,7 +1221,7 @@ class _DietScreenState extends State<DietScreen> {
                                             ),
                                           );
                                           if (confirm != true) return;
-                                          await _dietRepo.deleteEntry(meal.id);
+                                          await _deleteMeal(meal);
                                           await _load();
                                         },
                                       ),

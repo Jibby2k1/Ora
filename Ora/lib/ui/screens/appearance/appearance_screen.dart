@@ -7,12 +7,14 @@ import 'package:http/http.dart' as http;
 import '../../../data/db/db.dart';
 import '../../../data/repositories/appearance_repo.dart';
 import '../../../data/repositories/settings_repo.dart';
-import '../../../core/cloud/upload_service.dart';
+import '../../../core/cloud/appearance_analysis_service.dart';
+import '../../../core/utils/image_downscaler.dart';
 import '../../../domain/models/appearance_entry.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 import '../shell/app_shell_controller.dart';
 import '../../../core/input/input_router.dart';
+import '../../widgets/consent/cloud_consent.dart';
 
 enum AppearanceAssessment { skin, physique, style }
 
@@ -26,7 +28,7 @@ class AppearanceScreen extends StatefulWidget {
 class _AppearanceScreenState extends State<AppearanceScreen> {
   late final SettingsRepo _settingsRepo;
   late final AppearanceRepo _appearanceRepo;
-  final _uploadService = UploadService.instance;
+  final AppearanceAnalysisService _appearanceAnalysis = AppearanceAnalysisService();
   bool _accessReady = false;
   AppearanceAssessment _assessment = AppearanceAssessment.physique;
   double _skinScore = 0;
@@ -35,6 +37,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   Color _physiqueColor = Colors.blue;
   Color _skinColor = Colors.purple;
   Color _styleColor = Colors.teal;
+  String _selectedFeedbackCategory = 'skin';
   Future<List<AppearanceEntry>>? _timelineFuture;
   bool _handlingInput = false;
   
@@ -51,13 +54,11 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     _appearanceRepo = AppearanceRepo(AppDatabase.instance);
     _ensureAccess();
     _refreshTimeline();
-    _uploadService.addListener(_onUploadsChanged);
     AppShellController.instance.pendingInput.addListener(_handlePendingInput);
   }
 
   @override
   void dispose() {
-    _uploadService.removeListener(_onUploadsChanged);
     AppShellController.instance.pendingInput.removeListener(_handlePendingInput);
     _adviceInputController.dispose();
     super.dispose();
@@ -71,62 +72,64 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     AppShellController.instance.clearPendingInput();
     final event = dispatch.event;
     if (event.file != null) {
-      await _confirmAppearanceUpload(event.file!);
+      await _processAppearanceImage(event.file!);
     } else if ((dispatch.entity ?? event.text)?.trim().isNotEmpty == true) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Appearance logs come from Orb uploads.')),
+        const SnackBar(content: Text('Appearance logs require a photo upload.')),
       );
     }
     _handlingInput = false;
   }
 
-  Future<void> _confirmAppearanceUpload(File file) async {
-    if (!mounted) return;
-    final approved = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: GlassCard(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Queue appearance upload'),
-                const SizedBox(height: 8),
-                Text(file.path.split('/').last),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: ElevatedButton.icon(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    icon: const Icon(Icons.cloud_upload),
-                    label: const Text('Queue'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    if (approved != true) return;
-    _uploadService.enqueue(
-      UploadItem(
-        type: UploadType.appearance,
-        name: file.uri.pathSegments.last,
-        path: file.path,
-      ),
-    );
+  Future<void> _processAppearanceImage(File file) async {
+    final consent = await CloudConsent.ensureAppearanceConsent(context, _settingsRepo);
+    if (!consent || !mounted) return;
+    final enabled = await _settingsRepo.getCloudEnabled();
+    final apiKey = await _settingsRepo.getCloudApiKey();
+    final provider = await _settingsRepo.getCloudProvider();
+    final model = await _settingsRepo.getCloudModel();
+    if (!enabled || apiKey == null || apiKey.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cloud analysis requires an API key.')),
+      );
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Queued for upload.')),
+      const SnackBar(content: Text('Analyzing appearance...')),
     );
-  }
-
-  void _onUploadsChanged() {
+    final result = await _appearanceAnalysis.analyzeImage(
+      file: file,
+      provider: provider,
+      apiKey: apiKey,
+      model: model,
+    );
     if (!mounted) return;
-    setState(() {});
+    if (result == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to analyze appearance.')),
+      );
+      return;
+    }
+    final category = result.category;
+    final persisted = await ImageDownscaler.persistImageToSubdir(
+      file,
+      'appearance/$category',
+    );
+    final recent = await _appearanceRepo.getRecentEntries(limit: 200);
+    final scores = _latestScoresFromEntries(recent);
+    final score = _scoreForCategory(scores, category);
+    await _appearanceRepo.addEntry(
+      createdAt: DateTime.now(),
+      measurements: _buildFeedbackPayload(
+        category: category,
+        score: score,
+        delta: 0,
+        feedback: result.feedback,
+        uploadName: file.uri.pathSegments.last,
+      ),
+      imagePath: persisted.path,
+    );
+    _refreshTimeline();
   }
 
   void _refreshTimeline() {
@@ -211,6 +214,35 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     if (raw is double) return raw;
     final parsed = double.tryParse(raw?.toString() ?? '');
     return parsed;
+  }
+
+  double _scoreForCategory(_FeedbackScores scores, String category) {
+    switch (category) {
+      case 'physique':
+        return scores.physique;
+      case 'style':
+        return scores.style;
+      case 'skin':
+      default:
+        return scores.skin;
+    }
+  }
+
+  String _buildFeedbackPayload({
+    required String category,
+    required double score,
+    required int delta,
+    required String feedback,
+    required String uploadName,
+  }) {
+    return jsonEncode({
+      'type': 'feedback',
+      'category': category,
+      'score': score.round(),
+      'score_delta': delta,
+      'feedback': feedback,
+      'upload_name': uploadName,
+    });
   }
 
   Future<void> _requestGeminiAdvice(String category, String userInput) async {
@@ -414,14 +446,28 @@ Remember: you are only giving guidance, the user will determine their own score.
     );
   }
 
-  Widget _buildFeedbackHistoryCard(String title, String category) {
+  Widget _buildFeedbackHistoryCard() {
     return GlassCard(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title),
-          const SizedBox(height: 8),
+          const Text('Feedback History'),
+          const SizedBox(height: 12),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'skin', label: Text('Skin')),
+              ButtonSegment(value: 'physique', label: Text('Physique')),
+              ButtonSegment(value: 'style', label: Text('Style')),
+            ],
+            selected: {_selectedFeedbackCategory},
+            onSelectionChanged: (value) {
+              setState(() {
+                _selectedFeedbackCategory = value.first;
+              });
+            },
+          ),
+          const SizedBox(height: 12),
           FutureBuilder<List<AppearanceEntry>>(
             future: _timelineFuture,
             builder: (context, snapshot) {
@@ -431,7 +477,7 @@ Remember: you are only giving guidance, the user will determine their own score.
               final entries = snapshot.data ?? [];
               final filtered = entries.where((entry) {
                 final data = _decodeMeasurements(entry.measurements);
-                return data['type'] == 'feedback' && data['category'] == category;
+                return data['type'] == 'feedback' && data['category'] == _selectedFeedbackCategory;
               }).toList();
               if (filtered.isEmpty) {
                 return const Text('No feedback yet.');
@@ -450,13 +496,33 @@ Remember: you are only giving guidance, the user will determine their own score.
                     if (deltaLabel != null) deltaLabel,
                     if (uploadName != null && uploadName.trim().isNotEmpty) uploadName.trim(),
                   ].join(' • ');
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      feedback == null || feedback.isEmpty ? 'Feedback logged.' : feedback,
-                    ),
-                    subtitle: meta.isEmpty ? null : Text(meta),
-                    trailing: Text(_formatDate(entry.createdAt), style: Theme.of(context).textTheme.bodySmall),
+                  final imagePath = entry.imagePath;
+                  final imageFile =
+                      imagePath == null || imagePath.isEmpty ? null : File(imagePath);
+                  final hasImage = imageFile != null && imageFile.existsSync();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (hasImage)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.file(
+                            imageFile!,
+                            height: 160,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          feedback == null || feedback.isEmpty ? 'Feedback logged.' : feedback,
+                        ),
+                        subtitle: meta.isEmpty ? null : Text(meta),
+                        trailing: Text(_formatDate(entry.createdAt), style: Theme.of(context).textTheme.bodySmall),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                   );
                 }).toList(),
               );
@@ -564,77 +630,11 @@ Remember: you are only giving guidance, the user will determine their own score.
               const SizedBox(height: 12),
               _buildProgressRingsCard(),
               const SizedBox(height: 12),
-              _buildFeedbackHistoryCard('Skin Feedback History', 'skin'),
-              const SizedBox(height: 12),
-              _buildFeedbackHistoryCard('Physique Feedback History', 'physique'),
-              const SizedBox(height: 12),
-              _buildFeedbackHistoryCard('Style Feedback History', 'style'),
-              const SizedBox(height: 12),
-              if (_uploadService.queue.where((e) => e.type == UploadType.appearance).isNotEmpty)
-                ...[
-                  GlassCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Uploads (Appearance)'),
-                        const SizedBox(height: 8),
-                        ..._uploadService.queue
-                            .where((e) => e.type == UploadType.appearance)
-                            .map(_uploadTile),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
+              _buildFeedbackHistoryCard(),
             ],
           ),
         ],
       ),
-    );
-  }
-
-  Widget _uploadTile(UploadItem item) {
-    final statusText = item.status == UploadStatus.queued
-        ? 'Queued'
-        : item.status == UploadStatus.uploading
-            ? 'Uploading ${(item.progress * 100).toStringAsFixed(0)}%'
-            : item.status == UploadStatus.done
-                ? 'Uploaded'
-                : 'Error';
-    return Column(
-      children: [
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(item.name),
-          subtitle: Text('Appearance • $statusText'),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (item.status == UploadStatus.queued)
-                IconButton(
-                  icon: const Icon(Icons.cloud_upload),
-                  onPressed: () => _uploadService.uploadItem(item),
-                ),
-              if (item.status == UploadStatus.error)
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  onPressed: () => _uploadService.uploadItem(item),
-                ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () {
-                  setState(() {
-                    _uploadService.remove(item);
-                  });
-                },
-              ),
-            ],
-          ),
-        ),
-        if (item.status == UploadStatus.uploading)
-          LinearProgressIndicator(value: item.progress),
-      ],
     );
   }
 }

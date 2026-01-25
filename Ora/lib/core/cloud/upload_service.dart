@@ -7,8 +7,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app.dart';
+import '../../core/cloud/appearance_analysis_service.dart';
+import '../../core/utils/image_downscaler.dart';
 import '../../data/db/db.dart';
 import '../../data/repositories/appearance_repo.dart';
+import '../../data/repositories/settings_repo.dart';
 import '../../domain/models/appearance_entry.dart';
 import '../../ui/screens/shell/app_shell_controller.dart';
 
@@ -44,6 +47,7 @@ class UploadService extends ChangeNotifier {
 
   final List<UploadItem> queue = [];
   final List<UploadEvaluation> _evaluations = [];
+  final AppearanceAnalysisService _appearanceAnalysis = AppearanceAnalysisService();
 
   bool get isSupported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
@@ -159,36 +163,68 @@ class UploadService extends ChangeNotifier {
     final recent = await repo.getRecentEntries(limit: 200);
     final scores = _latestScoresFromEntries(recent);
     final now = DateTime.now();
+    final category = await _inferAppearanceCategory(item, summary);
+    final score = _scoreForCategory(scores, category);
+    final imagePath = await _persistAppearanceImage(item.path, category);
     await repo.addEntry(
       createdAt: now,
       measurements: _buildFeedbackPayload(
-        category: 'skin',
-        score: scores.skin,
+        category: category,
+        score: score,
         delta: 0,
-        feedback: 'Skin review: ${summary.trim()}',
+        feedback: summary.trim(),
         uploadName: item.name,
       ),
+      imagePath: imagePath,
     );
-    await repo.addEntry(
-      createdAt: now,
-      measurements: _buildFeedbackPayload(
-        category: 'physique',
-        score: scores.physique,
-        delta: 0,
-        feedback: 'Physique review: ${summary.trim()}',
-        uploadName: item.name,
-      ),
-    );
-    await repo.addEntry(
-      createdAt: now,
-      measurements: _buildFeedbackPayload(
-        category: 'style',
-        score: scores.style,
-        delta: 0,
-        feedback: 'Style review: ${summary.trim()}',
-        uploadName: item.name,
-      ),
-    );
+  }
+
+  Future<String> _inferAppearanceCategory(UploadItem item, String summary) async {
+    final settings = SettingsRepo(AppDatabase.instance);
+    final enabled = await settings.getCloudEnabled();
+    final apiKey = await settings.getCloudApiKey();
+    final provider = await settings.getCloudProvider();
+    final model = await settings.getCloudModel();
+    if (!enabled || apiKey == null || apiKey.trim().isEmpty) {
+      return 'skin';
+    }
+    try {
+      final file = File(item.path);
+      if (!await file.exists()) return 'skin';
+      final category = await _appearanceAnalysis.classifyImage(
+        file: file,
+        provider: provider,
+        apiKey: apiKey,
+        model: model,
+        summary: summary,
+      );
+      return category ?? 'skin';
+    } catch (_) {
+      return 'skin';
+    }
+  }
+
+  double _scoreForCategory(_FeedbackScores scores, String category) {
+    switch (category) {
+      case 'physique':
+        return scores.physique;
+      case 'style':
+        return scores.style;
+      case 'skin':
+      default:
+        return scores.skin;
+    }
+  }
+
+  Future<String?> _persistAppearanceImage(String path, String category) async {
+    try {
+      final file = File(path);
+      if (!await file.exists()) return null;
+      final persisted = await ImageDownscaler.persistImageToSubdir(file, 'appearance/$category');
+      return persisted.path;
+    } catch (_) {
+      return null;
+    }
   }
 
   _FeedbackScores _latestScoresFromEntries(List<AppearanceEntry> entries) {
