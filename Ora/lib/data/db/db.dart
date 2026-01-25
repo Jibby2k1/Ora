@@ -13,6 +13,7 @@ import 'migrations/m0003_profile_settings.dart';
 import 'migrations/m0004_diet.dart';
 import 'migrations/m0005_appearance.dart';
 import 'migrations/m0006_diet_micros.dart';
+import 'migrations/m0007_diet_images.dart';
 import 'schema.dart';
 
 class AppDatabase {
@@ -66,6 +67,9 @@ class AppDatabase {
     }
     if (from < 6 && to >= 6) {
       batches.add(migration0006());
+    }
+    if (from < 7 && to >= 7) {
+      batches.add(migration0007());
     }
 
     for (final statements in batches) {
