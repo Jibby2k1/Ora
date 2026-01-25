@@ -25,11 +25,13 @@ class OraOrb extends StatefulWidget {
 }
 
 class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
-  static const double _orbSize = 56;
-  static const double _dockWidth = 84;
-  static const double _dockHeight = 84;
+  static const double _orbSize = 84;
+  static const double _dockWidth = 126;
+  static const double _dockHeight = 126;
   static const double _edgePadding = 12;
   static const double _dragOverscroll = 24;
+  static const double _dockNavHeight = 68;
+  static const String _orbAsset = 'assets/branding/ora.png';
 
   final SettingsRepo _settingsRepo = SettingsRepo(AppDatabase.instance);
   final SpeechToTextEngine _stt = SpeechToTextEngine.instance;
@@ -250,26 +252,19 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
               height: _orbSize,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    scheme.primary.withOpacity(0.95),
-                    scheme.secondary.withOpacity(0.75),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
                 boxShadow: [
                   BoxShadow(
-                    color: scheme.primary.withOpacity(0.45),
+                    color: scheme.primary.withOpacity(0.35),
                     blurRadius: 18,
                     offset: const Offset(0, 6),
                   ),
                 ],
               ),
-              child: Icon(
-                _recording ? Icons.stop_rounded : Icons.auto_awesome,
-                color: scheme.onPrimary,
-                size: 26,
+              child: ClipOval(
+                child: Image.asset(
+                  _orbAsset,
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
           ],
@@ -559,10 +554,10 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
   }
 
   Offset _dockPosition(Size size, EdgeInsets padding) {
-    final minY = padding.top + (_toolbarHeight - _orbSize) / 2 + 2;
-    final maxY = size.height - _orbSize - _edgePadding;
-    final y = minY.clamp(minY, maxY);
-    final x = size.width - _orbSize - _edgePadding;
+    final maxY = _maxY(size, padding);
+    final y = (size.height - padding.bottom - _dockNavHeight - _orbSize * 0.35)
+        .clamp(padding.top + _edgePadding, maxY);
+    final x = (size.width - _orbSize) / 2;
     return Offset(x, y);
   }
 
@@ -585,7 +580,7 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     final minX = _edgePadding;
     final minY = padding.top + _edgePadding;
     final maxX = size.width - _orbSize - _edgePadding;
-    final maxY = size.height - _orbSize - _edgePadding;
+    final maxY = _maxY(size, padding);
     return Offset(
       pos.dx.clamp(minX, maxX),
       pos.dy.clamp(minY, maxY),
@@ -596,7 +591,7 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     final minX = _edgePadding;
     final minY = padding.top + _edgePadding;
     final maxX = size.width - _orbSize - _edgePadding;
-    final maxY = size.height - _orbSize - _edgePadding;
+    final maxY = _maxY(size, padding);
 
     double dx = pos.dx;
     double dy = pos.dy;
@@ -617,6 +612,10 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     dy = dy.clamp(minY - _dragOverscroll, maxY + _dragOverscroll);
 
     return Offset(dx, dy);
+  }
+
+  double _maxY(Size size, EdgeInsets padding) {
+    return size.height - padding.bottom - _orbSize + 6;
   }
 
   Offset _deckOffset(Size size, EdgeInsets padding, Offset orbOffset) {

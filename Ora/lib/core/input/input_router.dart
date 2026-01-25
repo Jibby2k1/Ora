@@ -590,7 +590,7 @@ class InputRouter {
       InputIntent.dietLog => 1,
       InputIntent.appearanceLog => appearanceEnabled ? 2 : 0,
       InputIntent.leaderboard => appearanceEnabled ? 3 : 2,
-      InputIntent.settings => appearanceEnabled ? 4 : 3,
+      InputIntent.settings => appearanceEnabled ? 3 : 2,
       InputIntent.programImport => 0,
       InputIntent.unknown => 0,
     };
@@ -614,9 +614,9 @@ class InputRouter {
       case InputIntent.programImport:
         return 'Program Import';
       case InputIntent.leaderboard:
-        return 'Leaderboard';
+        return 'Profile';
       case InputIntent.settings:
-        return 'Settings';
+        return 'Profile';
       case InputIntent.unknown:
         return 'Training';
     }
