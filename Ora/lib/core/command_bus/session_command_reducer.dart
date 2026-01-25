@@ -45,6 +45,7 @@ class SessionCommandReducer {
         flagWarmup: role == 'WARMUP',
         flagPartials: (command.partials ?? 0) > 0,
         isAmrap: isAmrap,
+        restSecActual: command.restSecActual,
       );
 
       final created = await workoutRepo.getSetEntryById(id);
@@ -63,6 +64,7 @@ class SessionCommandReducer {
       if (before == null) {
         return CommandResult(dbWrites: [], uiEvents: ['error:missing_set'], inverse: null);
       }
+      final restActual = command.restSecActual ?? before['rest_sec_actual'] as int?;
       await workoutRepo.updateSetEntry(
         id: command.id,
         weightValue: command.weight,
@@ -70,6 +72,7 @@ class SessionCommandReducer {
         partialReps: command.partials,
         rpe: command.rpe,
         rir: command.rir,
+        restSecActual: restActual,
       );
       final inverse = UpdateSetEntry(
         id: command.id,
@@ -78,6 +81,7 @@ class SessionCommandReducer {
         partials: before['partial_reps'] as int?,
         rpe: before['rpe'] as double?,
         rir: before['rir'] as double?,
+        restSecActual: before['rest_sec_actual'] as int?,
       );
       return CommandResult(
         dbWrites: ['update set_entry'],
