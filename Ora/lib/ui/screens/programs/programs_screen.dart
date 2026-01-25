@@ -10,7 +10,6 @@ import '../../../domain/services/calorie_service.dart';
 import '../../../domain/services/session_service.dart';
 import '../day_picker/day_picker_screen.dart';
 import '../history/exercise_catalog_screen.dart';
-import '../history/history_screen.dart';
 import '../session/session_screen.dart';
 import '../shell/app_shell_controller.dart';
 import '../../../core/input/input_router.dart';
@@ -34,6 +33,7 @@ class _ProgramDayMatch {
 
 enum _VoiceDayChoiceType { freeStyle, programDay }
 
+
 class _VoiceDayChoice {
   const _VoiceDayChoice.freeStyle() : type = _VoiceDayChoiceType.freeStyle, programDayId = null;
   const _VoiceDayChoice.programDay(this.programDayId) : type = _VoiceDayChoiceType.programDay;
@@ -50,6 +50,8 @@ class ProgramsScreen extends StatefulWidget {
 }
 
 class _ProgramsScreenState extends State<ProgramsScreen> {
+  static const int _createProgramId = -1;
+
   late final ProgramRepo _programRepo;
   late final WorkoutRepo _workoutRepo;
   late final SessionService _sessionService;
@@ -577,18 +579,6 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
               );
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.show_chart),
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const HistoryScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _createProgram,
-          ),
           const SizedBox(width: 72),
         ],
       ),
@@ -633,9 +623,21 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                                       child: Text(program['name'] as String),
                                     ),
                                   )
+                                  .followedBy(
+                                    const [
+                                      DropdownMenuItem<int>(
+                                        value: _createProgramId,
+                                        child: Text('Create new program...'),
+                                      ),
+                                    ],
+                                  )
                                   .toList(),
                               onChanged: (value) {
                                 if (value == null) return;
+                                if (value == _createProgramId) {
+                                  _createProgram();
+                                  return;
+                                }
                                 final program = programs.firstWhere((p) => p['id'] == value);
                                 setState(() {
                                   _selectedProgramId = value;
@@ -668,11 +670,18 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _startFreeStyleSession(),
+                            icon: const Icon(Icons.bolt),
+                            label: const Text('Free day'),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  _buildWorkoutCaloriesCard(),
                   const SizedBox(height: 16),
                   GlassCard(
                     padding: const EdgeInsets.all(16),
