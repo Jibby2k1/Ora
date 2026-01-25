@@ -579,7 +579,6 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
               );
             },
           ),
-          const SizedBox(width: 72),
         ],
       ),
       body: Stack(

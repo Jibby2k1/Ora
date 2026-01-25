@@ -30,6 +30,7 @@ class SettingsRepo {
   static const String keyOrbDocked = 'orb_docked';
   static const String keyOrbPosX = 'orb_pos_x';
   static const String keyOrbPosY = 'orb_pos_y';
+  static const String keyProfileAvatarPath = 'profile_avatar_path';
 
   Future<String> getUnit() async {
     return (await _get(keyUnit)) ?? 'lb';
@@ -200,6 +201,18 @@ class SettingsRepo {
   Future<bool> getOrbHidden() async {
     final raw = await _get(keyOrbHidden);
     return raw == '1';
+  }
+
+  Future<String?> getProfileAvatarPath() async {
+    return _get(keyProfileAvatarPath);
+  }
+
+  Future<void> setProfileAvatarPath(String? path) async {
+    if (path == null || path.trim().isEmpty) {
+      await _delete(keyProfileAvatarPath);
+      return;
+    }
+    await _set(keyProfileAvatarPath, path.trim());
   }
 
   Future<void> setOrbHidden(bool value) async {
