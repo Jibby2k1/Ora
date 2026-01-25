@@ -19,7 +19,14 @@ class SessionCommandReducer {
         return CommandResult(dbWrites: [], uiEvents: ['error:missing_session_exercise'], inverse: null);
       }
       final existing = await workoutRepo.getSetsForSessionExercise(command.sessionExerciseId);
-      final setIndex = existing.length + 1;
+      var maxIndex = 0;
+      for (final row in existing) {
+        final value = row['set_index'] as int?;
+        if (value != null && value > maxIndex) {
+          maxIndex = value;
+        }
+      }
+      final setIndex = maxIndex + 1;
       final planResult = SetPlanService().nextExpected(blocks: info.planBlocks, existingSets: existing);
       final role = planResult?.nextRole ?? 'TOP';
       final isAmrap = planResult?.isAmrap ?? false;
