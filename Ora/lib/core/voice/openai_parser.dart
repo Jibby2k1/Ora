@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'voice_models.dart';
@@ -33,7 +34,7 @@ class OpenAiParser {
     final uri = Uri.https('api.openai.com', '/v1/chat/completions');
     final payload = {
       'model': model,
-      'temperature': 0.1,
+      if (_openAiSupportsTemperature(model)) 'temperature': 0.1,
       'messages': [
         {
           'role': 'system',
@@ -65,7 +66,9 @@ class OpenAiParser {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      lastError = 'OpenAI HTTP ${response.statusCode}: ${response.body}';
+      final body = _trimBody(response.body);
+      lastError = 'OpenAI HTTP ${response.statusCode}: $body';
+      debugPrint('[OpenAI][voice-parse] ${response.statusCode} $body');
       return null;
     }
 
@@ -201,5 +204,16 @@ Respond with JSON only.
     final end = text.lastIndexOf('}');
     if (start == -1 || end == -1 || end <= start) return null;
     return text.substring(start, end + 1);
+  }
+
+  String _trimBody(String body) {
+    final trimmed = body.trim();
+    if (trimmed.length <= 400) return trimmed;
+    return '${trimmed.substring(0, 400)}...';
+  }
+
+  bool _openAiSupportsTemperature(String model) {
+    final lower = model.toLowerCase();
+    return !lower.startsWith('gpt-5');
   }
 }

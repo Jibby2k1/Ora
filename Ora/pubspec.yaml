@@ -30,6 +30,7 @@ dependencies:
   sign_in_with_apple: ^6.1.0
   file_picker: ^10.3.8
   image_picker: ^1.1.1
+  image: ^4.2.0
   firebase_storage: ^12.1.3
   flutter_secure_storage: ^9.2.2
 
@@ -52,6 +53,7 @@ flutter:
     - lib/data/seed/muscle_map_seed.json
     - assets/vosk/vosk-model-small-en-us-0.15.zip
     - assets/branding/ora_logo_blue.png
+    - assets/branding/ora.png
     - assets/models/llm/
     - assets/anatomy/
     - assets/anatomy/codecanyon/codecanyon-I0qdAu3M-interactive-human-body-muscle-diagram-male-and-female-diagrams/source/with_tooltip_and_colours/

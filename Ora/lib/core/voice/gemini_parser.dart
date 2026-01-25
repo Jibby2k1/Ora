@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'voice_models.dart';
+import '../cloud/gemini_queue.dart';
 
 class GeminiParser {
   GeminiParser();
@@ -54,20 +56,25 @@ class GeminiParser {
 
     http.Response response;
     try {
-      response = await http
-          .post(
-            uri,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(payload),
-          )
-          .timeout(const Duration(seconds: 10));
+      response = await GeminiQueue.instance.run(
+        () => http
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(payload),
+            )
+            .timeout(const Duration(seconds: 10)),
+        label: 'voice-parse',
+      );
     } catch (e) {
       lastError = 'Gemini request failed: $e';
       return null;
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      lastError = 'Gemini HTTP ${response.statusCode}: ${response.body}';
+      final body = _trimGeminiBody(response.body);
+      lastError = 'Gemini HTTP ${response.statusCode}: $body';
+      debugPrint('[Gemini][voice] ${response.statusCode} $body');
       return null;
     }
 
@@ -146,6 +153,12 @@ $catalogList
 Input: "$input"
 JSON:
 ''';
+  }
+
+  String _trimGeminiBody(String body) {
+    final trimmed = body.trim();
+    if (trimmed.length <= 400) return trimmed;
+    return '${trimmed.substring(0, 400)}...';
   }
 
   String _formatList(List<String>? values) {

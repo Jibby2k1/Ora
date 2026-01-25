@@ -66,7 +66,7 @@ class _OraAppState extends State<OraApp> {
               backgroundColor: const Color(0xFF1D4ED8),
               body: Center(
                 child: Image.asset(
-                  'assets/branding/ora_logo_blue.png',
+                  'assets/branding/ora.png',
                   width: 180,
                   height: 180,
                 ),
@@ -88,7 +88,7 @@ class _OraAppState extends State<OraApp> {
                   backgroundColor: const Color(0xFF1D4ED8),
                   body: Center(
                     child: Image.asset(
-                      'assets/branding/ora_logo_blue.png',
+                      'assets/branding/ora.png',
                       width: 180,
                       height: 180,
                     ),
