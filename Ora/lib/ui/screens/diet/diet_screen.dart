@@ -341,10 +341,23 @@ class _DietScreenState extends State<DietScreen> {
     }
     final ok = await CloudConsent.ensureDietConsent(context, _settingsRepo);
     if (!ok || !context.mounted) return;
-    final file = await _imagePicker.pickImage(source: ImageSource.camera);
-    if (file == null) return;
-    final optimized = await ImageDownscaler.downscaleImageIfNeeded(File(file.path));
-    await _analyzePhoto(optimized);
+    try {
+      final file = await _imagePicker.pickImage(source: ImageSource.camera);
+      if (file == null) return;
+      final optimized = await ImageDownscaler.downscaleImageIfNeeded(File(file.path));
+      await _analyzePhoto(optimized);
+    } on PlatformException catch (error) {
+      if (!context.mounted) return;
+      final message = error.code.contains('camera')
+          ? 'Camera access is disabled. Enable it in Settings > Ora.'
+          : 'Camera unavailable: ${error.message ?? error.code}.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Camera unavailable. Check permissions in Settings > Ora.')),
+      );
+    }
   }
 
   Future<String?> _pickMealImage({required bool fromCamera}) async {
@@ -356,9 +369,26 @@ class _DietScreenState extends State<DietScreen> {
         );
         return null;
       }
-      final file = await _imagePicker.pickImage(source: ImageSource.camera);
-      if (file == null) return null;
-      picked = File(file.path);
+      try {
+        final file = await _imagePicker.pickImage(source: ImageSource.camera);
+        if (file == null) return null;
+        picked = File(file.path);
+      } on PlatformException catch (error) {
+        if (context.mounted) {
+          final message = error.code.contains('camera')
+              ? 'Camera access is disabled. Enable it in Settings > Ora.'
+              : 'Camera unavailable: ${error.message ?? error.code}.';
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        }
+        return null;
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Camera unavailable. Check permissions in Settings > Ora.')),
+          );
+        }
+        return null;
+      }
     } else {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: false,

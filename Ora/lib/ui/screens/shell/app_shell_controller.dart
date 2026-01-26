@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../../core/input/input_router.dart';
@@ -17,6 +19,19 @@ class AppShellController {
   final ValueNotifier<int> restRemainingSeconds = ValueNotifier<int>(0);
   final ValueNotifier<bool> restAlertActive = ValueNotifier<bool>(false);
   final ValueNotifier<InputDispatch?> pendingInput = ValueNotifier<InputDispatch?>(null);
+  final ValueNotifier<String?> pendingSessionVoice = ValueNotifier<String?>(null);
+  final ValueNotifier<int> programsRevision = ValueNotifier<int>(0);
+  Timer? _restTicker;
+  DateTime? _restStartedAt;
+  DateTime? _restEndsAt;
+  int _restDurationSeconds = 0;
+  int? _restSetId;
+  int? _restExerciseId;
+
+  int? get restActiveSetId => _restSetId;
+  int? get restActiveExerciseId => _restExerciseId;
+  DateTime? get restStartedAt => _restStartedAt;
+  int get restDurationSeconds => _restDurationSeconds;
 
   void selectTab(int index) {
     if (tabIndex.value == index) return;
@@ -48,9 +63,12 @@ class AppShellController {
     activeSession.value = value;
     if (!value) {
       activeSessionIndicatorHidden.value = false;
-      restRemainingSeconds.value = 0;
-      restAlertActive.value = false;
+      _clearRestState();
     }
+  }
+
+  void refreshActiveSession() {
+    activeSession.notifyListeners();
   }
 
   void setActiveSessionIndicatorHidden(bool value) {
@@ -68,11 +86,87 @@ class AppShellController {
     restAlertActive.value = value;
   }
 
+  void startRestTimer({
+    required int seconds,
+    int? setId,
+    int? exerciseId,
+  }) {
+    if (seconds <= 0) return;
+    _restSetId = setId;
+    _restExerciseId = exerciseId;
+    _restDurationSeconds = seconds;
+    _restStartedAt = DateTime.now();
+    _restEndsAt = _restStartedAt!.add(Duration(seconds: seconds));
+    restAlertActive.value = false;
+    _tickRest();
+    _restTicker ??= Timer.periodic(const Duration(seconds: 1), (_) => _tickRest());
+  }
+
+  void completeRestTimer({bool showAlert = false}) {
+    _restSetId = null;
+    _restExerciseId = null;
+    _restStartedAt = null;
+    _restEndsAt = null;
+    _restDurationSeconds = 0;
+    restRemainingSeconds.value = 0;
+    restAlertActive.value = showAlert;
+    _stopRestTicker();
+  }
+
+  void _tickRest() {
+    if (_restEndsAt == null) {
+      restRemainingSeconds.value = 0;
+      _stopRestTicker();
+      return;
+    }
+    final remaining = _restEndsAt!.difference(DateTime.now()).inSeconds;
+    if (remaining <= 0) {
+      _restSetId = null;
+      _restExerciseId = null;
+      _restStartedAt = null;
+      _restEndsAt = null;
+      _restDurationSeconds = 0;
+      restRemainingSeconds.value = 0;
+      restAlertActive.value = true;
+      _stopRestTicker();
+      return;
+    }
+    restRemainingSeconds.value = remaining;
+  }
+
+  void _clearRestState() {
+    _restSetId = null;
+    _restExerciseId = null;
+    _restStartedAt = null;
+    _restEndsAt = null;
+    _restDurationSeconds = 0;
+    restRemainingSeconds.value = 0;
+    restAlertActive.value = false;
+    _stopRestTicker();
+  }
+
+  void _stopRestTicker() {
+    _restTicker?.cancel();
+    _restTicker = null;
+  }
+
   void setPendingInput(InputDispatch? input) {
     pendingInput.value = input;
   }
 
   void clearPendingInput() {
     pendingInput.value = null;
+  }
+
+  void setPendingSessionVoice(String? input) {
+    pendingSessionVoice.value = input;
+  }
+
+  void clearPendingSessionVoice() {
+    pendingSessionVoice.value = null;
+  }
+
+  void bumpProgramsRevision() {
+    programsRevision.value = programsRevision.value + 1;
   }
 }

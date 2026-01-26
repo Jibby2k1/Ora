@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
@@ -126,6 +127,13 @@ class _AccountScreenState extends State<AccountScreen> {
     setState(() => _busy = true);
     try {
       await action();
+    } on PlatformException catch (e) {
+      final details = [
+        if (e.code.isNotEmpty) 'code=${e.code}',
+        if ((e.message ?? '').isNotEmpty) 'message=${e.message}',
+        if ((e.details ?? '').toString().isNotEmpty) 'details=${e.details}',
+      ].join(' | ');
+      _show(details.isEmpty ? 'PlatformException' : 'PlatformException: $details');
     } on FirebaseAuthException catch (e) {
       _show(_friendlyError(e));
     } catch (e) {

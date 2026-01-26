@@ -49,8 +49,12 @@
 	<string>This app uses the camera to capture meal and appearance photos.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app uses the microphone to capture voice logs.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>This app uses speech recognition to power voice commands.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app accesses your photo library to attach meal and appearance photos.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>This app saves generated photos to your library when requested.</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

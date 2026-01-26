@@ -141,6 +141,7 @@ class InputRouter {
           ? 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises.'
           : 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises. Missing $missingCount exercises.';
       _showSnack(snack);
+      AppShellController.instance.bumpProgramsRevision();
       if (missingCount > 0) {
         if (!context.mounted) return;
         await showDialog<void>(
