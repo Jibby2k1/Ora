@@ -113,6 +113,45 @@ class _SessionActiveBannerState extends State<SessionActiveBanner>
                             ),
                           ),
                         ),
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: ValueListenableBuilder<int>(
+                            valueListenable: AppShellController.instance.restRemainingSeconds,
+                            builder: (context, restSeconds, child) {
+                              final duration = AppShellController.instance.restDurationSeconds;
+                              if (restSeconds <= 0 || duration <= 0) {
+                                return const SizedBox.shrink();
+                              }
+                              final progress = (restSeconds / duration).clamp(0.0, 1.0);
+                              const accent = Color(0xFF3C64A7);
+                              return LayoutBuilder(
+                                builder: (context, constraints) {
+                                  return Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 320),
+                                      curve: Curves.easeOut,
+                                      height: 3,
+                                      width: constraints.maxWidth * progress,
+                                      decoration: BoxDecoration(
+                                        color: accent,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.35),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 1),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           child: Row(
