@@ -19,6 +19,8 @@ class AppShellController {
   final ValueNotifier<int> restRemainingSeconds = ValueNotifier<int>(0);
   final ValueNotifier<bool> restAlertActive = ValueNotifier<bool>(false);
   final ValueNotifier<InputDispatch?> pendingInput = ValueNotifier<InputDispatch?>(null);
+  final ValueNotifier<String?> pendingSessionVoice = ValueNotifier<String?>(null);
+  final ValueNotifier<int> programsRevision = ValueNotifier<int>(0);
   Timer? _restTicker;
   DateTime? _restStartedAt;
   DateTime? _restEndsAt;
@@ -63,6 +65,10 @@ class AppShellController {
       activeSessionIndicatorHidden.value = false;
       _clearRestState();
     }
+  }
+
+  void refreshActiveSession() {
+    activeSession.notifyListeners();
   }
 
   void setActiveSessionIndicatorHidden(bool value) {
@@ -150,5 +156,17 @@ class AppShellController {
 
   void clearPendingInput() {
     pendingInput.value = null;
+  }
+
+  void setPendingSessionVoice(String? input) {
+    pendingSessionVoice.value = input;
+  }
+
+  void clearPendingSessionVoice() {
+    pendingSessionVoice.value = null;
+  }
+
+  void bumpProgramsRevision() {
+    programsRevision.value = programsRevision.value + 1;
   }
 }

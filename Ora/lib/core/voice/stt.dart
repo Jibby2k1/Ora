@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:record/record.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:vosk_flutter/vosk_flutter.dart';
 
 class SpeechToTextEngine {
@@ -30,10 +31,11 @@ class SpeechToTextEngine {
   void Function(String)? _onResult;
   void Function(String)? _onPartial;
   void Function(Object error)? _onError;
+  stt.SpeechToText? _iosSpeech;
 
   bool get isAvailable {
     if (kIsWeb) return false;
-    if (Platform.isIOS) return false;
+    if (Platform.isIOS) return true;
     return Platform.isAndroid || Platform.isLinux || Platform.isWindows;
   }
 
@@ -45,6 +47,24 @@ class SpeechToTextEngine {
     }
 
     try {
+      if (Platform.isIOS) {
+        _iosSpeech = stt.SpeechToText();
+        final ok = await _iosSpeech!.initialize(
+          onError: (error) {
+            lastError = error.errorMsg;
+            _onError?.call(error.errorMsg);
+          },
+        );
+        if (!ok) {
+          final hasPermission = await _iosSpeech!.hasPermission;
+          lastError = hasPermission
+              ? 'Speech recognition unavailable.'
+              : 'Microphone permission denied';
+          return;
+        }
+        _initialized = true;
+        return;
+      }
       _vosk = VoskFlutterPlugin.instance();
       final loader = ModelLoader();
       var modelPath = await loader.loadFromAssets('assets/vosk/vosk-model-small-en-us-0.15.zip');
@@ -103,7 +123,39 @@ class SpeechToTextEngine {
 
   Future<String?> listenOnce({Duration timeout = const Duration(seconds: 8)}) async {
     await initialize();
-    if (!_initialized || _speechService == null) {
+    if (!_initialized) {
+      return null;
+    }
+    if (Platform.isIOS) {
+      final speech = _iosSpeech;
+      if (speech == null) return null;
+      final completer = Completer<String?>();
+      Timer? timer;
+      timer = Timer(timeout, () async {
+        if (completer.isCompleted) return;
+        await speech.stop();
+        completer.complete(null);
+      });
+      await speech.listen(
+        listenMode: stt.ListenMode.dictation,
+        partialResults: true,
+        onResult: (result) async {
+          final text = result.recognizedWords.trim();
+          if (text.isEmpty) return;
+          if (result.finalResult) {
+            timer?.cancel();
+            await speech.stop();
+            if (!completer.isCompleted) {
+              completer.complete(text);
+            }
+          } else {
+            _onPartial?.call(text);
+          }
+        },
+      );
+      return completer.future;
+    }
+    if (_speechService == null) {
       return null;
     }
 
@@ -137,14 +189,39 @@ class SpeechToTextEngine {
     void Function(String)? onPartial,
     void Function(Object error)? onError,
   }) async {
-    await initialize();
-    if (!_initialized || _recognizer == null) {
-      throw Exception(lastError ?? 'STT not initialized');
-    }
     _onResult = onResult;
     _onPartial = onPartial;
     _onError = onError;
     _hasResult = false;
+    await initialize();
+    if (!_initialized) {
+      throw Exception(lastError ?? 'STT not initialized');
+    }
+
+    if (Platform.isIOS) {
+      final speech = _iosSpeech;
+      if (speech == null) {
+        throw Exception(lastError ?? 'Speech recognition unavailable');
+      }
+      await speech.listen(
+        listenMode: stt.ListenMode.dictation,
+        partialResults: true,
+        cancelOnError: true,
+        onResult: (result) async {
+          final text = result.recognizedWords.trim();
+          if (text.isEmpty) return;
+          if (result.finalResult) {
+            await _emitResult(text);
+          } else {
+            _onPartial?.call(text);
+          }
+        },
+      );
+      return;
+    }
+    if (_recognizer == null) {
+      throw Exception(lastError ?? 'STT not initialized');
+    }
 
     if (_useARecord) {
       await _startLinuxARecord();
@@ -203,6 +280,10 @@ class SpeechToTextEngine {
   }
 
   Future<void> stopListening() async {
+    if (Platform.isIOS) {
+      await _iosSpeech?.stop();
+      return;
+    }
     if (_useARecord) {
       await _linuxSub?.cancel();
       _linuxSub = null;

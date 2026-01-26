@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import '../../../app.dart';
 import '../../../core/voice/stt.dart';
 import '../../../core/input/input_router.dart';
@@ -748,17 +749,26 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
 
   Future<void> _handleCameraTap() async {
     setState(() => _expanded = false);
-    final file = await _imagePicker.pickImage(source: ImageSource.camera);
-    if (file == null) return;
-    final optimized = await ImageDownscaler.downscaleImageIfNeeded(File(file.path));
-    await _routeInput(
-      InputEvent(
-        source: InputSource.camera,
-        file: optimized,
-        fileName: optimized.uri.pathSegments.last,
-        mimeType: _guessMimeType(optimized.path),
-      ),
-    );
+    try {
+      final file = await _imagePicker.pickImage(source: ImageSource.camera);
+      if (file == null) return;
+      final optimized = await ImageDownscaler.downscaleImageIfNeeded(File(file.path));
+      await _routeInput(
+        InputEvent(
+          source: InputSource.camera,
+          file: optimized,
+          fileName: optimized.uri.pathSegments.last,
+          mimeType: _guessMimeType(optimized.path),
+        ),
+      );
+    } on PlatformException catch (error) {
+      final message = error.code.contains('camera')
+          ? 'Camera access is disabled. Enable it in Settings > Ora.'
+          : 'Camera unavailable: ${error.message ?? error.code}.';
+      _showSnack(message);
+    } catch (_) {
+      _showSnack('Camera unavailable. Check permissions in Settings > Ora.');
+    }
   }
 
   Future<void> _handleUploadTap() async {
@@ -827,7 +837,12 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
         },
         onError: (error) async {
           await _stopRecording();
-          _showSnack('Mic error: $error');
+          final text = error.toString();
+          if (text.contains('Microphone permission denied')) {
+            _showSnack('Microphone access is disabled. Enable it in Settings > Ora.');
+          } else {
+            _showSnack('Mic error: $error');
+          }
         },
       );
       _recordTimeout?.cancel();

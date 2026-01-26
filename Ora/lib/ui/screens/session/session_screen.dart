@@ -162,6 +162,7 @@ class _SessionScreenState extends State<SessionScreen> {
   bool _wakeWordEnabled = false;
   bool _sessionEnded = false;
   String _weightUnit = 'lb';
+  bool _handlingPendingSessionVoice = false;
 
   @override
   void initState() {
@@ -171,6 +172,7 @@ class _SessionScreenState extends State<SessionScreen> {
       AppShellController.instance.setActiveSession(true);
       AppShellController.instance.setActiveSessionIndicatorHidden(false);
     }
+    AppShellController.instance.pendingSessionVoice.addListener(_handlePendingSessionVoice);
     _workoutRepo = WorkoutRepo(db);
     _exerciseRepo = ExerciseRepo(db);
     _programRepo = ProgramRepo(db);
@@ -201,16 +203,25 @@ class _SessionScreenState extends State<SessionScreen> {
         _inlineRestNow = DateTime.now();
       });
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _handlePendingSessionVoice();
+    });
   }
 
   @override
   void dispose() {
     _voiceController.dispose();
     _inlineRestTicker?.cancel();
+    AppShellController.instance.pendingSessionVoice.removeListener(_handlePendingSessionVoice);
     for (final drafts in _draftSetsByExerciseId.values) {
       for (final draft in drafts) {
         draft.dispose();
       }
+    }
+    if (!widget.isEditing && !_sessionEnded) {
+      AppShellController.instance.setActiveSession(true);
+      AppShellController.instance.setActiveSessionIndicatorHidden(false);
+      AppShellController.instance.refreshActiveSession();
     }
     if (_sessionEnded && !widget.isEditing) {
       AppShellController.instance.setActiveSession(false);
@@ -976,6 +987,7 @@ class _SessionScreenState extends State<SessionScreen> {
                           controller: drafts[i].weight,
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           textAlign: TextAlign.center,
+                          onTap: () => _setActiveExercise(info),
                           decoration: const InputDecoration(
                             isDense: true,
                             contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -990,6 +1002,7 @@ class _SessionScreenState extends State<SessionScreen> {
                           controller: drafts[i].reps,
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,
+                          onTap: () => _setActiveExercise(info),
                           decoration: const InputDecoration(
                             isDense: true,
                             contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -1008,7 +1021,10 @@ class _SessionScreenState extends State<SessionScreen> {
                             size: 20,
                             color: Theme.of(context).colorScheme.primary,
                           ),
-                          onPressed: () => _commitDraftSet(info, drafts[i]),
+                          onPressed: () {
+                            _setActiveExercise(info);
+                            _commitDraftSet(info, drafts[i]);
+                          },
                         ),
                       ),
                     ],
@@ -1044,7 +1060,10 @@ class _SessionScreenState extends State<SessionScreen> {
         SizedBox(
           width: double.infinity,
           child: OutlinedButton(
-            onPressed: () => _showQuickAddSet(info),
+            onPressed: () {
+              _setActiveExercise(info);
+              _showQuickAddSet(info);
+            },
             style: OutlinedButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.surface.withOpacity(0.2),
               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1305,7 +1324,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
     if (wantsSame && latest != null) {
       if (lastReps != null && lastWeight != null) {
-        await _logSet(
+        await _logSetFromVoice(
           pending.exerciseInfo,
           reps: lastReps,
           weight: lastWeight,
@@ -1335,7 +1354,7 @@ class _SessionScreenState extends State<SessionScreen> {
         _showMessage('Need reps.');
         return true;
       }
-      await _logSet(
+      await _logSetFromVoice(
         pending.exerciseInfo,
         reps: reps,
         weight: weight,
@@ -1355,7 +1374,7 @@ class _SessionScreenState extends State<SessionScreen> {
         _showMessage('Need weight.');
         return true;
       }
-      await _logSet(
+      await _logSetFromVoice(
         pending.exerciseInfo,
         reps: reps,
         weight: weight,
@@ -1463,6 +1482,9 @@ class _SessionScreenState extends State<SessionScreen> {
     if (wantsSame && _lastExerciseInfo != null) {
       return _lastExerciseInfo;
     }
+    if (_lastExerciseInfo == null && _sessionExercises.length == 1) {
+      return _sessionExercises.first;
+    }
     final inferred = await _resolveExercise(transcript);
     return inferred ?? _lastExerciseInfo;
   }
@@ -1548,7 +1570,7 @@ class _SessionScreenState extends State<SessionScreen> {
       return;
     }
 
-    await _logSet(
+    await _logSetFromVoice(
       exerciseInfo,
       reps: resolvedReps,
       weight: resolvedWeight,
@@ -1560,6 +1582,37 @@ class _SessionScreenState extends State<SessionScreen> {
     _setVoiceDebug(
       decision: 'Logged ($source)',
       resolved: 'exercise=${exerciseInfo.exerciseName} reps=$resolvedReps weight=$resolvedWeight unit=$resolvedUnit',
+    );
+  }
+
+  Future<void> _logSetFromVoice(
+    SessionExerciseInfo info, {
+    required int reps,
+    double? weight,
+    String weightUnit = 'lb',
+    int? partials,
+    double? rpe,
+    double? rir,
+  }) async {
+    final drafts = _draftSetsByExerciseId[info.sessionExerciseId];
+    final canUseDraft = (drafts != null && drafts.isNotEmpty) &&
+        (partials == null && rpe == null && rir == null) &&
+        (weight == null || weightUnit == _weightUnit);
+    if (canUseDraft) {
+      final draft = drafts!.first;
+      draft.reps.text = reps.toString();
+      draft.weight.text = weight == null ? '' : _formatSetWeight(weight);
+      await _commitDraftSet(info, draft);
+      return;
+    }
+    await _logSet(
+      info,
+      reps: reps,
+      weight: weight,
+      weightUnit: weightUnit,
+      partials: partials,
+      rpe: rpe,
+      rir: rir,
     );
   }
 
@@ -1838,6 +1891,7 @@ class _SessionScreenState extends State<SessionScreen> {
         exerciseId: info.exerciseId,
       );
     }
+    _refreshInlineSetData(info);
     setState(() {
       _lastLogged = LastLoggedSet(
         exerciseName: info.exerciseName,
@@ -1933,6 +1987,11 @@ class _SessionScreenState extends State<SessionScreen> {
     setState(() {});
   }
 
+  void _setActiveExercise(SessionExerciseInfo info) {
+    if (_lastExerciseInfo?.sessionExerciseId == info.sessionExerciseId) return;
+    _lastExerciseInfo = info;
+  }
+
   void _startRestTimer([int seconds = 120]) {
     AppShellController.instance.startRestTimer(seconds: seconds);
   }
@@ -1941,6 +2000,19 @@ class _SessionScreenState extends State<SessionScreen> {
     AppShellController.instance.completeRestTimer();
     if (!mounted) return;
     setState(() {});
+  }
+
+  Future<void> _handlePendingSessionVoice() async {
+    if (!mounted || _handlingPendingSessionVoice) return;
+    final pending = AppShellController.instance.pendingSessionVoice.value;
+    if (pending == null || pending.trim().isEmpty) return;
+    _handlingPendingSessionVoice = true;
+    AppShellController.instance.clearPendingSessionVoice();
+    try {
+      await _handleVoiceInput(pending.trim());
+    } finally {
+      _handlingPendingSessionVoice = false;
+    }
   }
 
   Future<void> _runVoice() async {
@@ -1982,7 +2054,12 @@ class _SessionScreenState extends State<SessionScreen> {
             _listening = false;
             _voicePartial = null;
           });
-          _showMessage('Voice error: $error');
+          final text = error.toString();
+          if (text.contains('Microphone permission denied')) {
+            _showMessage('Microphone access is disabled. Enable it in Settings > Ora.');
+          } else {
+            _showMessage('Voice error: $error');
+          }
         },
       );
     } catch (e) {
@@ -2102,6 +2179,8 @@ class _SessionScreenState extends State<SessionScreen> {
       _exerciseById[info.exerciseId] = info;
       _sessionExerciseById[info.sessionExerciseId] = info;
       _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []).add(_DraftSet());
+      _currentDayExerciseNames = _sessionExercises.map((e) => e.exerciseName).toList();
+      _lastExerciseInfo = info;
     });
     return info;
   }
