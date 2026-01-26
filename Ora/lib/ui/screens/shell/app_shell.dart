@@ -66,7 +66,7 @@ class _AppShellState extends State<AppShell> {
           Positioned(
             left: 0,
             right: 0,
-            bottom: navHeight + 8,
+            bottom: navHeight,
             child: SessionActiveBanner(onTap: _resumeActiveSession),
           ),
           const OraOrb(),

@@ -5,13 +5,15 @@ import '../../../data/repositories/program_repo.dart';
 import '../../../data/repositories/workout_repo.dart';
 import '../../../domain/services/session_service.dart';
 import '../session/session_screen.dart';
+import '../shell/app_shell_controller.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 
 class DayPickerScreen extends StatefulWidget {
-  const DayPickerScreen({super.key, required this.programId});
+  const DayPickerScreen({super.key, required this.programId, this.initialVoiceInput});
 
   final int programId;
+  final String? initialVoiceInput;
 
   @override
   State<DayPickerScreen> createState() => _DayPickerScreenState();
@@ -37,9 +39,14 @@ class _DayPickerScreenState extends State<DayPickerScreen> {
       programDayId: programDayId,
     );
     if (!mounted) return;
+    final voiceInput = widget.initialVoiceInput;
+    if (voiceInput != null && voiceInput.trim().isNotEmpty) {
+      AppShellController.instance.setPendingSessionVoice(voiceInput.trim());
+    }
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => SessionScreen(contextData: contextData)),
     );
+    await _syncActiveSessionBanner();
   }
 
   Future<void> _startSmartDay(List<Map<String, Object?>> days) async {
@@ -48,6 +55,14 @@ class _DayPickerScreenState extends State<DayPickerScreen> {
     final nextIndex = lastIndex == null ? 0 : (lastIndex + 1) % days.length;
     final day = days.firstWhere((d) => d['day_index'] == nextIndex, orElse: () => days.first);
     await _startSession(day['id'] as int);
+  }
+
+  Future<void> _syncActiveSessionBanner() async {
+    final hasActive = await _workoutRepo.hasActiveSession();
+    if (!mounted) return;
+    AppShellController.instance.setActiveSession(hasActive);
+    AppShellController.instance.setActiveSessionIndicatorHidden(false);
+    AppShellController.instance.refreshActiveSession();
   }
 
   @override

@@ -79,6 +79,7 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     AppShellController.instance.appearanceProfileEnabled.addListener(_syncAppearancePrefsFromController);
     AppShellController.instance.appearanceProfileSex.addListener(_syncAppearancePrefsFromController);
     AppShellController.instance.pendingInput.addListener(_handlePendingInput);
+    AppShellController.instance.programsRevision.addListener(_handleProgramsRefresh);
     _loadAppearancePrefs();
     _loadProgramDays();
   }
@@ -88,7 +89,13 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     AppShellController.instance.appearanceProfileEnabled.removeListener(_syncAppearancePrefsFromController);
     AppShellController.instance.appearanceProfileSex.removeListener(_syncAppearancePrefsFromController);
     AppShellController.instance.pendingInput.removeListener(_handlePendingInput);
+    AppShellController.instance.programsRevision.removeListener(_handleProgramsRefresh);
     super.dispose();
+  }
+
+  void _handleProgramsRefresh() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _handlePendingInput() async {
@@ -100,23 +107,24 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     }
     _handlingInput = true;
     AppShellController.instance.clearPendingInput();
-    if (dispatch.event.text != null && dispatch.event.text!.trim().isNotEmpty) {
-      final text = dispatch.event.text!.trim();
-      if (dispatch.event.source == InputSource.mic && _selectedProgramId != null) {
-        final hasActive = await _workoutRepo.hasActiveSession(programId: _selectedProgramId);
+    final transcript = dispatch.event.text?.trim();
+    if (transcript != null && transcript.isNotEmpty) {
+      final displayText = dispatch.entity ?? transcript;
+      if (dispatch.event.source == InputSource.mic) {
+        final hasActive = await _workoutRepo.hasActiveSession();
         if (hasActive) {
-          await _confirmTrainingText(dispatch.entity ?? text);
+          await _resumeActiveSessionWithVoice(transcript);
         } else {
-          await _promptVoiceLogDaySelection(text, entity: dispatch.entity);
+          await _promptVoiceLogDaySelection(transcript, entity: dispatch.entity);
         }
       } else {
-        await _confirmTrainingText(dispatch.entity ?? text);
+        await _confirmTrainingText(displayText, voiceTranscript: transcript);
       }
     }
     _handlingInput = false;
   }
 
-  Future<void> _confirmTrainingText(String text) async {
+  Future<void> _confirmTrainingText(String text, {String? voiceTranscript}) async {
     final approved = await showModalBottomSheet<bool>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -171,14 +179,20 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     }
     if (!mounted) return;
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => DayPickerScreen(programId: _selectedProgramId!)),
+      MaterialPageRoute(
+        builder: (_) => DayPickerScreen(
+          programId: _selectedProgramId!,
+          initialVoiceInput: voiceTranscript,
+        ),
+      ),
     );
+    await _syncActiveSessionBanner();
   }
 
   Future<void> _promptVoiceLogDaySelection(String text, {String? entity}) async {
     final programId = _selectedProgramId;
     if (programId == null) {
-      await _confirmTrainingText(entity ?? text);
+      await _confirmTrainingText(entity ?? text, voiceTranscript: text);
       return;
     }
     final matches = await _findMatchingProgramDays(
@@ -247,9 +261,9 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     );
     if (choice == null) return;
     if (choice.type == _VoiceDayChoiceType.freeStyle) {
-      await _startFreeStyleSession(programId: programId);
+      await _startFreeStyleSession(programId: programId, initialVoiceInput: text);
     } else if (choice.programDayId != null) {
-      await _startProgramDaySession(choice.programDayId!);
+      await _startProgramDaySession(choice.programDayId!, initialVoiceInput: text);
     }
   }
 
@@ -294,15 +308,19 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     return matches;
   }
 
-  Future<void> _startFreeStyleSession({int? programId}) async {
+  Future<void> _startFreeStyleSession({int? programId, String? initialVoiceInput}) async {
     final contextData = await _sessionService.startFreeSession(programId: programId);
     if (!mounted) return;
+    if (initialVoiceInput != null && initialVoiceInput.trim().isNotEmpty) {
+      AppShellController.instance.setPendingSessionVoice(initialVoiceInput.trim());
+    }
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => SessionScreen(contextData: contextData)),
     );
+    await _syncActiveSessionBanner();
   }
 
-  Future<void> _startProgramDaySession(int programDayId) async {
+  Future<void> _startProgramDaySession(int programDayId, {String? initialVoiceInput}) async {
     final programId = _selectedProgramId;
     if (programId == null) return;
     final contextData = await _sessionService.startSessionForProgramDay(
@@ -310,9 +328,30 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
       programDayId: programDayId,
     );
     if (!mounted) return;
+    if (initialVoiceInput != null && initialVoiceInput.trim().isNotEmpty) {
+      AppShellController.instance.setPendingSessionVoice(initialVoiceInput.trim());
+    }
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => SessionScreen(contextData: contextData)),
     );
+    await _syncActiveSessionBanner();
+  }
+
+  Future<void> _resumeActiveSessionWithVoice(String transcript) async {
+    final contextData = await _sessionService.resumeActiveSession();
+    if (contextData == null || !mounted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No active session found.')),
+        );
+      }
+      return;
+    }
+    AppShellController.instance.setPendingSessionVoice(transcript.trim());
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => SessionScreen(contextData: contextData)),
+    );
+    await _syncActiveSessionBanner();
   }
 
 
@@ -335,6 +374,14 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
       _appearanceProfileEnabled = enabled;
       _appearanceSex = sex;
     });
+  }
+
+  Future<void> _syncActiveSessionBanner() async {
+    final hasActive = await _workoutRepo.hasActiveSession();
+    if (!mounted) return;
+    AppShellController.instance.setActiveSession(hasActive);
+    AppShellController.instance.setActiveSessionIndicatorHidden(false);
+    AppShellController.instance.refreshActiveSession();
   }
 
   Future<void> _createProgram() async {
@@ -449,6 +496,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => DayPickerScreen(programId: _selectedProgramId!)),
     );
+    await _syncActiveSessionBanner();
+    if (!mounted) return;
     setState(() {});
   }
 
@@ -478,6 +527,7 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => SessionScreen(contextData: contextData)),
     );
+    await _syncActiveSessionBanner();
   }
 
   Future<void> _loadProgramDays() async {
@@ -756,75 +806,81 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  if (programs.isEmpty)
-                    const Center(child: Text('Create your first program.'))
-                  else
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Programs'),
-                        const SizedBox(height: 8),
-                        ...programs.map((program) {
-                          final id = program['id'] as int;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: GlassCard(
-                              padding: EdgeInsets.zero,
-                              child: ListTile(
-                                title: Text(program['name'] as String),
-                                subtitle: const Text('Tap to start or edit days'),
-                                onTap: () async {
-                                  await Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => DayPickerScreen(programId: id)),
-                                  );
-                                  setState(() {});
-                                },
-                                trailing: PopupMenuButton<String>(
-                                  onSelected: (value) async {
-                                    if (value == 'edit') {
-                                      await Navigator.of(context).push(
-                                        MaterialPageRoute(builder: (_) => ProgramEditorScreen(programId: id)),
-                                      );
-                                      setState(() {});
-                                    } else if (value == 'delete') {
-                                      final confirm = await showDialog<bool>(
-                                        context: context,
-                                        builder: (context) {
-                                          return AlertDialog(
-                                            title: const Text('Delete program?'),
-                                            content: const Text(
-                                              'This removes the program and its days. Sessions remain in history.',
-                                            ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.of(context).pop(false),
-                                                child: const Text('Cancel'),
-                                              ),
-                                              ElevatedButton(
-                                                onPressed: () => Navigator.of(context).pop(true),
-                                                child: const Text('Delete'),
-                                              ),
-                                            ],
-                                          );
-                                        },
-                                      );
-                                      if (confirm == true) {
-                                        await _programRepo.deleteProgram(id);
+                  GlassCard(
+                    padding: const EdgeInsets.all(16),
+                    child: programs.isEmpty
+                        ? const Center(child: Text('Create your first program.'))
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Programs'),
+                              const SizedBox(height: 8),
+                              ...programs.map((program) {
+                                final id = program['id'] as int;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: GlassCard(
+                                    padding: EdgeInsets.zero,
+                                    child: ListTile(
+                                      title: Text(program['name'] as String),
+                                      subtitle: const Text('Tap to start or edit days'),
+                                      onTap: () async {
+                                        await Navigator.of(context).push(
+                                          MaterialPageRoute(builder: (_) => DayPickerScreen(programId: id)),
+                                        );
+                                        await _syncActiveSessionBanner();
+                                        if (!mounted) return;
                                         setState(() {});
-                                      }
-                                    }
-                                  },
-                                  itemBuilder: (_) => const [
-                                    PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                    PopupMenuItem(value: 'delete', child: Text('Delete')),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                      ],
-                    ),
+                                      },
+                                      trailing: PopupMenuButton<String>(
+                                        onSelected: (value) async {
+                                          if (value == 'edit') {
+                                            await Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (_) => ProgramEditorScreen(programId: id),
+                                              ),
+                                            );
+                                            setState(() {});
+                                          } else if (value == 'delete') {
+                                            final confirm = await showDialog<bool>(
+                                              context: context,
+                                              builder: (context) {
+                                                return AlertDialog(
+                                                  title: const Text('Delete program?'),
+                                                  content: const Text(
+                                                    'This removes the program and its days. Sessions remain in history.',
+                                                  ),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed: () => Navigator.of(context).pop(false),
+                                                      child: const Text('Cancel'),
+                                                    ),
+                                                    ElevatedButton(
+                                                      onPressed: () => Navigator.of(context).pop(true),
+                                                      child: const Text('Delete'),
+                                                    ),
+                                                  ],
+                                                );
+                                              },
+                                            );
+                                            if (confirm == true) {
+                                              await _programRepo.deleteProgram(id);
+                                              setState(() {});
+                                            }
+                                          }
+                                        },
+                                        itemBuilder: (_) => const [
+                                          PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                          PopupMenuItem(value: 'delete', child: Text('Delete')),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
+                  ),
                   const SizedBox(height: 24),
                 ],
               );
