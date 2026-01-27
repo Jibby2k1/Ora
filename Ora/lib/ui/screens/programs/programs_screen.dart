@@ -735,10 +735,10 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
-                          child: ElevatedButton.icon(
+                          child: OutlinedButton.icon(
                             onPressed: () => _startFreeStyleSession(),
                             icon: const Icon(Icons.bolt),
-                            label: const Text('Empty Day'),
+                            label: const Text('Free day'),
                           ),
                         ),
                       ],

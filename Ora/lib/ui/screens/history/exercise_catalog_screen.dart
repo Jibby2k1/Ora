@@ -144,26 +144,27 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final selectionMode = widget.selectionMode;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.selectionMode ? 'Select Exercise' : 'Exercise Catalog'),
-        actions: [
-          if (!widget.selectionMode) ...[
-            IconButton(
-              tooltip: 'Fill missing muscles (cloud)',
-              onPressed: _isFilling ? null : _fillMissingMuscles,
-              icon: _isFilling ? const Icon(Icons.sync) : const Icon(Icons.auto_fix_high),
-            ),
-            const SizedBox(width: 72),
-          ],
-        ],
+        title: Text(selectionMode ? 'Select Exercise' : 'Exercise Catalog'),
+        actions: selectionMode
+            ? null
+            : [
+                IconButton(
+                  tooltip: 'Fill missing muscles (cloud)',
+                  onPressed: _isFilling ? null : _fillMissingMuscles,
+                  icon: _isFilling ? const Icon(Icons.sync) : const Icon(Icons.auto_fix_high),
+                ),
+                const SizedBox(width: 72),
+              ],
       ),
       body: Stack(
         children: [
           const GlassBackground(),
           Column(
             children: [
-              if (!widget.selectionMode)
+              if (!selectionMode)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                   child: Row(
@@ -194,7 +195,7 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
                     ],
                   ),
                 ),
-              if (_activeView == 0 || widget.selectionMode) ...[
+              if (_activeView == 0 || selectionMode) ...[
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: TextField(
@@ -223,15 +224,16 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
                                 ? (item['equipment_type'] as String)
                                 : '${item['equipment_type']} • $primary',
                           ),
-                          onTap: widget.selectionMode
+                          onTap: selectionMode
                               ? () => Navigator.of(context).pop(
                                     ExerciseMatch(
                                       id: item['id'] as int,
                                       name: item['canonical_name'] as String,
                                     ),
                                   )
+                                  )
                               : null,
-                          trailing: widget.selectionMode
+                          trailing: selectionMode
                               ? const Icon(Icons.add_circle_outline)
                               : IconButton(
                                   icon: const Icon(Icons.show_chart),
@@ -271,7 +273,7 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
                       ),
                     ),
                   ),
-              ] else if (!widget.selectionMode)
+              ] else if (!selectionMode)
                 Expanded(
                   child: HistoryScreen(embedded: true),
                 ),
