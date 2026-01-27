@@ -5,6 +5,14 @@ Local-first fitness companion for training sessions, diet logging, and appearanc
 ## Overview
 Ora is a Flutter app that keeps all core data on-device and focuses on fast logging, clear visuals, and optional cloud-assisted parsing. It combines program-based training, voice-logged sessions, diet tracking, and appearance journaling into a single experience.
 
+## Project Docs
+Project governance and planning live at the repo root:
+- `PROJECT_CHARTER.md`
+- `ROADMAP.md`
+- `CONTRIBUTING.md`
+- `DECISIONS.md`
+- `GOVERNANCE.md`
+
 ## Features
 - Training programs with days, exercises, and set-plan blocks
 - Session logging with rest timer, undo/redo, and exercise matching
