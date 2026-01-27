@@ -6,6 +6,11 @@ Ora is a **local-first workout tracker** designed to reduce the friction of logg
 
 ---
 
+## Product Snapshot
+![Ora app preview](Ora/Examples/Ora.png)
+
+---
+
 ## Quick Links
 - Project Charter: [PROJECT_CHARTER.md](PROJECT_CHARTER.md)
 - Roadmap: [ROADMAP.md](ROADMAP.md)
@@ -209,3 +214,7 @@ export GEMINI_API_KEY="YOUR_KEY_HERE"
 * Alejandro Jimenez - BS in *
 * Haley Tarala - BS in *
 * Matty Maloni - BS in *
+
+### Team Photos
+![Team photo](Ora/Examples/TEAM.JPG)
+![Team at SwampHacks](Ora/Examples/TEAM_HACK.JPG)
