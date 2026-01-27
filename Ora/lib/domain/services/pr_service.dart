@@ -10,9 +10,7 @@ class PrService {
       final r = set['reps'] as int?;
       if (w == null || r == null) continue;
       if (w >= weight && r >= reps) {
-        if (w > weight || r > reps) {
-          return false;
-        }
+        return false;
       }
     }
     return true;

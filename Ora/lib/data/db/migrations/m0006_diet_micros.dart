@@ -1,4 +1,3 @@
-import '../schema.dart';
 
 List<String> migration0006() {
   return [

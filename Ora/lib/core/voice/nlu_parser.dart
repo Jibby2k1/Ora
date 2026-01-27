@@ -98,7 +98,8 @@ class NluParser {
   }
 
   NluCommand? parse(String input) {
-    final text = normalize(input);
+    final raw = input.trim();
+    final text = normalize(raw);
     if (text.isEmpty) return null;
 
     if (text == 'undo') return NluCommand(type: 'undo');
@@ -120,6 +121,16 @@ class NluParser {
     if (text == 'show stats') {
       return NluCommand(type: 'show_stats');
     }
+    if (text.startsWith('rest ')) {
+      final seconds = _parseRestSeconds(text.substring('rest '.length).trim());
+      return NluCommand(type: 'rest', restSeconds: seconds);
+    }
+    if (text == 'rest') {
+      return NluCommand(type: 'rest', restSeconds: _parseRestSeconds(text));
+    }
+
+    final commaCommand = _parseCommaCommand(raw);
+    if (commaCommand != null) return commaCommand;
 
     final logCommand = _parseLogCommand(text);
     if (logCommand != null) return logCommand;
@@ -176,20 +187,21 @@ class NluParser {
   NluCommand? _parseLogCommand(String text) {
     final extras = _parseLogTail(text);
 
-    final commaParts = text.split(',');
-    if (commaParts.length >= 2) {
-      final exerciseRef = commaParts.first.trim();
-      final rest = commaParts.sublist(1).join(',').trim();
-      final parsed = _parseLogTail(rest);
+    final numericForMatch = RegExp(
+      r'^(.+?)\s+(\d+(?:\.\d+)?)\s*(kg|kilograms|kilo|lbs|lb|pounds)?\s+for\s+(.+?)(?:\s+reps)?$',
+    ).firstMatch(text);
+    if (numericForMatch != null) {
+      final weight = double.tryParse(numericForMatch.group(2) ?? '');
+      final reps = _parseIntValue(numericForMatch.group(4)?.trim() ?? '');
       return NluCommand(
         type: 'log_set',
-        exerciseRef: exerciseRef,
-        weight: parsed.weight,
-        weightUnit: parsed.weightUnit,
-        reps: parsed.reps,
-        partials: parsed.partials,
-        rpe: parsed.rpe,
-        rir: parsed.rir,
+        exerciseRef: numericForMatch.group(1)?.trim(),
+        weight: weight,
+        weightUnit: _normalizeUnit(numericForMatch.group(3)),
+        reps: reps,
+        partials: extras.partials,
+        rpe: extras.rpe,
+        rir: extras.rir,
       );
     }
 
@@ -204,6 +216,24 @@ class NluParser {
         exerciseRef: forMatch.group(1)?.trim(),
         weight: weight,
         weightUnit: _normalizeUnit(forMatch.group(3)),
+        reps: reps,
+        partials: extras.partials,
+        rpe: extras.rpe,
+        rir: extras.rir,
+      );
+    }
+
+    final numericXMatch = RegExp(
+      r'^(.+?)\s+(\d+(?:\.\d+)?)\s*(kg|kilograms|kilo|lbs|lb|pounds)?\s*x\s*(.+?)$',
+    ).firstMatch(text);
+    if (numericXMatch != null) {
+      final weight = double.tryParse(numericXMatch.group(2) ?? '');
+      final reps = _parseIntValue(numericXMatch.group(4)?.trim() ?? '');
+      return NluCommand(
+        type: 'log_set',
+        exerciseRef: numericXMatch.group(1)?.trim(),
+        weight: weight,
+        weightUnit: _normalizeUnit(numericXMatch.group(3)),
         reps: reps,
         partials: extras.partials,
         rpe: extras.rpe,
@@ -255,6 +285,26 @@ class NluParser {
     }
 
     return null;
+  }
+
+  NluCommand? _parseCommaCommand(String rawInput) {
+    if (!rawInput.contains(',')) return null;
+    final parts = rawInput.split(',');
+    if (parts.length < 2) return null;
+    final exerciseRef = normalize(parts.first);
+    if (exerciseRef.isEmpty) return null;
+    final rest = normalize(parts.sublist(1).join(','));
+    final parsed = _parseLogTail(rest);
+    return NluCommand(
+      type: 'log_set',
+      exerciseRef: exerciseRef,
+      weight: parsed.weight,
+      weightUnit: parsed.weightUnit,
+      reps: parsed.reps,
+      partials: parsed.partials,
+      rpe: parsed.rpe,
+      rir: parsed.rir,
+    );
   }
 
   _LogTail _parseLogTail(String text) {

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 
 import '../appearance/appearance_screen.dart';
 import '../diet/diet_screen.dart';

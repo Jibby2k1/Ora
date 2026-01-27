@@ -31,22 +31,44 @@ class OpenAiParser {
     );
     lastPrompt = prompt;
 
-    final uri = Uri.https('api.openai.com', '/v1/chat/completions');
-    final payload = {
-      'model': model,
-      if (_openAiSupportsTemperature(model)) 'temperature': 0.1,
-      'messages': [
-        {
-          'role': 'system',
-          'content': prompt,
-        },
-        {
-          'role': 'user',
-          'content': transcript,
-        }
-      ],
-      'response_format': {'type': 'json_object'},
-    };
+    final useResponses = _openAiUsesResponses(model);
+    final uri = Uri.https(
+      'api.openai.com',
+      useResponses ? '/v1/responses' : '/v1/chat/completions',
+    );
+    final payload = useResponses
+        ? {
+            'model': model,
+            'input': [
+              {
+                'role': 'system',
+                'content': [
+                  {'type': 'input_text', 'text': prompt},
+                ],
+              },
+              {
+                'role': 'user',
+                'content': [
+                  {'type': 'input_text', 'text': transcript},
+                ],
+              },
+            ],
+          }
+        : {
+            'model': model,
+            if (_openAiSupportsTemperature(model)) 'temperature': 0.1,
+            'messages': [
+              {
+                'role': 'system',
+                'content': prompt,
+              },
+              {
+                'role': 'user',
+                'content': transcript,
+              }
+            ],
+            'response_format': {'type': 'json_object'},
+          };
 
     http.Response response;
     try {
@@ -74,13 +96,12 @@ class OpenAiParser {
 
     try {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final choices = data['choices'] as List<dynamic>? ?? [];
-      if (choices.isEmpty) {
-        lastError = 'OpenAI returned no choices.';
+      final content =
+          useResponses ? (_extractResponseText(data) ?? '') : _extractChatContent(data);
+      if (content.trim().isEmpty) {
+        lastError = 'OpenAI returned empty content.';
         return null;
       }
-      final message = choices.first['message'] as Map<String, dynamic>?;
-      final content = message?['content']?.toString() ?? '';
       lastRawOutput = content;
       final jsonText = _extractJson(content);
       if (jsonText == null) {
@@ -215,5 +236,36 @@ Respond with JSON only.
   bool _openAiSupportsTemperature(String model) {
     final lower = model.toLowerCase();
     return !lower.startsWith('gpt-5');
+  }
+
+  bool _openAiUsesResponses(String model) {
+    final lower = model.toLowerCase();
+    return lower.startsWith('gpt-5');
+  }
+
+  String _extractChatContent(Map<String, dynamic> data) {
+    final choices = data['choices'];
+    if (choices is! List || choices.isEmpty) return '';
+    final first = choices.first;
+    if (first is! Map) return '';
+    final message = first['message'];
+    if (message is! Map) return '';
+    final content = message['content'];
+    return content?.toString() ?? '';
+  }
+
+  String? _extractResponseText(Map<String, dynamic> data) {
+    final output = data['output'] as List<dynamic>? ?? [];
+    for (final item in output) {
+      final content = (item as Map<String, dynamic>)['content'] as List<dynamic>? ?? [];
+      for (final part in content) {
+        final map = part as Map<String, dynamic>;
+        final type = map['type']?.toString();
+        if (type == 'output_text' || type == 'text') {
+          return map['text']?.toString();
+        }
+      }
+    }
+    return null;
   }
 }
