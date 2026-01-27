@@ -211,7 +211,7 @@ export GEMINI_API_KEY="YOUR_KEY_HERE"
 * Raul Valle - PhD in Electrical and Computer Engineering
 * Eric Zhu - BS in Computer Science
 * Samuel Schneider - BS in *
-* Alejandro Jimenez - BS in *
+* Alejandro Jimenez - BS in Computer Science
 * Haley Tarala - BS in *
 * Matty Maloni - BS in *
 
