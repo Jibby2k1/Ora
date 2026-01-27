@@ -6,6 +6,15 @@ Ora is a **local-first workout tracker** designed to reduce the friction of logg
 
 ---
 
+## Quick Links
+- Project Charter: [PROJECT_CHARTER.md](PROJECT_CHARTER.md)
+- Roadmap: [ROADMAP.md](ROADMAP.md)
+- How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Decisions log: [DECISIONS.md](DECISIONS.md)
+- Governance: [GOVERNANCE.md](GOVERNANCE.md)
+
+---
+
 ## Why Ora (Human-Centered Design)
 
 Logging workouts is a classic “I’ll do it later” problem: it’s tedious, interrupts flow, and often requires too many taps. Ora’s design goal is to make logging feel like sending a voice note—fast enough to do between sets—while keeping your data under your control.
@@ -198,4 +207,5 @@ export GEMINI_API_KEY="YOUR_KEY_HERE"
 * Eric Zhu - BS in Computer Science
 * Samuel Schneider - BS in *
 * Alejandro Jimenez - BS in *
-
+* Haley Tarala - BS in *
+* Matty Maloni - BS in *
