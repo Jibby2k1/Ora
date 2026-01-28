@@ -183,17 +183,17 @@ class _SettingsContentState extends State<SettingsContent> {
                                 ? 'To use OpenAI, follow these steps:\n'
                                     '1) Go to platform.openai.com\n'
                                     '2) Sign in or create an account.\n'
-                                    '3) Open the “API Keys” page.\n'
-                                    '4) Click “Create new secret key”.\n'
-                                    '5) Copy the key immediately (you won’t see it again).\n'
-                                    '6) Paste it into the “API Key” field and press Save.\n'
+                                    '3) Open the "API Keys" page.\n'
+                                    '4) Click "Create new secret key".\n'
+                                    "5) Copy the key immediately (you won't see it again).\n"
+                                    '6) Paste it into the "API Key" field and press Save.\n'
                                     'Text and file previews may be sent for classification. No audio is sent.'
                                 : 'To use Gemini, follow these steps:\n'
                                     '1) Go to aistudio.google.com\n'
                                     '2) Sign in with your Google account.\n'
-                                    '3) Open “Get API key”.\n'
+                                    '3) Open "Get API key".\n'
                                     '4) Create a new key.\n'
-                                    '5) Copy the key and paste it into the “API Key” field, then press Save.\n'
+                                    '5) Copy the key and paste it into the "API Key" field, then press Save.\n'
                                     'Note: the student Gemini plan for the consumer app does not automatically '
                                     'include API access. Text, file previews, and images may be sent for classification.';
                             showDialog<void>(
@@ -387,7 +387,7 @@ class _SettingsContentState extends State<SettingsContent> {
                     SwitchListTile(
                       value: _wakeWordEnabled,
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Wake word: “Hey Ora”'),
+                      title: const Text('Wake word: "Hey Ora"'),
                       subtitle: const Text('Session-only, foreground-only'),
                       onChanged: (value) async {
                         setState(() => _wakeWordEnabled = value);
@@ -424,3 +424,4 @@ class _SettingsContentState extends State<SettingsContent> {
     );
   }
 }
+

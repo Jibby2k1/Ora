@@ -465,7 +465,7 @@ class _SetPlanEditorSheetState extends State<_SetPlanEditorSheet> {
                             children: [
                               Expanded(
                                 child: DropdownButtonFormField<String>(
-                                  value: block.role,
+                                  initialValue: block.role,
                                   decoration: const InputDecoration(labelText: 'Role'),
                                   items: roles
                                       .map((role) => DropdownMenuItem(value: role, child: Text(role)))
@@ -528,7 +528,7 @@ class _SetPlanEditorSheetState extends State<_SetPlanEditorSheet> {
                           ),
                           const SizedBox(height: 8),
                           DropdownButtonFormField<String>(
-                            value: block.loadRuleType,
+                            initialValue: block.loadRuleType,
                             decoration: const InputDecoration(labelText: 'Load rule'),
                             items: loadRules
                                 .map((rule) => DropdownMenuItem(value: rule, child: Text(rule)))

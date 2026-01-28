@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:fl_chart/fl_chart.dart';
 
 import '../../../data/db/db.dart';
 import '../../../data/repositories/appearance_repo.dart';
@@ -41,9 +40,6 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   String _selectedFeedbackCategory = 'skin';
   Future<List<AppearanceEntry>>? _timelineFuture;
   bool _handlingInput = false;
-  Future<List<AppearanceEntry>>? _weightFuture;
-  final TextEditingController _weightInputController = TextEditingController();
-  String _weightUnit = 'lb';
   
   // Gemini API state
   String? _geminiResponse;
@@ -58,7 +54,6 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     _appearanceRepo = AppearanceRepo(AppDatabase.instance);
     _ensureAccess();
     _refreshTimeline();
-    _loadWeightUnit();
     AppShellController.instance.pendingInput.addListener(_handlePendingInput);
   }
 
@@ -66,7 +61,6 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   void dispose() {
     AppShellController.instance.pendingInput.removeListener(_handlePendingInput);
     _adviceInputController.dispose();
-    _weightInputController.dispose();
     super.dispose();
   }
 
@@ -141,17 +135,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   void _refreshTimeline() {
     setState(() {
       _timelineFuture = _appearanceRepo.getRecentEntries(limit: 30);
-      _weightFuture = _appearanceRepo.getRecentEntries(limit: 120);
     });
     _refreshScores();
-  }
-
-  Future<void> _loadWeightUnit() async {
-    final unit = await _settingsRepo.getUnit();
-    if (!mounted) return;
-    setState(() {
-      _weightUnit = unit;
-    });
   }
 
   Future<void> _refreshScores() async {
@@ -191,52 +176,6 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
       }
     } catch (_) {}
     return {};
-  }
-
-  List<_WeightEntry> _weightEntriesFrom(List<AppearanceEntry> entries) {
-    final results = <_WeightEntry>[];
-    for (final entry in entries) {
-      final data = _decodeMeasurements(entry.measurements);
-      if (data['type'] != 'weight') continue;
-      final value = _readScore(data['value']);
-      if (value == null) continue;
-      final unit = data['unit']?.toString() ?? _weightUnit;
-      results.add(_WeightEntry(
-        createdAt: entry.createdAt,
-        weight: value,
-        unit: unit,
-      ));
-    }
-    results.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    return results;
-  }
-
-  Future<void> _saveWeightEntry() async {
-    final raw = _weightInputController.text.trim();
-    if (raw.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter your weight.')),
-      );
-      return;
-    }
-    final value = double.tryParse(raw);
-    if (value == null || value <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid weight.')),
-      );
-      return;
-    }
-    await _appearanceRepo.addEntry(
-      createdAt: DateTime.now(),
-      measurements: jsonEncode({
-        'type': 'weight',
-        'value': value,
-        'unit': _weightUnit,
-      }),
-    );
-    if (!mounted) return;
-    _weightInputController.clear();
-    _refreshTimeline();
   }
 
   String _formatDate(DateTime date) {
@@ -324,22 +263,28 @@ Do NOT give advice on ways to change appearance in illegal, immoral, or unethica
 Focus only on practical, health-based improvements.
 Remember: you are only giving guidance, the user will determine their own score.''';
 
-      // For now, we'll use a simple HTTP request to Gemini API
-      // In production, you'd want to get the API key from settings/secure storage
-      final apiKey = ''; // TODO: Get from settings
-      if (apiKey.isEmpty) {
+      final enabled = await _settingsRepo.getCloudEnabled();
+      final apiKey = await _settingsRepo.getCloudApiKey();
+      final provider = await _settingsRepo.getCloudProvider();
+      final model = await _settingsRepo.getCloudModel();
+      if (!enabled || apiKey == null || apiKey.trim().isEmpty) {
         if (mounted) {
           setState(() {
-            _geminiError = 'Gemini API key not configured. Please set it in settings.';
+            _geminiError = 'Cloud API key not configured. Please set it in settings.';
             _geminiLoading = false;
           });
         }
         return;
       }
 
+      if (provider == 'openai') {
+        await _requestOpenAiAdvice(prompt, apiKey, model);
+        return;
+      }
+
       final uri = Uri.https(
         'generativelanguage.googleapis.com',
-        '/v1beta/models/gemini-2.5-flash:generateContent',
+        '/v1beta/models/$model:generateContent',
         {'key': apiKey},
       );
 
@@ -408,6 +353,113 @@ Remember: you are only giving guidance, the user will determine their own score.
         });
       }
     }
+  }
+
+  Future<void> _requestOpenAiAdvice(String prompt, String apiKey, String model) async {
+    final useResponses = _openAiUsesResponses(model);
+    final uri = Uri.https(
+      'api.openai.com',
+      useResponses ? '/v1/responses' : '/v1/chat/completions',
+    );
+    final payload = useResponses
+        ? {
+            'model': model,
+            'input': [
+              {
+                'role': 'user',
+                'content': [
+                  {'type': 'input_text', 'text': prompt},
+                ],
+              },
+            ],
+          }
+        : {
+            'model': model,
+            if (_openAiSupportsTemperature(model)) 'temperature': 0.7,
+            'messages': [
+              {'role': 'user', 'content': prompt},
+            ],
+          };
+
+    try {
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $apiKey',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (!mounted) return;
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final text =
+            useResponses ? (_extractResponseText(data) ?? '') : _extractChatContent(data);
+        if (text.trim().isEmpty) {
+          setState(() {
+            _geminiError = 'No response from OpenAI.';
+            _geminiLoading = false;
+          });
+          return;
+        }
+        setState(() {
+          _geminiResponse = text;
+          _geminiLoading = false;
+        });
+        return;
+      }
+      setState(() {
+        _geminiError = 'OpenAI API error: ${response.statusCode}';
+        _geminiLoading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _geminiError = 'Request failed: $e';
+          _geminiLoading = false;
+        });
+      }
+    }
+  }
+
+  bool _openAiSupportsTemperature(String model) {
+    final lower = model.toLowerCase();
+    return !lower.startsWith('gpt-5');
+  }
+
+  bool _openAiUsesResponses(String model) {
+    final lower = model.toLowerCase();
+    return lower.startsWith('gpt-5');
+  }
+
+  String? _extractResponseText(Map<String, dynamic> data) {
+    final output = data['output'] as List<dynamic>? ?? [];
+    for (final item in output) {
+      final content = (item as Map<String, dynamic>)['content'] as List<dynamic>? ?? [];
+      for (final part in content) {
+        final map = part as Map<String, dynamic>;
+        final type = map['type']?.toString();
+        if (type == 'output_text' || type == 'text') {
+          return map['text']?.toString();
+        }
+      }
+    }
+    return null;
+  }
+
+  String _extractChatContent(Map<String, dynamic> data) {
+    final choices = data['choices'];
+    if (choices is! List || choices.isEmpty) return '';
+    final first = choices.first;
+    if (first is! Map) return '';
+    final message = first['message'];
+    if (message is! Map) return '';
+    final content = message['content'];
+    return content?.toString() ?? '';
   }
 
   Widget _buildAssessmentCard() {
@@ -568,7 +620,7 @@ Remember: you are only giving guidance, the user will determine their own score.
                         ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: Image.file(
-                            imageFile!,
+                            imageFile,
                             height: 160,
                             width: double.infinity,
                             fit: BoxFit.cover,
@@ -586,154 +638,6 @@ Remember: you are only giving guidance, the user will determine their own score.
                     ],
                   );
                 }).toList(),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWeightTrackerCard() {
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Weight Tracker'),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _weightInputController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                    hintText: 'Enter weight',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(_weightUnit),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: _saveWeightEntry,
-                child: const Text('Save'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          FutureBuilder<List<AppearanceEntry>>(
-            future: _weightFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final entries = _weightEntriesFrom(snapshot.data ?? []);
-              if (entries.isEmpty) {
-                return const Text('No weight entries yet.');
-              }
-              final latest = entries.last;
-              final minWeight = entries.map((e) => e.weight).reduce((a, b) => a < b ? a : b);
-              final maxWeight = entries.map((e) => e.weight).reduce((a, b) => a > b ? a : b);
-              final spots = entries.asMap().entries.map((entry) {
-                return FlSpot(entry.key.toDouble(), entry.value.weight);
-              }).toList();
-              final labelStyle = Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11);
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Latest: ${latest.weight.toStringAsFixed(1)} ${latest.unit}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 160,
-                    child: LineChart(
-                      LineChartData(
-                        minY: minWeight - 2,
-                        maxY: maxWeight + 2,
-                        gridData: FlGridData(show: false),
-                        borderData: FlBorderData(show: false),
-                        titlesData: FlTitlesData(
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 36,
-                              getTitlesWidget: (value, meta) {
-                                final label = value.toStringAsFixed(0);
-                                return Text(label, style: labelStyle);
-                              },
-                            ),
-                          ),
-                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              interval: entries.length <= 1 ? 1 : (entries.length - 1).toDouble(),
-                              getTitlesWidget: (value, meta) {
-                                final index = value.round().clamp(0, entries.length - 1);
-                                final date = entries[index].createdAt;
-                                return Text('${date.month}/${date.day}', style: labelStyle);
-                              },
-                            ),
-                          ),
-                        ),
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots: spots,
-                            isCurved: true,
-                            color: Theme.of(context).colorScheme.primary,
-                            barWidth: 2,
-                            dotData: FlDotData(show: entries.length <= 12),
-                            belowBarData: BarAreaData(
-                              show: true,
-                              color: Theme.of(context).colorScheme.primary.withOpacity(0.12),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'History',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  Column(
-                    children: entries.reversed.take(6).map((entry) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Row(
-                          children: [
-                            Text(
-                              '${entry.weight.toStringAsFixed(1)} ${entry.unit}',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                            const Spacer(),
-                            Text(
-                              _formatDate(entry.createdAt),
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
               );
             },
           ),
@@ -839,8 +743,6 @@ Remember: you are only giving guidance, the user will determine their own score.
               const SizedBox(height: 12),
               _buildProgressRingsCard(),
               const SizedBox(height: 12),
-              _buildWeightTrackerCard(),
-              const SizedBox(height: 12),
               _buildFeedbackHistoryCard(),
             ],
           ),
@@ -860,18 +762,6 @@ class _FeedbackScores {
   final double skin;
   final double physique;
   final double style;
-}
-
-class _WeightEntry {
-  _WeightEntry({
-    required this.createdAt,
-    required this.weight,
-    required this.unit,
-  });
-
-  final DateTime createdAt;
-  final double weight;
-  final String unit;
 }
 
 class _StackedRings extends StatelessWidget {

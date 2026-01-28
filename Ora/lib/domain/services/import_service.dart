@@ -70,9 +70,6 @@ class ImportService {
 
   Future<ImportResult> _importFromExcel(Excel excel, {String? programNameOverride}) async {
     final sheet = excel.tables.values.first;
-    if (sheet == null) {
-      throw Exception('No sheets found');
-    }
 
     final programRepo = ProgramRepo(_db);
     final exerciseRepo = ExerciseRepo(_db);
@@ -190,7 +187,7 @@ class ImportService {
                   await _resolveExerciseId(exerciseRepo, notesCandidate, createIfMissing: true);
               if (shiftedExerciseId != null) {
                 final shiftedDayExerciseId = await programRepo.addProgramDayExercise(
-                  programDayId: dayId!,
+                  programDayId: dayId,
                   exerciseId: shiftedExerciseId,
                   orderIndex: await _nextOrderIndex(programRepo, dayId),
                   notes: nextExercise,
@@ -231,9 +228,6 @@ class ImportService {
 
   Future<ExerciseScanResult> _scanFromExcel(Excel excel) async {
     final sheet = excel.tables.values.first;
-    if (sheet == null) {
-      throw Exception('No sheets found');
-    }
 
     final exerciseRepo = ExerciseRepo(_db);
     final rows = sheet.rows;
