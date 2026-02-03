@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -78,6 +80,8 @@ class _ProfileTabState extends State<_ProfileTab> {
   late final SettingsRepo _settingsRepo;
   final ImagePicker _imagePicker = ImagePicker();
 
+  StreamSubscription<User?>? _authSub;
+
   final _usernameController = TextEditingController();
   final _ageController = TextEditingController();
   final _heightController = TextEditingController();
@@ -98,10 +102,12 @@ class _ProfileTabState extends State<_ProfileTab> {
     _profileRepo = ProfileRepo(db);
     _settingsRepo = SettingsRepo(db);
     _load();
+    _listenToAuthChanges();
   }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _usernameController.dispose();
     _ageController.dispose();
     _heightController.dispose();
@@ -115,7 +121,8 @@ class _ProfileTabState extends State<_ProfileTab> {
     final unit = await _settingsRepo.getUnit();
     final heightUnit = await _settingsRepo.getHeightUnit();
     final avatarPath = await _settingsRepo.getProfileAvatarPath();
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _safeCurrentUser();
+    if (!mounted) return;
     setState(() {
       _profile = profile;
       _weightUnit = unit;
@@ -124,6 +131,7 @@ class _ProfileTabState extends State<_ProfileTab> {
       _remoteAvatarUrl = user?.photoURL;
       _loading = false;
     });
+    if (!mounted) return;
     if (profile != null) {
       _usernameController.text = profile.displayName ?? '';
       _ageController.text = profile.age?.toString() ?? '';
@@ -178,15 +186,22 @@ class _ProfileTabState extends State<_ProfileTab> {
       jpegQuality: 82,
     );
     await _settingsRepo.setProfileAvatarPath(scaled.path);
+    if (!mounted) return;
     setState(() => _avatarPath = scaled.path);
   }
 
   Future<String?> _uploadAvatar(String path) async {
+    if (!_isFirebaseReady) return null;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
-    final ref = FirebaseStorage.instance.ref('users/${user.uid}/profile/avatar.jpg');
-    await ref.putFile(File(path));
-    return ref.getDownloadURL();
+    try {
+      final ref = FirebaseStorage.instance.ref('users/${user.uid}/profile/avatar.jpg');
+      await ref.putFile(File(path));
+      return ref.getDownloadURL();
+    } catch (e) {
+      debugPrint('Avatar upload failed: $e');
+      return null;
+    }
   }
 
   Future<void> _save() async {
@@ -203,20 +218,34 @@ class _ProfileTabState extends State<_ProfileTab> {
       weightKg: weightKg,
       notes: notes.isEmpty ? null : notes,
     );
+    if (!mounted) return;
     setState(() {
       _profile = saved;
     });
 
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _safeCurrentUser();
+    String? syncError;
     if (user != null) {
-      if (username.isNotEmpty) {
-        await user.updateDisplayName(username);
+      try {
+        if (username.isNotEmpty) {
+          await user.updateDisplayName(username);
+        }
+      } catch (e) {
+        syncError = 'Profile saved locally; display name sync failed.';
+        debugPrint('Profile display name sync failed: $e');
       }
       if (_avatarPath != null) {
-        final url = await _uploadAvatar(_avatarPath!);
-        if (url != null) {
-          await user.updatePhotoURL(url);
-          setState(() => _remoteAvatarUrl = url);
+        try {
+          final url = await _uploadAvatar(_avatarPath!);
+          if (url != null) {
+            await user.updatePhotoURL(url);
+            if (mounted) {
+              setState(() => _remoteAvatarUrl = url);
+            }
+          }
+        } catch (e) {
+          syncError = 'Profile saved locally; avatar sync failed.';
+          debugPrint('Profile avatar sync failed: $e');
         }
       }
     }
@@ -225,7 +254,8 @@ class _ProfileTabState extends State<_ProfileTab> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          user == null ? 'Profile saved locally.' : 'Profile saved + synced.',
+          syncError ??
+              (user == null ? 'Profile saved locally.' : 'Profile saved + synced.'),
         ),
       ),
     );
@@ -363,5 +393,28 @@ class _ProfileTabState extends State<_ProfileTab> {
       backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
       child: Icon(Icons.person, color: Theme.of(context).colorScheme.primary),
     );
+  }
+
+  bool get _isFirebaseReady => Firebase.apps.isNotEmpty;
+
+  User? _safeCurrentUser() {
+    if (!_isFirebaseReady) return null;
+    try {
+      return FirebaseAuth.instance.currentUser;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _listenToAuthChanges() {
+    if (!_isFirebaseReady) return;
+    try {
+      _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
+        if (!mounted) return;
+        _load();
+      });
+    } catch (_) {
+      // Ignore auth subscription failures when Firebase isn't initialized.
+    }
   }
 }

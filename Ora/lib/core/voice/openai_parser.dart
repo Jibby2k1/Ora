@@ -37,7 +37,7 @@ class OpenAiParser {
       useResponses ? '/v1/responses' : '/v1/chat/completions',
     );
     final payload = useResponses
-        ? {
+        ? <String, dynamic>{
             'model': model,
             'input': [
               {
@@ -54,9 +54,8 @@ class OpenAiParser {
               },
             ],
           }
-        : {
+        : <String, dynamic>{
             'model': model,
-            if (_openAiSupportsTemperature(model)) 'temperature': 0.1,
             'messages': [
               {
                 'role': 'system',
@@ -69,6 +68,9 @@ class OpenAiParser {
             ],
             'response_format': {'type': 'json_object'},
           };
+    if (!useResponses && _openAiSupportsTemperature(model)) {
+      payload['temperature'] = 0.1;
+    }
 
     http.Response response;
     try {
