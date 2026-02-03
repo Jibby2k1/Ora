@@ -184,17 +184,39 @@ class DietAnalysisService {
     required String apiKey,
     required String model,
   }) async {
-    final uri = Uri.https('api.openai.com', '/v1/chat/completions');
+    final useResponses = _openAiUsesResponses(model);
+    final uri = Uri.https(
+      'api.openai.com',
+      useResponses ? '/v1/responses' : '/v1/chat/completions',
+    );
     final prompt = _analysisTextPrompt();
-    final payload = {
-      'model': model,
-      if (_openAiSupportsTemperature(model)) 'temperature': 0.1,
-      'messages': [
-        {'role': 'system', 'content': prompt},
-        {'role': 'user', 'content': text},
-      ],
-      'response_format': {'type': 'json_object'},
-    };
+    final payload = useResponses
+        ? {
+            'model': model,
+            'input': [
+              {
+                'role': 'system',
+                'content': [
+                  {'type': 'input_text', 'text': prompt},
+                ],
+              },
+              {
+                'role': 'user',
+                'content': [
+                  {'type': 'input_text', 'text': text},
+                ],
+              },
+            ],
+          }
+        : {
+            'model': model,
+            if (_openAiSupportsTemperature(model)) 'temperature': 0.1,
+            'messages': [
+              {'role': 'system', 'content': prompt},
+              {'role': 'user', 'content': text},
+            ],
+            'response_format': {'type': 'json_object'},
+          };
     final response = await http.post(
       uri,
       headers: {
@@ -208,6 +230,13 @@ class DietAnalysisService {
       return null;
     }
     try {
+      if (useResponses) {
+        final textOut = _extractResponseText(response.body);
+        if (textOut == null || textOut.trim().isEmpty) return null;
+        final jsonText = _extractJsonFromText(textOut);
+        if (jsonText == null) return null;
+        return _parseOpenAiJson(jsonText);
+      }
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final choices = data['choices'] as List<dynamic>? ?? [];
       if (choices.isEmpty) return null;
@@ -284,17 +313,39 @@ class DietAnalysisService {
     String apiKey,
     String model,
   ) async {
-    final uri = Uri.https('api.openai.com', '/v1/chat/completions');
+    final useResponses = _openAiUsesResponses(model);
+    final uri = Uri.https(
+      'api.openai.com',
+      useResponses ? '/v1/responses' : '/v1/chat/completions',
+    );
     final prompt = _refinePrompt(current);
-    final payload = {
-      'model': model,
-      if (_openAiSupportsTemperature(model)) 'temperature': 0.0,
-      'messages': [
-        {'role': 'system', 'content': prompt},
-        {'role': 'user', 'content': userText},
-      ],
-      'response_format': {'type': 'json_object'},
-    };
+    final payload = useResponses
+        ? {
+            'model': model,
+            'input': [
+              {
+                'role': 'system',
+                'content': [
+                  {'type': 'input_text', 'text': prompt},
+                ],
+              },
+              {
+                'role': 'user',
+                'content': [
+                  {'type': 'input_text', 'text': userText},
+                ],
+              },
+            ],
+          }
+        : {
+            'model': model,
+            if (_openAiSupportsTemperature(model)) 'temperature': 0.0,
+            'messages': [
+              {'role': 'system', 'content': prompt},
+              {'role': 'user', 'content': userText},
+            ],
+            'response_format': {'type': 'json_object'},
+          };
     final response = await http.post(
       uri,
       headers: {
@@ -307,6 +358,14 @@ class DietAnalysisService {
       return null;
     }
     try {
+      if (useResponses) {
+        final textOut = _extractResponseText(response.body);
+        if (textOut == null || textOut.trim().isEmpty) return null;
+        final jsonText = _extractJsonFromText(textOut);
+        if (jsonText == null) return null;
+        final map = jsonDecode(jsonText) as Map<String, dynamic>;
+        return _fromMap(map);
+      }
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final choices = data['choices'] as List<dynamic>? ?? [];
       if (choices.isEmpty) return null;
@@ -515,5 +574,10 @@ Apply user corrections and return the updated estimate.
   bool _openAiSupportsTemperature(String model) {
     final lower = model.toLowerCase();
     return !lower.startsWith('gpt-5');
+  }
+
+  bool _openAiUsesResponses(String model) {
+    final lower = model.toLowerCase();
+    return lower.startsWith('gpt-5');
   }
 }

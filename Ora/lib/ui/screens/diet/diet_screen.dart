@@ -19,6 +19,7 @@ import '../../../core/cloud/upload_service.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 import '../../widgets/consent/cloud_consent.dart';
+import 'food_barcode_scanner.dart';
 
 class DietScreen extends StatefulWidget {
   const DietScreen({super.key});
@@ -358,6 +359,21 @@ class _DietScreenState extends State<DietScreen> {
         const SnackBar(content: Text('Camera unavailable. Check permissions in Settings > Ora.')),
       );
     }
+  }
+
+  Future<void> _scanBarcode() async {
+    if (!(Platform.isAndroid || Platform.isIOS)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Barcode scanning is available on mobile devices.')),
+      );
+      return;
+    }
+    final estimate = await FoodBarcodeScannerPage.show(
+      context,
+      dietRepo: _dietRepo,
+    );
+    if (!mounted || estimate == null) return;
+    await _reviewEstimate(estimate);
   }
 
   Future<String?> _pickMealImage({required bool fromCamera}) async {
@@ -1194,6 +1210,28 @@ class _DietScreenState extends State<DietScreen> {
                     children: [
                       const Text('Meals'),
                       const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: _useCamera,
+                              icon: const Icon(Icons.photo_camera),
+                              label: const Text('Scan photo'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _scanBarcode,
+                              icon: const Icon(Icons.qr_code_scanner),
+                              label: const Text('Scan barcode'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _pickMedia,
+                              icon: const Icon(Icons.photo_library),
+                              label: const Text('Upload photo'),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       if (_allMeals.isEmpty)
                         const Text('No meals logged yet.')
                       else
