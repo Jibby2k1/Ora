@@ -36,6 +36,9 @@ class MuscleEnricher {
     'Abductors',
     'Hip Flexors',
   ];
+  static final Map<String, String> _muscleLookup = {
+    for (final muscle in _muscles) muscle.toLowerCase(): muscle,
+  };
 
   Future<MuscleInfo?> enrich({
     required String exerciseName,
@@ -43,7 +46,8 @@ class MuscleEnricher {
     required String apiKey,
     required String model,
   }) async {
-    if (provider == 'openai') {
+    final normalizedProvider = provider.trim().toLowerCase();
+    if (normalizedProvider == 'openai') {
       return _openAi(exerciseName, apiKey, model);
     }
     return _gemini(exerciseName, apiKey, model);
@@ -90,7 +94,7 @@ class MuscleEnricher {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      debugPrint('[Gemini][muscle] ${response.statusCode} ${_trimGeminiBody(response.body)}');
+      debugPrint('[Gemini][muscle] ${response.statusCode} ${_trimBody(response.body)}');
       return null;
     }
 
@@ -101,7 +105,7 @@ class MuscleEnricher {
       final content = candidates.first['content'] as Map<String, dynamic>?;
       final parts = content?['parts'] as List<dynamic>? ?? [];
       if (parts.isEmpty) return null;
-      final text = parts.first['text']?.toString() ?? '';
+      final text = _joinGeminiParts(parts);
       final jsonText = _extractJson(text);
       if (jsonText == null) return null;
       final map = jsonDecode(jsonText) as Map<String, dynamic>;
@@ -169,6 +173,7 @@ class MuscleEnricher {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      debugPrint('[OpenAI][muscle] ${response.statusCode} ${_trimBody(response.body)}');
       return null;
     }
 
@@ -207,17 +212,31 @@ $options
   }
 
   MuscleInfo? _parseInfo(Map<String, dynamic> map) {
-    final primary = map['primary']?.toString().trim();
-    if (primary == null || primary.isEmpty) return null;
+    final primaryRaw = map['primary']?.toString().trim();
+    if (primaryRaw == null || primaryRaw.isEmpty) return null;
+    final primary = _normalizeMuscle(primaryRaw) ?? primaryRaw;
     final secondaryRaw = map['secondary'];
     final secondary = <String>[];
+    final seen = <String>{primary.toLowerCase()};
+    void addSecondary(String value) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return;
+      final normalized = _normalizeMuscle(trimmed) ?? trimmed;
+      final key = normalized.toLowerCase();
+      if (!seen.add(key)) return;
+      secondary.add(normalized);
+    }
     if (secondaryRaw is List) {
       for (final item in secondaryRaw) {
-        final text = item?.toString().trim();
-        if (text == null || text.isEmpty) continue;
-        if (text.toLowerCase() == primary.toLowerCase()) continue;
-        secondary.add(text);
+        if (item == null) continue;
+        addSecondary(item.toString());
       }
+    } else if (secondaryRaw is String) {
+      for (final part in secondaryRaw.split(RegExp(r'[,;/]'))) {
+        addSecondary(part);
+      }
+    } else if (secondaryRaw != null) {
+      addSecondary(secondaryRaw.toString());
     }
     return MuscleInfo(primary: primary, secondary: secondary);
   }
@@ -239,14 +258,18 @@ $options
   }
 
   String? _extractResponseText(Map<String, dynamic> data) {
-    final output = data['output'] as List<dynamic>? ?? [];
+    final output = data['output'];
+    if (output is! List) return null;
     for (final item in output) {
-      final content = (item as Map<String, dynamic>)['content'] as List<dynamic>? ?? [];
+      if (item is! Map) continue;
+      final content = item['content'];
+      if (content is! List) continue;
       for (final part in content) {
-        final map = part as Map<String, dynamic>;
-        final type = map['type']?.toString();
+        if (part is! Map) continue;
+        final type = part['type']?.toString();
         if (type == 'output_text' || type == 'text') {
-          return map['text']?.toString();
+          final text = part['text']?.toString();
+          if (text != null && text.isNotEmpty) return text;
         }
       }
     }
@@ -254,15 +277,66 @@ $options
   }
 
   String? _extractJson(String text) {
-    final start = text.indexOf('{');
-    final end = text.lastIndexOf('}');
-    if (start == -1 || end == -1 || end <= start) return null;
-    return text.substring(start, end + 1);
+    var depth = 0;
+    var start = -1;
+    var inString = false;
+    var escaped = false;
+    for (var i = 0; i < text.length; i++) {
+      final char = text[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (char == r'\') {
+          escaped = true;
+          continue;
+        }
+        if (char == '"') inString = false;
+        continue;
+      }
+      if (char == '"') {
+        inString = true;
+        continue;
+      }
+      if (char == '{') {
+        if (depth == 0) start = i;
+        depth++;
+        continue;
+      }
+      if (char == '}' && depth > 0) {
+        depth--;
+        if (depth == 0 && start != -1) {
+          return text.substring(start, i + 1);
+        }
+      }
+    }
+    return null;
   }
 
-  String _trimGeminiBody(String body) {
+  String _trimBody(String body) {
     final trimmed = body.trim();
     if (trimmed.length <= 400) return trimmed;
     return '${trimmed.substring(0, 400)}...';
+  }
+
+  String? _normalizeMuscle(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    return _muscleLookup[trimmed.toLowerCase()];
+  }
+
+  String _joinGeminiParts(List<dynamic> parts) {
+    final buffer = StringBuffer();
+    var wrote = false;
+    for (final part in parts) {
+      if (part is! Map) continue;
+      final text = part['text']?.toString();
+      if (text == null || text.isEmpty) continue;
+      if (wrote) buffer.writeln();
+      buffer.write(text);
+      wrote = true;
+    }
+    return buffer.toString();
   }
 }

@@ -80,11 +80,21 @@ class InputRouter {
 
   Future<InputRouteResult?> classify(InputEvent event) async {
     final settings = SettingsRepo(_db);
+    final cloudEnabled = await settings.getCloudEnabled();
     final provider = await settings.getCloudProvider();
     final model = await settings.getCloudModel();
     final apiKey = await settings.getCloudApiKey();
-    if (apiKey == null || apiKey.trim().isEmpty) {
-      _showSnack('Cloud API key required.');
+    final keyMissing = apiKey == null || apiKey.trim().isEmpty;
+    if (!cloudEnabled || keyMissing) {
+      if (event.file != null && _isSpreadsheet(event.file!)) {
+        return InputRouteResult(
+          intent: InputIntent.programImport,
+          confidence: 0.35,
+          reason: cloudEnabled ? 'Spreadsheet file fallback' : 'Spreadsheet file (cloud disabled)',
+          entity: event.fileName,
+        );
+      }
+      _showSnack(cloudEnabled ? 'Cloud API key required.' : 'Cloud parsing disabled.');
       return null;
     }
 
@@ -169,16 +179,38 @@ class InputRouter {
   }
 
   Future<InputRouteResult?> _classifyOpenAi(String prompt, String apiKey, String model) async {
-    final uri = Uri.https('api.openai.com', '/v1/chat/completions');
-    final payload = {
-      'model': model,
-      if (_openAiSupportsTemperature(model)) 'temperature': 0.1,
-      'messages': [
-        {'role': 'system', 'content': prompt},
-        {'role': 'user', 'content': 'Classify this input.'},
-      ],
-      'response_format': {'type': 'json_object'},
-    };
+    final useResponses = _openAiUsesResponses(model);
+    final uri = Uri.https(
+      'api.openai.com',
+      useResponses ? '/v1/responses' : '/v1/chat/completions',
+    );
+    final payload = useResponses
+        ? {
+            'model': model,
+            'input': [
+              {
+                'role': 'system',
+                'content': [
+                  {'type': 'input_text', 'text': prompt},
+                ],
+              },
+              {
+                'role': 'user',
+                'content': [
+                  {'type': 'input_text', 'text': 'Classify this input.'},
+                ],
+              },
+            ],
+          }
+        : {
+            'model': model,
+            if (_openAiSupportsTemperature(model)) 'temperature': 0.1,
+            'messages': [
+              {'role': 'system', 'content': prompt},
+              {'role': 'user', 'content': 'Classify this input.'},
+            ],
+            'response_format': {'type': 'json_object'},
+          };
 
     final response = await http
         .post(
@@ -199,10 +231,12 @@ class InputRouter {
 
     try {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final choices = data['choices'] as List<dynamic>? ?? [];
-      if (choices.isEmpty) return null;
-      final message = choices.first['message'] as Map<String, dynamic>?;
-      final content = message?['content']?.toString() ?? '';
+      final content = useResponses
+          ? (_extractResponseText(data) ?? '')
+          : ((data['choices'] as List<dynamic>? ?? []).isNotEmpty
+              ? ((data['choices'] as List<dynamic>).first['message']?['content']?.toString() ?? '')
+              : '');
+      if (content.trim().isEmpty) return null;
       final jsonText = _extractJson(content);
       if (jsonText == null) return null;
       final parsed = jsonDecode(jsonText) as Map<String, dynamic>;
@@ -485,6 +519,11 @@ class InputRouter {
   bool _openAiSupportsTemperature(String model) {
     final lower = model.toLowerCase();
     return !lower.startsWith('gpt-5');
+  }
+
+  bool _openAiUsesResponses(String model) {
+    final lower = model.toLowerCase();
+    return lower.startsWith('gpt-5');
   }
 
   String _readTextPreview(File file) {

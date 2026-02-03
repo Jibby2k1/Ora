@@ -362,7 +362,7 @@ Remember: you are only giving guidance, the user will determine their own score.
       useResponses ? '/v1/responses' : '/v1/chat/completions',
     );
     final payload = useResponses
-        ? {
+        ? <String, dynamic>{
             'model': model,
             'input': [
               {
@@ -373,13 +373,15 @@ Remember: you are only giving guidance, the user will determine their own score.
               },
             ],
           }
-        : {
+        : <String, dynamic>{
             'model': model,
-            if (_openAiSupportsTemperature(model)) 'temperature': 0.7,
             'messages': [
               {'role': 'user', 'content': prompt},
             ],
           };
+    if (!useResponses && _openAiSupportsTemperature(model)) {
+      payload['temperature'] = 0.7;
+    }
 
     try {
       final response = await http

@@ -13,7 +13,18 @@ Future<void> main() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   } else if (Platform.isAndroid || Platform.isIOS) {
-    await Firebase.initializeApp();
+    const enableFirebase =
+        bool.fromEnvironment('ENABLE_FIREBASE', defaultValue: false);
+    if (enableFirebase) {
+      try {
+        await Firebase.initializeApp();
+      } catch (error) {
+        debugPrint('Firebase init skipped: $error');
+      }
+    } else {
+      debugPrint(
+          'Firebase disabled for this run. Set ENABLE_FIREBASE=true to enable.');
+    }
   }
   runApp(ProviderScope(child: OraApp()));
 }
