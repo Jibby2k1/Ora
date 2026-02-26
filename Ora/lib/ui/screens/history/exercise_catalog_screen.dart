@@ -231,7 +231,6 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
                                       name: item['canonical_name'] as String,
                                     ),
                                   )
-                                  )
                               : null,
                           trailing: selectionMode
                               ? const Icon(Icons.add_circle_outline)

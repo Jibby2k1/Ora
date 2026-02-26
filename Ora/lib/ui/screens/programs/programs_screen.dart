@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../../../data/db/db.dart';
 import '../../../data/repositories/program_repo.dart';
 import '../../../data/repositories/settings_repo.dart';
 import '../../../data/repositories/workout_repo.dart';
 import '../../../domain/services/calorie_service.dart';
+import '../../../domain/services/import_service.dart';
 import '../../../domain/services/session_service.dart';
 import '../day_picker/day_picker_screen.dart';
 import '../history/exercise_catalog_screen.dart';
@@ -61,10 +63,7 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
   String? _selectedProgramName;
   bool _appearanceProfileEnabled = false;
   String _appearanceSex = 'neutral';
-  List<String> _relevantMuscles = const [];
-  List<Map<String, Object?>> _programDays = const [];
-  int? _selectedDayId;
-  String? _selectedDayName;
+  String? _selectedStatsMuscle;
   bool _handlingInput = false;
 
   @override
@@ -81,7 +80,6 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     AppShellController.instance.pendingInput.addListener(_handlePendingInput);
     AppShellController.instance.programsRevision.addListener(_handleProgramsRefresh);
     _loadAppearancePrefs();
-    _loadProgramDays();
   }
 
   @override
@@ -486,29 +484,31 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     );
   }
 
-  Future<void> _startManualDay() async {
-    if (_selectedProgramId == null) {
+  Future<void> _startManualDay({int? programId}) async {
+    final selectedProgramId = programId ?? _selectedProgramId;
+    if (selectedProgramId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Pick a program first.')),
       );
       return;
     }
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => DayPickerScreen(programId: _selectedProgramId!)),
+      MaterialPageRoute(builder: (_) => DayPickerScreen(programId: selectedProgramId)),
     );
     await _syncActiveSessionBanner();
     if (!mounted) return;
     setState(() {});
   }
 
-  Future<void> _startSmartDay() async {
-    if (_selectedProgramId == null) {
+  Future<void> _startSmartDay({int? programId}) async {
+    final selectedProgramId = programId ?? _selectedProgramId;
+    if (selectedProgramId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Pick a program first.')),
       );
       return;
     }
-    final days = await _programRepo.getProgramDays(_selectedProgramId!);
+    final days = await _programRepo.getProgramDays(selectedProgramId);
     if (days.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -516,11 +516,11 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
       );
       return;
     }
-    final lastIndex = await _workoutRepo.getLastCompletedDayIndex(_selectedProgramId!);
+    final lastIndex = await _workoutRepo.getLastCompletedDayIndex(selectedProgramId);
     final nextIndex = lastIndex == null ? 0 : (lastIndex + 1) % days.length;
     final day = days.firstWhere((d) => d['day_index'] == nextIndex, orElse: () => days.first);
     final contextData = await _sessionService.startSessionForProgramDay(
-      programId: _selectedProgramId!,
+      programId: selectedProgramId,
       programDayId: day['id'] as int,
     );
     if (!mounted) return;
@@ -530,89 +530,270 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     await _syncActiveSessionBanner();
   }
 
-  Future<void> _loadProgramDays() async {
-    if (_selectedProgramId == null) return;
-    final days = await _programRepo.getProgramDays(_selectedProgramId!);
-    if (days.isEmpty) {
+  Future<void> _uploadProgram() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['xlsx'],
+      withData: false,
+    );
+    if (picked == null || picked.files.isEmpty) return;
+    final path = picked.files.first.path;
+    if (path == null || path.trim().isEmpty) {
       if (!mounted) return;
-      setState(() => _relevantMuscles = const []);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to read the selected file.')),
+      );
       return;
     }
-    final lastIndex = await _workoutRepo.getLastCompletedDayIndex(_selectedProgramId!);
-    final nextIndex = lastIndex == null ? 0 : (lastIndex + 1) % days.length;
-    final day = days.firstWhere((d) => d['day_index'] == nextIndex, orElse: () => days.first);
-    _selectedDayId ??= day['id'] as int;
-    _selectedDayName ??= day['day_name'] as String;
-    _programDays = days;
-    await _loadRelevantMuscles();
+
+    final service = ImportService(AppDatabase.instance);
+    try {
+      final result = await service.importFromXlsxPath(path);
+      final refreshedPrograms = await _programRepo.getPrograms();
+      Map<String, Object?>? importedProgram;
+      for (final program in refreshedPrograms) {
+        if (program['id'] == result.programId) {
+          importedProgram = program;
+          break;
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _selectedProgramId = result.programId;
+        if (importedProgram != null) {
+          _selectedProgramName = importedProgram['name'] as String;
+        }
+      });
+      AppShellController.instance.bumpProgramsRevision();
+
+      final missingCount = result.missingExercises.length;
+      final snack = missingCount == 0
+          ? 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises.'
+          : 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises. Missing $missingCount exercises.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(snack)));
+
+      if (missingCount > 0) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: const Text('Missing exercises'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: result.missingExercises.map((e) => Text('• $e')).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Import failed: $error')),
+      );
+    }
   }
 
-  Future<void> _loadRelevantMuscles() async {
-    if (_selectedDayId == null) return;
-    final muscles = await _programRepo.getMusclesForProgramDay(_selectedDayId!);
+  Future<void> _showProgramDaySheet() async {
+    final programs = await _programRepo.getPrograms();
     if (!mounted) return;
-    setState(() {
-      _relevantMuscles = muscles;
-    });
-  }
-
-  void _showMuscleStats(String muscle) {
-    final stats = _muscleStats[muscle] ?? const _MuscleStats(pr: '—', volume: '—', prCount: '—');
-    showModalBottomSheet(
+    int? selectedProgramId = _selectedProgramId;
+    if (programs.isNotEmpty &&
+        (selectedProgramId == null || !programs.any((p) => p['id'] == selectedProgramId))) {
+      selectedProgramId = programs.first['id'] as int;
+    }
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      showDragHandle: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: GlassCard(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                child: GlassCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          muscle,
-                          style: Theme.of(context).textTheme.titleLarge,
+                      const Text('Start Program Day'),
+                      const SizedBox(height: 12),
+                      if (programs.isEmpty) ...[
+                        Text(
+                          'No programs yet. Create or upload one to continue.',
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close),
-                      ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              Navigator.of(context).pop();
+                              await _createProgram();
+                            },
+                            icon: const Icon(Icons.add),
+                            label: const Text('Create New Program'),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              Navigator.of(context).pop();
+                              await _uploadProgram();
+                            },
+                            icon: const Icon(Icons.upload_file),
+                            label: const Text('Upload Program'),
+                          ),
+                        ),
+                      ] else ...[
+                        InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Program',
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<int>(
+                              value: selectedProgramId,
+                              menuMaxHeight: 320,
+                              isExpanded: true,
+                              items: programs
+                                  .map(
+                                    (program) => DropdownMenuItem<int>(
+                                      value: program['id'] as int,
+                                      child: Text(program['name'] as String),
+                                    ),
+                                  )
+                                  .followedBy(
+                                    const [
+                                      DropdownMenuItem<int>(
+                                        value: _createProgramId,
+                                        child: Text('Create new program...'),
+                                      ),
+                                    ],
+                                  )
+                                  .toList(),
+                              onChanged: (value) {
+                                if (value == null) return;
+                                if (value == _createProgramId) {
+                                  Navigator.of(context).pop();
+                                  Future.microtask(() => _createProgram());
+                                  return;
+                                }
+                                final program = programs.firstWhere((p) => p['id'] == value);
+                                setModalState(() {
+                                  selectedProgramId = value;
+                                });
+                                setState(() {
+                                  _selectedProgramId = value;
+                                  _selectedProgramName = program['name'] as String;
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: selectedProgramId == null
+                                    ? null
+                                    : () async {
+                                        Navigator.of(context).pop();
+                                        await _startManualDay(programId: selectedProgramId);
+                                      },
+                                icon: const Icon(Icons.view_list),
+                                label: const Text('Manual Day'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: selectedProgramId == null
+                                    ? null
+                                    : () async {
+                                        Navigator.of(context).pop();
+                                        await _startSmartDay(programId: selectedProgramId);
+                                      },
+                                icon: const Icon(Icons.auto_awesome),
+                                label: const Text('Smart Day'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  _AnatomyPreview(
-                    muscle: muscle,
-                    sex: _appearanceProfileEnabled ? _appearanceSex : 'neutral',
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _StatPill(label: 'PR', value: stats.pr),
-                      _StatPill(label: 'Volume', value: stats.volume),
-                      _StatPill(label: 'PR Count', value: stats.prCount),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Metrics include top set PRs, total volume, and PR count for the most recent automatic day.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
+    );
+  }
+
+  Widget _buildSelectedMuscleStats(String muscle) {
+    final stats = _muscleStats[muscle] ?? const _MuscleStats(pr: '—', volume: '—', prCount: '—');
+    return GlassCard(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            muscle,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 10),
+          _AnatomyPreview(
+            muscle: muscle,
+            sex: _appearanceProfileEnabled ? _appearanceSex : 'neutral',
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _StatPill(label: 'PR', value: stats.pr),
+              _StatPill(label: 'Volume', value: stats.volume),
+              _StatPill(label: 'PR Count', value: stats.prCount),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Metrics include top set PRs, total volume, and PR count for the most recent automatic day.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsPlaceholder() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.35)),
+        color: Theme.of(context).colorScheme.surface.withOpacity(0.2),
+      ),
+      child: Text(
+        'Select a muscle group to view stats.',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
     );
   }
 
@@ -645,9 +826,6 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
               if (programs.isEmpty) {
                 _selectedProgramId = null;
                 _selectedProgramName = null;
-                _selectedDayId = null;
-                _selectedDayName = null;
-                _programDays = [];
               } else {
                 final selectedExists = _selectedProgramId != null &&
                     programs.any((program) => program['id'] == _selectedProgramId);
@@ -655,11 +833,9 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                   final first = programs.first;
                   _selectedProgramId = first['id'] as int;
                   _selectedProgramName = first['name'] as String;
-                  _selectedDayId = null;
-                  _selectedDayName = null;
-                  _loadProgramDays();
                 }
               }
+              final muscleOptions = _muscleOrder;
               return ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
@@ -668,139 +844,37 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Start New Day'),
+                        const Text('Quick Start'),
                         const SizedBox(height: 12),
-                        InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Program',
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<int>(
-                              value: _selectedProgramId,
-                              isExpanded: true,
-                              items: programs
-                                  .map(
-                                    (program) => DropdownMenuItem<int>(
-                                      value: program['id'] as int,
-                                      child: Text(program['name'] as String),
-                                    ),
-                                  )
-                                  .followedBy(
-                                    const [
-                                      DropdownMenuItem<int>(
-                                        value: _createProgramId,
-                                        child: Text('Create new program...'),
-                                      ),
-                                    ],
-                                  )
-                                  .toList(),
-                              onChanged: (value) {
-                                if (value == null) return;
-                                if (value == _createProgramId) {
-                                  _createProgram();
-                                  return;
-                                }
-                                final program = programs.firstWhere((p) => p['id'] == value);
-                                setState(() {
-                                  _selectedProgramId = value;
-                                  _selectedProgramName = program['name'] as String;
-                                  _selectedDayId = null;
-                                  _selectedDayName = null;
-                                });
-                                _loadProgramDays();
-                              },
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () => _startFreeStyleSession(),
+                            child: const Text('Start Workout'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Theme.of(context).colorScheme.primary,
+                              foregroundColor: Theme.of(context).colorScheme.surface,
+                              minimumSize: const Size.fromHeight(64),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              textStyle: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: _startManualDay,
-                                icon: const Icon(Icons.view_list),
-                                label: const Text('Manual Day'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: _startSmartDay,
-                                icon: const Icon(Icons.auto_awesome),
-                                label: const Text('Smart Day'),
-                              ),
-                            ),
-                          ],
                         ),
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
-                            onPressed: () => _startFreeStyleSession(),
-                            icon: const Icon(Icons.bolt),
-                            label: const Text('Free day'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  GlassCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Stats'),
-                        const SizedBox(height: 12),
-                        InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Day',
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<int>(
-                              value: _selectedDayId,
-                              isExpanded: true,
-                              items: _programDays
-                                  .map(
-                                    (day) => DropdownMenuItem<int>(
-                                      value: day['id'] as int,
-                                      child: Text(day['day_name'] as String),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) {
-                                if (value == null) return;
-                                final day = _programDays.firstWhere((d) => d['id'] == value);
-                                setState(() {
-                                  _selectedDayId = value;
-                                  _selectedDayName = day['day_name'] as String;
-                                });
-                                _loadRelevantMuscles();
-                              },
+                            onPressed: () => _showProgramDaySheet(),
+                            icon: const Icon(Icons.calendar_today),
+                            label: const Text('Start Program Day'),
+                            style: OutlinedButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        GridView.count(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 8,
-                          crossAxisSpacing: 8,
-                          childAspectRatio: 3.0,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          children: (_relevantMuscles.isEmpty ? _muscleOrder : _relevantMuscles)
-                              .map(
-                                (muscle) => OutlinedButton(
-                                  onPressed: () => _showMuscleStats(muscle),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    visualDensity: VisualDensity.compact,
-                                    textStyle: const TextStyle(fontSize: 12),
-                                  ),
-                                  child: Text(muscle, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                ),
-                              )
-                              .toList(),
                         ),
                       ],
                     ),
@@ -880,6 +954,43 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                               }),
                             ],
                           ),
+                  ),
+                  const SizedBox(height: 16),
+                  GlassCard(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Stats'),
+                        const SizedBox(height: 12),
+                        InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Muscle group',
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: muscleOptions.contains(_selectedStatsMuscle) ? _selectedStatsMuscle : null,
+                              hint: const Text('Select a muscle group'),
+                              menuMaxHeight: 320,
+                              isExpanded: true,
+                              items: muscleOptions
+                                  .map(
+                                    (muscle) => DropdownMenuItem<String>(
+                                      value: muscle,
+                                      child: Text(muscle),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) {
+                                setState(() => _selectedStatsMuscle = value);
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _selectedStatsMuscle == null ? _buildStatsPlaceholder() : _buildSelectedMuscleStats(_selectedStatsMuscle!),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 24),
                 ],
