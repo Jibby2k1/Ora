@@ -10,7 +10,11 @@ import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 
 class ExerciseCatalogScreen extends StatefulWidget {
-  const ExerciseCatalogScreen({super.key, this.initialQuery, this.selectionMode = false});
+  const ExerciseCatalogScreen({
+    super.key,
+    this.initialQuery,
+    this.selectionMode = false,
+  });
 
   final String? initialQuery;
   final bool selectionMode;
@@ -32,6 +36,9 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
   void initState() {
     super.initState();
     _exerciseRepo = ExerciseRepo(AppDatabase.instance);
+    if (widget.selectionMode) {
+      _activeView = 0;
+    }
     if (widget.initialQuery != null && widget.initialQuery!.trim().isNotEmpty) {
       _controller.text = widget.initialQuery!.trim();
       _search(_controller.text);
@@ -188,7 +195,7 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
                     ],
                   ),
                 ),
-              if (_activeView == 0) ...[
+              if (_activeView == 0 || selectionMode) ...[
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: TextField(
@@ -218,17 +225,15 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
                                 : '${item['equipment_type']} • $primary',
                           ),
                           onTap: selectionMode
-                              ? () {
-                                  Navigator.of(context).pop(
+                              ? () => Navigator.of(context).pop(
                                     ExerciseMatch(
                                       id: item['id'] as int,
                                       name: item['canonical_name'] as String,
                                     ),
-                                  );
-                                }
+                                  )
                               : null,
                           trailing: selectionMode
-                              ? const Icon(Icons.chevron_right)
+                              ? const Icon(Icons.add_circle_outline)
                               : IconButton(
                                   icon: const Icon(Icons.show_chart),
                                   onPressed: () async {
@@ -267,7 +272,7 @@ class _ExerciseCatalogScreenState extends State<ExerciseCatalogScreen> {
                       ),
                     ),
                   ),
-              ] else
+              ] else if (!selectionMode)
                 Expanded(
                   child: HistoryScreen(embedded: true),
                 ),

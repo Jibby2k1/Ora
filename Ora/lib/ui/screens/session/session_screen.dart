@@ -43,6 +43,13 @@ class SessionScreen extends StatefulWidget {
 }
 
 class _DraftSet {
+  _DraftSet({this.repsHint, int? initialReps}) {
+    if (initialReps != null && initialReps > 0) {
+      reps.text = initialReps.toString();
+    }
+  }
+
+  final String? repsHint;
   final TextEditingController weight = TextEditingController();
   final TextEditingController reps = TextEditingController();
 
@@ -268,11 +275,36 @@ class _SessionScreenState extends State<SessionScreen> {
       if (_draftSetsByExerciseId.containsKey(info.sessionExerciseId)) continue;
       final sets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
       if (sets.isNotEmpty) continue;
-      _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []).add(_DraftSet());
+      _draftSetsByExerciseId[info.sessionExerciseId] = _buildPlannedDrafts(info);
       added = true;
     }
     if (!mounted || !added) return;
     setState(() {});
+  }
+
+  List<_DraftSet> _buildPlannedDrafts(SessionExerciseInfo info) {
+    if (info.planBlocks.isEmpty) return [_DraftSet()];
+    final ordered = List<SetPlanBlock>.from(info.planBlocks)
+      ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    final drafts = <_DraftSet>[];
+    for (final block in ordered) {
+      final hint = _formatRepsHint(block.repsMin, block.repsMax);
+      final lowerBoundReps = block.repsMin ?? block.repsMax;
+      final count = block.setCount <= 0 ? 1 : block.setCount;
+      for (var i = 0; i < count; i++) {
+        drafts.add(_DraftSet(repsHint: hint, initialReps: lowerBoundReps));
+      }
+    }
+    return drafts.isEmpty ? [_DraftSet()] : drafts;
+  }
+
+  String? _formatRepsHint(int? min, int? max) {
+    if (min == null && max == null) return null;
+    if (min != null && max != null) {
+      if (min == max) return '$min';
+      return '$min-$max';
+    }
+    return '${min ?? max}';
   }
 
   Future<void> _loadExerciseHints() async {
@@ -1003,10 +1035,11 @@ class _SessionScreenState extends State<SessionScreen> {
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,
                           onTap: () => _setActiveExercise(info),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             isDense: true,
                             contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                             border: OutlineInputBorder(),
+                            hintText: drafts[i].repsHint,
                           ),
                         ),
                       ),
