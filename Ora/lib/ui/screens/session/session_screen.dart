@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
-import 'dart:convert';
-
 import 'dart:async';
+import 'dart:convert';
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
 
 import '../../../core/command_bus/command.dart';
 import '../../../core/command_bus/dispatcher.dart';
@@ -26,14 +27,14 @@ import '../../../domain/models/session_exercise_info.dart';
 import '../../../domain/services/exercise_matcher.dart';
 import '../../../domain/services/set_plan_service.dart';
 import '../shell/app_shell_controller.dart';
+import '../history/history_screen.dart';
 import '../history/exercise_catalog_screen.dart';
-import '../../widgets/confirmation_card/confirmation_card.dart';
-import '../../widgets/exercise_modal/exercise_modal.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 
 class SessionScreen extends StatefulWidget {
-  const SessionScreen({super.key, required this.contextData, this.isEditing = false});
+  const SessionScreen(
+      {super.key, required this.contextData, this.isEditing = false});
 
   final SessionContext contextData;
   final bool isEditing;
@@ -43,17 +44,29 @@ class SessionScreen extends StatefulWidget {
 }
 
 class _DraftSet {
-  _DraftSet({this.repsHint, int? initialReps}) {
+  _DraftSet({
+    this.repsHint,
+    int? initialReps,
+    this.restSeconds,
+    this.targetSetIndex,
+  }) {
     if (initialReps != null && initialReps > 0) {
       reps.text = initialReps.toString();
     }
   }
 
   final String? repsHint;
+  int? restSeconds;
+  int? targetSetIndex;
   final TextEditingController weight = TextEditingController();
   final TextEditingController reps = TextEditingController();
+  bool _isDisposed = false;
+
+  bool get isDisposed => _isDisposed;
 
   void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
     weight.dispose();
     reps.dispose();
   }
@@ -65,6 +78,18 @@ class _InlineSetData {
   final List<Map<String, Object?>> sets;
   final List<Map<String, Object?>> previousSets;
 }
+
+class _NumberPadResult {
+  const _NumberPadResult({
+    required this.value,
+    required this.confirmed,
+  });
+
+  final String value;
+  final bool confirmed;
+}
+
+const _numberPadTapRegionGroup = 'session-number-pad';
 
 enum _PendingField { weight, reps }
 
@@ -107,7 +132,195 @@ class _ExerciseMuscles {
   final List<String> secondary;
 }
 
+class _AnimatedRestPill extends StatefulWidget {
+  const _AnimatedRestPill({
+    required this.isActive,
+    required this.isComplete,
+    required this.restSeconds,
+    required this.activeStartedAt,
+    required this.activeDurationSeconds,
+    required this.barColor,
+    required this.barBorderColor,
+    required this.fillColor,
+    required this.textColor,
+    required this.textStyle,
+    this.overrideLabel,
+  });
+
+  final bool isActive;
+  final bool isComplete;
+  final int restSeconds;
+  final DateTime? activeStartedAt;
+  final int activeDurationSeconds;
+  final Color barColor;
+  final Color barBorderColor;
+  final Color fillColor;
+  final Color textColor;
+  final TextStyle? textStyle;
+  final String? overrideLabel;
+
+  @override
+  State<_AnimatedRestPill> createState() => _AnimatedRestPillState();
+}
+
+class _AnimatedRestPillState extends State<_AnimatedRestPill>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  bool _localComplete = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this)
+      ..addStatusListener(_handleAnimationStatus);
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedRestPill oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final configChanged = widget.isActive != oldWidget.isActive ||
+        widget.isComplete != oldWidget.isComplete ||
+        widget.activeStartedAt != oldWidget.activeStartedAt ||
+        widget.activeDurationSeconds != oldWidget.activeDurationSeconds ||
+        widget.restSeconds != oldWidget.restSeconds;
+    if (configChanged) {
+      _syncAnimation();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller
+      ..removeStatusListener(_handleAnimationStatus)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _handleAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed && mounted && !_localComplete) {
+      setState(() {
+        _localComplete = true;
+      });
+    }
+  }
+
+  void _syncAnimation() {
+    if (widget.isComplete) {
+      _controller.stop();
+      _controller.value = 1.0;
+      _localComplete = true;
+      return;
+    }
+    if (!widget.isActive ||
+        widget.activeStartedAt == null ||
+        widget.activeDurationSeconds <= 0) {
+      _controller.stop();
+      _controller.value = 0.0;
+      _localComplete = false;
+      return;
+    }
+    final totalMs = widget.activeDurationSeconds * 1000;
+    final elapsedMs = DateTime.now()
+        .difference(widget.activeStartedAt!)
+        .inMilliseconds
+        .clamp(0, totalMs);
+    final progress = totalMs <= 0 ? 1.0 : elapsedMs / totalMs;
+    final remainingMs = totalMs - elapsedMs;
+    _controller.stop();
+    _controller.value = progress.clamp(0.0, 1.0);
+    _localComplete = remainingMs <= 0;
+    if (_localComplete) {
+      _controller.value = 1.0;
+      return;
+    }
+    _controller.animateTo(
+      1.0,
+      duration: Duration(milliseconds: remainingMs),
+      curve: Curves.linear,
+    );
+  }
+
+  int _remainingSeconds() {
+    if (!widget.isActive || _localComplete) return widget.restSeconds;
+    final totalMs = widget.activeDurationSeconds * 1000;
+    if (totalMs <= 0) return widget.restSeconds;
+    final elapsedMs = (totalMs * _controller.value).floor().clamp(0, totalMs);
+    final remainingMs = (totalMs - elapsedMs).clamp(0, totalMs);
+    if (remainingMs <= 0) return 0;
+    return ((remainingMs - 1) ~/ 1000) + 1;
+  }
+
+  String _formatRestShort(int seconds) {
+    if (seconds <= 0) return '0:00';
+    final hours = seconds ~/ 3600;
+    final mins = (seconds % 3600) ~/ 60;
+    final secs = seconds % 60;
+    if (hours > 0) {
+      return '$hours:${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+    }
+    return '${mins}:${secs.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final showComplete = widget.isComplete || _localComplete;
+        final widthFactor = showComplete
+            ? 1.0
+            : (widget.isActive ? (1.0 - _controller.value) : 0.0);
+        final label = widget.overrideLabel ??
+            (showComplete
+                ? _formatRestShort(widget.restSeconds)
+                : widget.isActive
+                    ? _formatRestShort(_remainingSeconds())
+                    : _formatRestShort(widget.restSeconds));
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth * widthFactor.clamp(0.0, 1.0);
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: widget.barColor,
+                    border: Border.all(color: widget.barBorderColor),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                if (width > 0)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: SizedBox(
+                      width: width,
+                      height: double.infinity,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: widget.fillColor,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                Center(
+                  child: Text(
+                    label,
+                    style: widget.textStyle?.copyWith(color: widget.textColor),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
 class _SessionScreenState extends State<SessionScreen> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _voiceController = TextEditingController();
   final _parser = NluParser();
   final _llmParser = LlmParser();
@@ -136,10 +349,25 @@ class _SessionScreenState extends State<SessionScreen> {
   final Map<int, Future<_InlineSetData>> _inlineSetFutures = {};
   final Map<int, String> _inlineDebugSnapshot = {};
   final Map<int, int> _restSecondsByExerciseId = {};
+  final Set<int> _completedRestSetIds = <int>{};
   Timer? _inlineRestTicker;
+  PersistentBottomSheetController? _numberPadSheetController;
+  Completer<_NumberPadResult?>? _numberPadResultCompleter;
+  StateSetter? _numberPadSheetSetState;
+  String _numberPadTitle = '';
+  String _numberPadRawValue = '';
+  bool _numberPadAllowDecimal = false;
+  bool _numberPadReplacePending = false;
+  bool _numberPadDiscardChanges = false;
+  String Function(String value)? _numberPadDisplayFormatter;
   DateTime _inlineRestNow = DateTime.now();
+  int? _lastObservedInlineRestSetId;
+  String? _activeNumberPadFieldKey;
+  String _activeNumberPadValue = '';
   DateTime? _sessionStartedAt;
   DateTime? _sessionEndedAt;
+  String? _sessionProgramName;
+  String? _sessionDayName;
   bool _listening = false;
   String? _voicePartial;
   final Map<int, List<_DraftSet>> _draftSetsByExerciseId = {};
@@ -179,15 +407,21 @@ class _SessionScreenState extends State<SessionScreen> {
       AppShellController.instance.setActiveSession(true);
       AppShellController.instance.setActiveSessionIndicatorHidden(false);
     }
-    AppShellController.instance.pendingSessionVoice.addListener(_handlePendingSessionVoice);
+    AppShellController.instance.pendingSessionVoice
+        .addListener(_handlePendingSessionVoice);
     _workoutRepo = WorkoutRepo(db);
     _exerciseRepo = ExerciseRepo(db);
     _programRepo = ProgramRepo(db);
     _settingsRepo = SettingsRepo(db);
     _matcher = ExerciseMatcher(_exerciseRepo);
-    _sessionExercises = List<SessionExerciseInfo>.from(widget.contextData.exercises);
-    _exerciseById = {for (final info in _sessionExercises) info.exerciseId: info};
-    _sessionExerciseById = {for (final info in _sessionExercises) info.sessionExerciseId: info};
+    _sessionExercises =
+        List<SessionExerciseInfo>.from(widget.contextData.exercises);
+    _exerciseById = {
+      for (final info in _sessionExercises) info.exerciseId: info
+    };
+    _sessionExerciseById = {
+      for (final info in _sessionExercises) info.sessionExerciseId: info
+    };
     _cacheRefToExerciseId = {};
     _dispatcher = CommandDispatcher(
       SessionCommandReducer(
@@ -195,7 +429,8 @@ class _SessionScreenState extends State<SessionScreen> {
         sessionExerciseById: _sessionExerciseById,
       ).call,
     );
-    _currentDayExerciseNames = _sessionExercises.map((e) => e.exerciseName).toList();
+    _currentDayExerciseNames =
+        _sessionExercises.map((e) => e.exerciseName).toList();
     // Defer local LLM initialization until it is actually needed.
     Future.microtask(_loadCloudSettings);
     Future.microtask(_loadExerciseHints);
@@ -204,10 +439,19 @@ class _SessionScreenState extends State<SessionScreen> {
     Future.microtask(_loadSessionHeader);
     Future.microtask(_seedInitialDraftSets);
     _inlineRestNow = DateTime.now();
-    _inlineRestTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+    _lastObservedInlineRestSetId = AppShellController.instance.restActiveSetId;
+    _inlineRestTicker = Timer.periodic(const Duration(milliseconds: 250), (_) {
       if (!mounted) return;
+      final restController = AppShellController.instance;
+      final now = DateTime.now();
+      final resolvedActiveRestSetId = restController.restActiveSetId;
+      if (_lastObservedInlineRestSetId != null &&
+          resolvedActiveRestSetId == null) {
+        _completedRestSetIds.add(_lastObservedInlineRestSetId!);
+      }
+      _lastObservedInlineRestSetId = resolvedActiveRestSetId;
       setState(() {
-        _inlineRestNow = DateTime.now();
+        _inlineRestNow = now;
       });
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -219,7 +463,8 @@ class _SessionScreenState extends State<SessionScreen> {
   void dispose() {
     _voiceController.dispose();
     _inlineRestTicker?.cancel();
-    AppShellController.instance.pendingSessionVoice.removeListener(_handlePendingSessionVoice);
+    AppShellController.instance.pendingSessionVoice
+        .removeListener(_handlePendingSessionVoice);
     for (final drafts in _draftSetsByExerciseId.values) {
       for (final draft in drafts) {
         draft.dispose();
@@ -259,11 +504,15 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   Future<void> _loadSessionHeader() async {
-    final header = await _workoutRepo.getSessionHeader(widget.contextData.sessionId);
+    final header =
+        await _workoutRepo.getSessionHeader(widget.contextData.sessionId);
     if (!mounted) return;
     setState(() {
-      _sessionStartedAt = DateTime.tryParse(header?['started_at'] as String? ?? '');
+      _sessionStartedAt =
+          DateTime.tryParse(header?['started_at'] as String? ?? '');
       _sessionEndedAt = DateTime.tryParse(header?['ended_at'] as String? ?? '');
+      _sessionProgramName = header?['program_name'] as String?;
+      _sessionDayName = header?['day_name'] as String?;
     });
   }
 
@@ -273,9 +522,11 @@ class _SessionScreenState extends State<SessionScreen> {
     var added = false;
     for (final info in _sessionExercises) {
       if (_draftSetsByExerciseId.containsKey(info.sessionExerciseId)) continue;
-      final sets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+      final sets =
+          await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
       if (sets.isNotEmpty) continue;
-      _draftSetsByExerciseId[info.sessionExerciseId] = _buildPlannedDrafts(info);
+      _draftSetsByExerciseId[info.sessionExerciseId] =
+          _buildPlannedDrafts(info);
       added = true;
     }
     if (!mounted || !added) return;
@@ -283,19 +534,43 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   List<_DraftSet> _buildPlannedDrafts(SessionExerciseInfo info) {
-    if (info.planBlocks.isEmpty) return [_DraftSet()];
+    if (info.planBlocks.isEmpty) {
+      return [
+        _DraftSet(
+          restSeconds: _restSecondsForExercise(info),
+          targetSetIndex: 1,
+        ),
+      ];
+    }
     final ordered = List<SetPlanBlock>.from(info.planBlocks)
       ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
     final drafts = <_DraftSet>[];
+    final defaultRestSeconds = _restSecondsForExercise(info);
+    var nextSetIndex = 1;
     for (final block in ordered) {
       final hint = _formatRepsHint(block.repsMin, block.repsMax);
       final lowerBoundReps = block.repsMin ?? block.repsMax;
       final count = block.setCount <= 0 ? 1 : block.setCount;
       for (var i = 0; i < count; i++) {
-        drafts.add(_DraftSet(repsHint: hint, initialReps: lowerBoundReps));
+        drafts.add(
+          _DraftSet(
+            repsHint: hint,
+            initialReps: lowerBoundReps,
+            restSeconds: defaultRestSeconds,
+            targetSetIndex: nextSetIndex,
+          ),
+        );
+        nextSetIndex += 1;
       }
     }
-    return drafts.isEmpty ? [_DraftSet()] : drafts;
+    return drafts.isEmpty
+        ? [
+            _DraftSet(
+              restSeconds: _restSecondsForExercise(info),
+              targetSetIndex: 1,
+            ),
+          ]
+        : drafts;
   }
 
   String? _formatRepsHint(int? min, int? max) {
@@ -307,12 +582,33 @@ class _SessionScreenState extends State<SessionScreen> {
     return '${min ?? max}';
   }
 
+  int _nextDraftSetIndex(SessionExerciseInfo info) {
+    var maxIndex = 0;
+    final cachedSets =
+        _inlineSetCache[info.sessionExerciseId]?.sets ?? const [];
+    for (final row in cachedSets) {
+      final value = row['set_index'] as int?;
+      if (value != null && value > maxIndex) {
+        maxIndex = value;
+      }
+    }
+    final drafts = _draftSetsByExerciseId[info.sessionExerciseId] ?? const [];
+    for (final draft in drafts) {
+      final value = draft.targetSetIndex;
+      if (value != null && value > maxIndex) {
+        maxIndex = value;
+      }
+    }
+    return maxIndex + 1;
+  }
+
   Future<void> _loadExerciseHints() async {
     try {
       final programId = widget.contextData.programId;
       final programDayId = widget.contextData.programDayId;
       if (programId == null) return;
-      final byDay = await _programRepo.getExerciseNamesByDayForProgram(programId);
+      final byDay =
+          await _programRepo.getExerciseNamesByDayForProgram(programId);
       final other = <String>[];
       byDay.forEach((dayId, names) {
         if (programDayId == null || dayId != programDayId) {
@@ -341,7 +637,8 @@ class _SessionScreenState extends State<SessionScreen> {
       final apiKey = await _settingsRepo.getCloudApiKey();
       final provider = await _settingsRepo.getCloudProvider();
       final model = await _settingsRepo.getCloudModel();
-      final canEnrich = cloudEnabled && apiKey != null && apiKey.trim().isNotEmpty;
+      final canEnrich =
+          cloudEnabled && apiKey != null && apiKey.trim().isNotEmpty;
       final enricher = canEnrich ? MuscleEnricher() : null;
       for (final info in _sessionExercises) {
         final row = await _exerciseRepo.getById(info.exerciseId);
@@ -354,7 +651,9 @@ class _SessionScreenState extends State<SessionScreen> {
             final decoded = jsonDecode(secondaryJson);
             if (decoded is List) {
               secondary.addAll(
-                decoded.map((e) => e.toString()).where((e) => e.trim().isNotEmpty),
+                decoded
+                    .map((e) => e.toString())
+                    .where((e) => e.trim().isNotEmpty),
               );
             }
           } catch (_) {}
@@ -396,8 +695,14 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   Future<void> _showQuickAddSet(SessionExerciseInfo info) async {
-    final list = _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []);
-    list.add(_DraftSet());
+    final list =
+        _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []);
+    list.add(
+      _DraftSet(
+        restSeconds: _restSecondsForExercise(info),
+        targetSetIndex: _nextDraftSetIndex(info),
+      ),
+    );
     if (!mounted) return;
     setState(() {});
   }
@@ -447,9 +752,219 @@ class _SessionScreenState extends State<SessionScreen> {
 
   String _formatRestShort(int seconds) {
     if (seconds <= 0) return '0:00';
-    final mins = seconds ~/ 60;
+    final hours = seconds ~/ 3600;
+    final mins = (seconds % 3600) ~/ 60;
     final secs = seconds % 60;
+    if (hours > 0) {
+      return '$hours:${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+    }
     return '${mins}:${secs.toString().padLeft(2, '0')}';
+  }
+
+  String _encodeSecondsToHmsInput(int seconds) {
+    final clamped = seconds.clamp(0, 359999);
+    final hours = clamped ~/ 3600;
+    final minutes = (clamped % 3600) ~/ 60;
+    final secs = clamped % 60;
+    final raw =
+        '${hours.toString().padLeft(2, '0')}${minutes.toString().padLeft(2, '0')}${secs.toString().padLeft(2, '0')}';
+    final trimmed = raw.replaceFirst(RegExp(r'^0+'), '');
+    return trimmed.isEmpty ? '0' : trimmed;
+  }
+
+  String _formatEditableDurationInput(String rawDigits) {
+    final digits = rawDigits.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return '0:00';
+    final limited =
+        digits.length <= 6 ? digits : digits.substring(digits.length - 6);
+    if (limited.length <= 2) {
+      return '0:${limited.padLeft(2, '0')}';
+    }
+    if (limited.length <= 4) {
+      final head = limited.substring(0, limited.length - 2);
+      final seconds = limited.substring(limited.length - 2);
+      final minutes = int.tryParse(head) ?? 0;
+      return '$minutes:$seconds';
+    }
+    final hoursText = limited.substring(0, limited.length - 4);
+    final minutes = limited.substring(limited.length - 4, limited.length - 2);
+    final seconds = limited.substring(limited.length - 2);
+    final hours = int.tryParse(hoursText) ?? 0;
+    return '$hours:$minutes:$seconds';
+  }
+
+  int _parseHmsInputToSeconds(String rawDigits) {
+    final digits = rawDigits.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return 0;
+    final limited =
+        digits.length <= 6 ? digits : digits.substring(digits.length - 6);
+    final padded = limited.padLeft(6, '0');
+    final hours = int.tryParse(padded.substring(0, 2)) ?? 0;
+    final minutes = int.tryParse(padded.substring(2, 4)) ?? 0;
+    final seconds = int.tryParse(padded.substring(4, 6)) ?? 0;
+    return (hours * 3600) + (minutes * 60) + seconds;
+  }
+
+  bool get _showInlineEditCaret =>
+      (_inlineRestNow.millisecondsSinceEpoch ~/ 500).isEven;
+
+  String _inlineEditingLabel(String value) {
+    final caret = _showInlineEditCaret ? '|' : '';
+    if (value.isEmpty) {
+      return caret.isEmpty ? ' ' : caret;
+    }
+    return '$value$caret';
+  }
+
+  Future<void> _bringFieldIntoView(BuildContext fieldContext) async {
+    if (Scrollable.maybeOf(fieldContext) == null) return;
+    try {
+      await Scrollable.ensureVisible(
+        fieldContext,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        alignment: 0.42,
+      );
+    } catch (_) {
+      // Ignore visibility failures from detached contexts.
+    }
+  }
+
+  String _formatNumberPadDisplay(String raw) {
+    final formatter = _numberPadDisplayFormatter;
+    return formatter == null ? raw : formatter(raw);
+  }
+
+  void _refreshNumberPadUi() {
+    _numberPadSheetSetState?.call(() {});
+    if (!mounted) return;
+    setState(() {
+      _activeNumberPadValue = _formatNumberPadDisplay(_numberPadRawValue);
+    });
+  }
+
+  void _configureNumberPadRequest({
+    required String title,
+    required String fieldKey,
+    required String initialValue,
+    required bool allowDecimal,
+    required String Function(String value)? displayFormatter,
+    required bool replaceOnFirstInput,
+  }) {
+    _numberPadTitle = title;
+    _numberPadRawValue = initialValue.trim();
+    _numberPadAllowDecimal = allowDecimal;
+    _numberPadReplacePending =
+        replaceOnFirstInput && _numberPadRawValue.isNotEmpty;
+    _numberPadDiscardChanges = false;
+    _numberPadDisplayFormatter = displayFormatter;
+    _numberPadResultCompleter = Completer<_NumberPadResult?>();
+    if (!mounted) return;
+    setState(() {
+      _activeNumberPadFieldKey = fieldKey;
+      _activeNumberPadValue = _formatNumberPadDisplay(_numberPadRawValue);
+    });
+  }
+
+  void _commitActiveNumberPad({
+    bool closeSheet = false,
+    bool confirmed = false,
+  }) {
+    final completer = _numberPadResultCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(
+        _NumberPadResult(
+          value: _numberPadRawValue.trim(),
+          confirmed: confirmed,
+        ),
+      );
+    }
+    if (closeSheet) {
+      _numberPadSheetController?.close();
+    }
+  }
+
+  void _cancelActiveNumberPad() {
+    _numberPadDiscardChanges = true;
+    final completer = _numberPadResultCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(null);
+    }
+    _numberPadSheetController?.close();
+  }
+
+  void _appendNumberPadChar(String char) {
+    if (char == '.' && !_numberPadAllowDecimal) return;
+    if (_numberPadReplacePending) {
+      _numberPadRawValue = '';
+      _numberPadReplacePending = false;
+    }
+    if (char == '.') {
+      if (_numberPadRawValue.contains('.')) return;
+      _numberPadRawValue =
+          _numberPadRawValue.isEmpty ? '0.' : '$_numberPadRawValue.';
+      _refreshNumberPadUi();
+      return;
+    }
+    if (_numberPadRawValue == '0') {
+      _numberPadRawValue = char;
+      _refreshNumberPadUi();
+      return;
+    }
+    _numberPadRawValue = '$_numberPadRawValue$char';
+    _refreshNumberPadUi();
+  }
+
+  void _backspaceNumberPad() {
+    if (_numberPadRawValue.isEmpty) return;
+    _numberPadRawValue =
+        _numberPadRawValue.substring(0, _numberPadRawValue.length - 1);
+    _numberPadReplacePending = false;
+    _refreshNumberPadUi();
+  }
+
+  void _clearNumberPad() {
+    _numberPadRawValue = '';
+    _numberPadReplacePending = false;
+    _refreshNumberPadUi();
+  }
+
+  bool _isTimerCompleteForRow(
+    Map<String, Object?> row, {
+    DateTime? now,
+  }) {
+    final setId = row['id'] as int?;
+    if (setId == null) return false;
+    if (_completedRestSetIds.contains(setId)) return true;
+    if (AppShellController.instance.restActiveSetId == setId) return false;
+    final restSeconds = (row['rest_sec_actual'] as int?) ?? 0;
+    if (restSeconds <= 0) return false;
+    final createdAt = DateTime.tryParse((row['created_at'] as String?) ?? '');
+    if (createdAt == null) return false;
+    final effectiveNow = now ?? DateTime.now();
+    return effectiveNow.difference(createdAt).inMilliseconds >=
+        restSeconds * 1000;
+  }
+
+  void _showUndoSnackBar({
+    required String message,
+    required Future<void> Function() onUndo,
+  }) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            unawaited(onUndo());
+          },
+        ),
+      ),
+    );
   }
 
   String _formatSessionTimer(Duration elapsed) {
@@ -460,7 +975,47 @@ class _SessionScreenState extends State<SessionScreen> {
     if (hours > 0) {
       return '${hours}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
     }
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  String _formatSessionDate(DateTime? value) {
+    if (value == null) return 'Today';
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[value.month - 1]} ${value.day}, ${value.year}';
+  }
+
+  String _sessionTitle() {
+    final day = _sessionDayName?.trim();
+    if (day != null && day.isNotEmpty) return day;
+    final program = _sessionProgramName?.trim();
+    if (program != null && program.isNotEmpty) return program;
+    return 'Workout Session';
+  }
+
+  String? _currentVoiceStatus() {
+    if (_voicePartial != null && _voicePartial!.trim().isNotEmpty) {
+      return 'Listening: $_voicePartial';
+    }
+    if (_prompt != null && _prompt!.trim().isNotEmpty) {
+      return _prompt;
+    }
+    if (_wakeWordEnabled) {
+      return 'Listening for "Hey Ora"';
+    }
+    return null;
   }
 
   void _startInlineRest({
@@ -468,95 +1023,591 @@ class _SessionScreenState extends State<SessionScreen> {
     required int restSeconds,
     required int exerciseId,
   }) {
-    if (restSeconds <= 0) return;
+    final previousActiveSetId = AppShellController.instance.restActiveSetId;
+    if (previousActiveSetId != null && previousActiveSetId != setId) {
+      _completedRestSetIds.add(previousActiveSetId);
+    }
+    if (restSeconds <= 0) {
+      if (previousActiveSetId != null) {
+        AppShellController.instance.completeRestTimer();
+        _lastObservedInlineRestSetId = null;
+      }
+      _completedRestSetIds.add(setId);
+      if (!mounted) return;
+      setState(() {});
+      return;
+    }
+    _completedRestSetIds.remove(setId);
     AppShellController.instance.startRestTimer(
       seconds: restSeconds,
       setId: setId,
       exerciseId: exerciseId,
     );
+    _lastObservedInlineRestSetId = setId;
     if (!mounted) return;
     setState(() {});
   }
 
   void _completeInlineRest() {
-    if (AppShellController.instance.restActiveSetId == null) return;
+    final completedSetId = AppShellController.instance.restActiveSetId;
+    if (completedSetId == null) return;
     AppShellController.instance.completeRestTimer();
+    _completedRestSetIds.add(completedSetId);
+    _lastObservedInlineRestSetId = null;
     if (!mounted) return;
     setState(() {});
   }
 
-  Future<void> _undoCompletedSet(SessionExerciseInfo info, Map<String, Object?> row) async {
+  Future<void> _undoCompletedSet(
+    SessionExerciseInfo info,
+    Map<String, Object?> row,
+  ) async {
     final id = row['id'] as int?;
     if (id == null) return;
+    _completedRestSetIds.remove(id);
     final weight = row['weight_value'] as num?;
     final reps = row['reps'] as int?;
     await _deleteSet(id, info);
-    final draft = _DraftSet();
+    final draft = _DraftSet(
+      restSeconds:
+          (row['rest_sec_actual'] as int?) ?? _restSecondsForExercise(info),
+      targetSetIndex: row['set_index'] as int?,
+    );
     if (weight != null) {
       draft.weight.text = _formatSetWeight(weight);
     }
     if (reps != null) {
       draft.reps.text = reps.toString();
     }
-    _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []).add(draft);
+    _draftSetsByExerciseId
+        .putIfAbsent(info.sessionExerciseId, () => [])
+        .add(draft);
     if (!mounted) return;
     setState(() {});
   }
 
-  Future<void> _showRestPicker(SessionExerciseInfo info, int currentSeconds) async {
-    final controller = TextEditingController(text: currentSeconds.toString());
-    final quickOptions = [30, 45, 60, 90, 120, 180];
-    final selected = await showDialog<int>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Rest Timer'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Seconds',
-                  isDense: true,
+  Future<_NumberPadResult?> _showNumberPad({
+    required String title,
+    required String fieldKey,
+    String initialValue = '',
+    bool allowDecimal = false,
+    String Function(String value)? displayFormatter,
+    bool replaceOnFirstInput = false,
+  }) async {
+    if (_numberPadSheetController != null) {
+      if (_activeNumberPadFieldKey == fieldKey) {
+        return null;
+      }
+      _commitActiveNumberPad();
+      _configureNumberPadRequest(
+        title: title,
+        fieldKey: fieldKey,
+        initialValue: initialValue,
+        allowDecimal: allowDecimal,
+        displayFormatter: displayFormatter,
+        replaceOnFirstInput: replaceOnFirstInput,
+      );
+      _refreshNumberPadUi();
+      return _numberPadResultCompleter?.future;
+    }
+    if (_scaffoldKey.currentState == null) {
+      return null;
+    }
+    _configureNumberPadRequest(
+      title: title,
+      fieldKey: fieldKey,
+      initialValue: initialValue,
+      allowDecimal: allowDecimal,
+      displayFormatter: displayFormatter,
+      replaceOnFirstInput: replaceOnFirstInput,
+    );
+    final completer = _numberPadResultCompleter!;
+    final scaffoldState = _scaffoldKey.currentState!;
+    final theme = Theme.of(context);
+    final keypadPanelTopColor = theme.colorScheme.surface.withOpacity(0.66);
+    final keypadPanelBottomColor =
+        theme.colorScheme.surfaceContainerHighest.withOpacity(0.5);
+    final keypadPanelBorderColor = theme.colorScheme.outline.withOpacity(0.18);
+    final keypadKeyColor = theme.colorScheme.surface.withOpacity(0.74);
+    final keypadKeyBorderColor = theme.colorScheme.onSurface.withOpacity(0.12);
+    late PersistentBottomSheetController controller;
+
+    Widget keyButton(
+      String label, {
+      required VoidCallback onPressed,
+      Color? backgroundColor,
+      Color? foregroundColor,
+    }) {
+      return Expanded(
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: SizedBox(
+            height: 56,
+            child: ElevatedButton(
+              onPressed: onPressed,
+              style: ElevatedButton.styleFrom(
+                elevation: 0,
+                backgroundColor: backgroundColor ?? keypadKeyColor,
+                foregroundColor: foregroundColor ?? theme.colorScheme.onSurface,
+                shadowColor: Colors.transparent,
+                side: BorderSide(color: keypadKeyBorderColor),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final seconds in quickOptions)
-                    OutlinedButton(
-                      onPressed: () => controller.text = seconds.toString(),
-                      child: Text('${seconds}s'),
+              child: label == '⌫'
+                  ? const Icon(Icons.backspace_outlined, size: 20)
+                  : Text(
+                      label,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () {
-                final value = int.tryParse(controller.text.trim());
-                if (value == null || value < 0) {
-                  _showMessage('Enter a valid rest time.');
-                  return;
-                }
-                Navigator.of(context).pop(value);
-              },
-              child: const Text('Save'),
             ),
-          ],
+          ),
+        ),
+      );
+    }
+
+    controller = scaffoldState.showBottomSheet(
+      (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setModalState) {
+            _numberPadSheetSetState = setModalState;
+            return TapRegion(
+              groupId: _numberPadTapRegionGroup,
+              onTapOutside: (_) {
+                if (_numberPadSheetController == null) return;
+                _commitActiveNumberPad(closeSheet: true);
+              },
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(28),
+                    ),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(
+                        sigmaX: 18,
+                        sigmaY: 18,
+                      ),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              keypadPanelTopColor,
+                              keypadPanelBottomColor,
+                            ],
+                          ),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(28),
+                          ),
+                          border: Border.all(color: keypadPanelBorderColor),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              _numberPadTitle,
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                keyButton('1',
+                                    onPressed: () => _appendNumberPadChar('1')),
+                                keyButton('2',
+                                    onPressed: () => _appendNumberPadChar('2')),
+                                keyButton('3',
+                                    onPressed: () => _appendNumberPadChar('3')),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                keyButton('4',
+                                    onPressed: () => _appendNumberPadChar('4')),
+                                keyButton('5',
+                                    onPressed: () => _appendNumberPadChar('5')),
+                                keyButton('6',
+                                    onPressed: () => _appendNumberPadChar('6')),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                keyButton('7',
+                                    onPressed: () => _appendNumberPadChar('7')),
+                                keyButton('8',
+                                    onPressed: () => _appendNumberPadChar('8')),
+                                keyButton('9',
+                                    onPressed: () => _appendNumberPadChar('9')),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                keyButton(
+                                  _numberPadAllowDecimal ? '.' : 'C',
+                                  onPressed: () => _numberPadAllowDecimal
+                                      ? _appendNumberPadChar('.')
+                                      : _clearNumberPad(),
+                                ),
+                                keyButton('0',
+                                    onPressed: () => _appendNumberPadChar('0')),
+                                keyButton('⌫', onPressed: _backspaceNumberPad),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                keyButton(
+                                  'Cancel',
+                                  onPressed: _cancelActiveNumberPad,
+                                ),
+                                keyButton(
+                                  'OK',
+                                  onPressed: () => _commitActiveNumberPad(
+                                    closeSheet: true,
+                                    confirmed: true,
+                                  ),
+                                  backgroundColor: theme.colorScheme.primary,
+                                  foregroundColor: theme.colorScheme.surface,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
         );
       },
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      enableDrag: false,
+    );
+    _numberPadSheetController = controller;
+    controller.closed.whenComplete(() {
+      final activeCompleter = _numberPadResultCompleter;
+      if (activeCompleter != null && !activeCompleter.isCompleted) {
+        activeCompleter.complete(
+          _numberPadDiscardChanges
+              ? null
+              : _NumberPadResult(
+                  value: _numberPadRawValue.trim(),
+                  confirmed: false,
+                ),
+        );
+      }
+      if (identical(_numberPadSheetController, controller)) {
+        _numberPadSheetController = null;
+        _numberPadSheetSetState = null;
+        _numberPadResultCompleter = null;
+        _numberPadTitle = '';
+        _numberPadRawValue = '';
+        _numberPadAllowDecimal = false;
+        _numberPadReplacePending = false;
+        _numberPadDiscardChanges = false;
+        _numberPadDisplayFormatter = null;
+      }
+      if (!mounted) return;
+      setState(() {
+        _activeNumberPadFieldKey = null;
+        _activeNumberPadValue = '';
+      });
+    });
+    return completer.future;
+  }
+
+  Future<int?> _promptRestSeconds(
+    int currentSeconds, {
+    required String fieldKey,
+  }) async {
+    final result = await _showNumberPad(
+      title: 'Rest Timer',
+      fieldKey: fieldKey,
+      initialValue: _encodeSecondsToHmsInput(currentSeconds),
+      displayFormatter: _formatEditableDurationInput,
+    );
+    if (result == null) return null;
+    return _parseHmsInputToSeconds(result.value);
+  }
+
+  Future<void> _editLoggedSetRest(
+    SessionExerciseInfo info, {
+    required int setId,
+    required int currentSeconds,
+  }) async {
+    final wasActive = AppShellController.instance.restActiveSetId == setId;
+    final selected = await _promptRestSeconds(
+      currentSeconds,
+      fieldKey: 'logged-rest-$setId',
+    );
+    if (selected == null) return;
+    await _workoutRepo.updateSetEntry(
+      id: setId,
+      restSecActual: selected,
+    );
+    if (wasActive) {
+      _completeInlineRest();
+    } else {
+      _completedRestSetIds.add(setId);
+    }
+    _refreshInlineSetData(info);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _editLoggedSetWeight(
+    SessionExerciseInfo info, {
+    required int setId,
+    required num? currentWeight,
+  }) async {
+    final result = await _showNumberPad(
+      title: 'Weight ($_weightUnit)',
+      fieldKey: 'logged-weight-$setId',
+      initialValue:
+          currentWeight == null ? '' : _formatSetWeight(currentWeight),
+      allowDecimal: true,
+    );
+    if (result == null) return;
+    final trimmed = result.value.trim();
+    final parsed = trimmed.isEmpty ? null : double.tryParse(trimmed);
+    if (trimmed.isNotEmpty && parsed == null) {
+      _showMessage('Enter a valid weight.');
+      return;
+    }
+    await _workoutRepo.updateSetEntry(
+      id: setId,
+      weightValue: parsed,
+    );
+    _refreshInlineSetData(info);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _editLoggedSetReps(
+    SessionExerciseInfo info, {
+    required int setId,
+    required int? currentReps,
+  }) async {
+    final result = await _showNumberPad(
+      title: 'Reps',
+      fieldKey: 'logged-reps-$setId',
+      initialValue: currentReps?.toString() ?? '',
+    );
+    if (result == null) return;
+    final parsed = int.tryParse(result.value.trim());
+    if (parsed == null || parsed <= 0) {
+      _showMessage('Enter valid reps.');
+      return;
+    }
+    await _workoutRepo.updateSetEntry(
+      id: setId,
+      reps: parsed,
+    );
+    _refreshInlineSetData(info);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _editDraftRest(SessionExerciseInfo info, _DraftSet draft) async {
+    final currentSeconds = draft.restSeconds ?? _restSecondsForExercise(info);
+    final selected = await _promptRestSeconds(
+      currentSeconds,
+      fieldKey: 'draft-rest-${info.sessionExerciseId}-${draft.hashCode}',
     );
     if (selected == null || !mounted) return;
     setState(() {
-      _restSecondsByExerciseId[info.exerciseId] = selected;
+      draft.restSeconds = selected;
     });
+  }
+
+  void _removeDraftRest(SessionExerciseInfo info, _DraftSet draft) {
+    final previousSeconds = draft.restSeconds ?? _restSecondsForExercise(info);
+    if (previousSeconds <= 0) return;
+    setState(() {
+      draft.restSeconds = 0;
+    });
+    _showUndoSnackBar(
+      message: 'Timer removed',
+      onUndo: () async {
+        if (!mounted) return;
+        final list = _draftSetsByExerciseId[info.sessionExerciseId];
+        if (list == null || !list.contains(draft)) return;
+        setState(() {
+          draft.restSeconds = previousSeconds;
+        });
+      },
+    );
+  }
+
+  Future<void> _removeLoggedSetRest(
+    SessionExerciseInfo info, {
+    required int setId,
+    required int currentSeconds,
+  }) async {
+    if (currentSeconds <= 0) return;
+    final wasComplete = _completedRestSetIds.contains(setId);
+    final wasActive = AppShellController.instance.restActiveSetId == setId;
+    if (wasActive) {
+      AppShellController.instance.completeRestTimer();
+      _lastObservedInlineRestSetId = null;
+    }
+    _completedRestSetIds.remove(setId);
+    await _workoutRepo.updateSetEntry(
+      id: setId,
+      restSecActual: 0,
+    );
+    _refreshInlineSetData(info);
+    if (mounted) {
+      setState(() {});
+    }
+    _showUndoSnackBar(
+      message: 'Timer removed',
+      onUndo: () async {
+        final row = await _workoutRepo.getSetEntryById(setId);
+        if (row == null) return;
+        await _workoutRepo.updateSetEntry(
+          id: setId,
+          restSecActual: currentSeconds,
+        );
+        if (wasComplete) {
+          _completedRestSetIds.add(setId);
+        }
+        _refreshInlineSetData(info);
+        if (!mounted) return;
+        setState(() {});
+      },
+    );
+  }
+
+  Future<void> _editExerciseRestTimers(SessionExerciseInfo info) async {
+    final currentSeconds = _restSecondsForExercise(info);
+    final selected = await _promptRestSeconds(
+      currentSeconds,
+      fieldKey: 'exercise-rest-${info.sessionExerciseId}',
+    );
+    if (selected == null) return;
+    final rows =
+        await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+    final now = DateTime.now();
+    final activeSetId = AppShellController.instance.restActiveSetId;
+    var shouldRestartActive = false;
+    for (final row in rows) {
+      final setId = row['id'] as int?;
+      final rowRestSeconds = (row['rest_sec_actual'] as int?) ?? 0;
+      if (setId == null || rowRestSeconds <= 0) continue;
+      if (_isTimerCompleteForRow(row, now: now)) continue;
+      await _workoutRepo.updateSetEntry(
+        id: setId,
+        restSecActual: selected,
+      );
+      if (setId == activeSetId) {
+        shouldRestartActive = true;
+      }
+    }
+    final drafts = _draftSetsByExerciseId[info.sessionExerciseId];
+    if (drafts != null) {
+      for (final draft in drafts) {
+        final draftRest = draft.restSeconds ?? currentSeconds;
+        if (draftRest > 0) {
+          draft.restSeconds = selected;
+        }
+      }
+    }
+    _restSecondsByExerciseId[info.exerciseId] = selected;
+    if (shouldRestartActive && activeSetId != null) {
+      if (selected > 0) {
+        AppShellController.instance.startRestTimer(
+          seconds: selected,
+          setId: activeSetId,
+          exerciseId: info.exerciseId,
+        );
+        _completedRestSetIds.remove(activeSetId);
+        _lastObservedInlineRestSetId = activeSetId;
+      } else {
+        AppShellController.instance.completeRestTimer();
+        _completedRestSetIds.remove(activeSetId);
+        _lastObservedInlineRestSetId = null;
+      }
+    }
+    _refreshInlineSetData(info);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _editDraftWeight(
+    SessionExerciseInfo info,
+    _DraftSet draft, {
+    required int setNumber,
+  }) async {
+    final result = await _showNumberPad(
+      title: 'Weight ($_weightUnit)',
+      fieldKey: 'draft-weight-${info.sessionExerciseId}-${draft.hashCode}',
+      initialValue: draft.weight.text,
+      allowDecimal: true,
+    );
+    if (result == null || draft.isDisposed) return;
+    final trimmed = result.value.trim();
+    final parsed = trimmed.isEmpty ? null : double.tryParse(trimmed);
+    if (trimmed.isNotEmpty && parsed == null) {
+      _showMessage('Enter a valid weight.');
+      return;
+    }
+    draft.weight.text = parsed == null ? '' : _formatSetWeight(parsed);
+    if (!result.confirmed) {
+      if (!mounted) return;
+      setState(() {});
+      return;
+    }
+    final reps = int.tryParse(draft.reps.text.trim());
+    if (reps != null && reps > 0) {
+      await _commitDraftSet(info, draft, setNumber: setNumber);
+      return;
+    }
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _editDraftReps(
+    SessionExerciseInfo info,
+    _DraftSet draft, {
+    required int setNumber,
+  }) async {
+    final result = await _showNumberPad(
+      title: 'Reps',
+      fieldKey: 'draft-reps-${info.sessionExerciseId}-${draft.hashCode}',
+      initialValue: draft.reps.text,
+    );
+    if (result == null || draft.isDisposed) return;
+    final trimmed = result.value.trim();
+    draft.reps.text = trimmed;
+    final reps = int.tryParse(trimmed);
+    if (reps == null || reps <= 0) {
+      if (!mounted) return;
+      setState(() {});
+      return;
+    }
+    if (!result.confirmed) {
+      if (!mounted) return;
+      setState(() {});
+      return;
+    }
+    await _commitDraftSet(info, draft, setNumber: setNumber);
   }
 
   Future<_InlineSetData> _loadInlineSetData(SessionExerciseInfo info) async {
@@ -601,8 +1652,11 @@ class _SessionScreenState extends State<SessionScreen> {
       );
       return existing;
     }
-    final future = _loadInlineSetData(info).then((data) {
-      _inlineSetCache[info.sessionExerciseId] = data;
+    late final Future<_InlineSetData> future;
+    future = _loadInlineSetData(info).then((data) {
+      if (identical(_inlineSetFutures[info.sessionExerciseId], future)) {
+        _inlineSetCache[info.sessionExerciseId] = data;
+      }
       return data;
     });
     _inlineSetFutures[info.sessionExerciseId] = future;
@@ -614,12 +1668,19 @@ class _SessionScreenState extends State<SessionScreen> {
 
   void _refreshInlineSetData(SessionExerciseInfo info) {
     final previous = _inlineSetFutures[info.sessionExerciseId];
-    final future = _loadInlineSetData(info).then((data) {
-      _inlineSetCache[info.sessionExerciseId] = data;
-      _pushSetDebug(
-        '[refresh] ex=${info.sessionExerciseId} done sets=${data.sets.length} '
-        'rows=${_summarizeSetRows(data.sets)}',
-      );
+    late final Future<_InlineSetData> future;
+    future = _loadInlineSetData(info).then((data) {
+      if (identical(_inlineSetFutures[info.sessionExerciseId], future)) {
+        _inlineSetCache[info.sessionExerciseId] = data;
+        _pushSetDebug(
+          '[refresh] ex=${info.sessionExerciseId} done sets=${data.sets.length} '
+          'rows=${_summarizeSetRows(data.sets)}',
+        );
+      } else {
+        _pushSetDebug(
+          '[refresh] ex=${info.sessionExerciseId} stale future=${future.hashCode}',
+        );
+      }
       return data;
     });
     _inlineSetFutures[info.sessionExerciseId] = future;
@@ -629,7 +1690,11 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
-  Future<void> _commitDraftSet(SessionExerciseInfo info, _DraftSet draft) async {
+  Future<void> _commitDraftSet(
+    SessionExerciseInfo info,
+    _DraftSet draft, {
+    int? setNumber,
+  }) async {
     final reps = int.tryParse(draft.reps.text.trim());
     if (reps == null || reps <= 0) {
       _showMessage('Enter valid reps.');
@@ -642,11 +1707,21 @@ class _SessionScreenState extends State<SessionScreen> {
     );
     _isLoggingSet = true;
     try {
-      final beforeSets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
-      _pushSetDebug('[commit] beforeCount=${beforeSets.length} rows=${_summarizeSetRows(beforeSets)}');
-      await _logInlineSet(info, reps: reps, weight: weight);
-      final afterSets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
-      _pushSetDebug('[commit] afterCount=${afterSets.length} rows=${_summarizeSetRows(afterSets)}');
+      final beforeSets =
+          await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+      _pushSetDebug(
+          '[commit] beforeCount=${beforeSets.length} rows=${_summarizeSetRows(beforeSets)}');
+      await _logInlineSet(
+        info,
+        reps: reps,
+        weight: weight,
+        restSeconds: draft.restSeconds ?? _restSecondsForExercise(info),
+        setIndex: setNumber ?? draft.targetSetIndex,
+      );
+      final afterSets =
+          await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+      _pushSetDebug(
+          '[commit] afterCount=${afterSets.length} rows=${_summarizeSetRows(afterSets)}');
       if (afterSets.length <= beforeSets.length) {
         _showMessage('Set not saved. Try again.');
         return;
@@ -725,6 +1800,160 @@ class _SessionScreenState extends State<SessionScreen> {
     _pushSetDebug(summary);
   }
 
+  Widget _buildLoggedRestRow(
+    BuildContext context,
+    SessionExerciseInfo info, {
+    required int setId,
+    required int restSeconds,
+    required bool isActive,
+    required bool isComplete,
+    required DateTime? activeStartedAt,
+    required int activeDurationSeconds,
+  }) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final completeAccent = Colors.green.shade700;
+    final barColor =
+        isComplete ? Colors.green.withOpacity(0.14) : accent.withOpacity(0.08);
+    final barBorderColor =
+        isComplete ? Colors.green.withOpacity(0.26) : accent.withOpacity(0.12);
+    final fillColor =
+        isComplete ? Colors.green.withOpacity(0.28) : accent.withOpacity(0.22);
+    final textColor = isComplete ? completeAccent : accent;
+    final fieldKey = 'logged-rest-$setId';
+    final isEditing = _activeNumberPadFieldKey == fieldKey;
+    final row = Padding(
+      padding: const EdgeInsets.fromLTRB(4, 6, 4, 10),
+      child: Builder(
+        builder: (rowContext) => GestureDetector(
+          onTap: () async {
+            await _bringFieldIntoView(rowContext);
+            if (!mounted) return;
+            _editLoggedSetRest(
+              info,
+              setId: setId,
+              currentSeconds: restSeconds,
+            );
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              height: 28,
+              child: _AnimatedRestPill(
+                isActive: isActive,
+                isComplete: isComplete,
+                restSeconds: restSeconds,
+                activeStartedAt: activeStartedAt,
+                activeDurationSeconds: activeDurationSeconds,
+                barColor: barColor,
+                barBorderColor: barBorderColor,
+                fillColor: fillColor,
+                textColor: textColor,
+                textStyle: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+                overrideLabel: isEditing
+                    ? _inlineEditingLabel(_activeNumberPadValue)
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return Dismissible(
+      key: ValueKey('rest-$setId-$restSeconds'),
+      direction: DismissDirection.startToEnd,
+      dismissThresholds: const {
+        DismissDirection.startToEnd: 0.45,
+      },
+      confirmDismiss: (_) async => !_isLoggingSet,
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(
+          color: Colors.redAccent.withOpacity(0.28),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.timer_off_outlined),
+      ),
+      onDismissed: (_) => unawaited(
+        _removeLoggedSetRest(
+          info,
+          setId: setId,
+          currentSeconds: restSeconds,
+        ),
+      ),
+      child: row,
+    );
+  }
+
+  Widget _buildDraftRestRow(
+    BuildContext context,
+    SessionExerciseInfo info,
+    _DraftSet draft,
+  ) {
+    final restSeconds = draft.restSeconds ?? _restSecondsForExercise(info);
+    if (restSeconds <= 0) {
+      return const SizedBox.shrink();
+    }
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final fieldKey = 'draft-rest-${info.sessionExerciseId}-${draft.hashCode}';
+    final isEditing = _activeNumberPadFieldKey == fieldKey;
+    final row = Padding(
+      padding: const EdgeInsets.fromLTRB(4, 6, 4, 10),
+      child: Builder(
+        builder: (rowContext) => GestureDetector(
+          onTap: () async {
+            await _bringFieldIntoView(rowContext);
+            if (!mounted) return;
+            _editDraftRest(info, draft);
+          },
+          child: Container(
+            height: 28,
+            decoration: BoxDecoration(
+              color: accent.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: accent.withOpacity(0.12)),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              isEditing
+                  ? _inlineEditingLabel(_activeNumberPadValue)
+                  : _formatRestShort(restSeconds),
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: accent,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return Dismissible(
+      key: ValueKey('draft-rest-${info.sessionExerciseId}-${draft.hashCode}'),
+      direction: DismissDirection.startToEnd,
+      dismissThresholds: const {
+        DismissDirection.startToEnd: 0.45,
+      },
+      confirmDismiss: (_) async => !_isLoggingSet,
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(
+          color: Colors.redAccent.withOpacity(0.28),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.timer_off_outlined),
+      ),
+      onDismissed: (_) => _removeDraftRest(info, draft),
+      child: row,
+    );
+  }
+
   Widget _buildInlineSets(
     BuildContext context,
     SessionExerciseInfo info,
@@ -732,8 +1961,7 @@ class _SessionScreenState extends State<SessionScreen> {
     List<Map<String, Object?>> previousSets,
     List<_DraftSet> drafts, {
     String renderSource = 'render',
-  }
-  ) {
+  }) {
     var volume = 0.0;
     for (final row in sets) {
       final weight = row['weight_value'] as num?;
@@ -743,353 +1971,535 @@ class _SessionScreenState extends State<SessionScreen> {
       }
     }
     _logInlineSnapshot(info, sets, previousSets, drafts, source: renderSource);
-    final restSeconds = _restSecondsForExercise(info);
+    final theme = Theme.of(context);
     final volumeLabel = volume == 0 ? '—' : volume.toStringAsFixed(0);
-    const setColWidth = 32.0;
-    const prevColWidth = 96.0;
-    const weightColWidth = 64.0;
-    const repsColWidth = 52.0;
-    const checkColWidth = 32.0;
-    const colGap = 10.0;
-    final headerStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.4,
-        );
+    const setFlex = 12;
+    const prevFlex = 28;
+    const weightFlex = 18;
+    const repsFlex = 18;
+    const checkFlex = 10;
+    const colGap = 8.0;
+    final headerStyle = theme.textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w800,
+      color: theme.colorScheme.onSurface.withOpacity(0.86),
+    );
+    final summaryStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurface.withOpacity(0.64),
+      fontWeight: FontWeight.w600,
+    );
+    final fieldFill = theme.colorScheme.surface.withOpacity(0.62);
+    final draftRowFill = theme.colorScheme.surface.withOpacity(0.34);
+    final borderColor = theme.colorScheme.onSurface.withOpacity(0.06);
+    final completeRowFill = Colors.green.withOpacity(0.14);
+    final completeBorderColor = Colors.green.withOpacity(0.26);
     final restController = AppShellController.instance;
     final activeRestSetId = restController.restActiveSetId;
     final activeRestStartedAt = restController.restStartedAt;
     final activeRestDuration = restController.restDurationSeconds;
+    final orderedSets = List<Map<String, Object?>>.from(sets)
+      ..sort((a, b) {
+        final aIndex = (a['set_index'] as int?) ?? 0;
+        final bIndex = (b['set_index'] as int?) ?? 0;
+        if (aIndex != bIndex) return aIndex.compareTo(bIndex);
+        final aId = (a['id'] as int?) ?? 0;
+        final bId = (b['id'] as int?) ?? 0;
+        return aId.compareTo(bId);
+      });
+
+    Widget valueChip(
+      String label, {
+      bool emphasize = false,
+      Color? foregroundColor,
+      Color? fillColor,
+      Color? outlineColor,
+    }) {
+      return Container(
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        decoration: BoxDecoration(
+          color: fillColor ?? fieldFill,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: outlineColor ?? borderColor),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: emphasize ? FontWeight.w700 : FontWeight.w600,
+            color: foregroundColor,
+          ),
+        ),
+      );
+    }
+
+    Widget editableValueChip({
+      required String label,
+      required VoidCallback onTap,
+      String? placeholder,
+      bool emphasize = false,
+      Color? foregroundColor,
+      String? fieldKey,
+    }) {
+      final isEditing =
+          fieldKey != null && _activeNumberPadFieldKey == fieldKey;
+      final hasValue = label.trim().isNotEmpty;
+      final displayLabel = isEditing
+          ? _inlineEditingLabel(_activeNumberPadValue)
+          : (hasValue ? label : (placeholder ?? '—'));
+      final chip = Builder(
+        builder: (chipContext) => Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () async {
+              await _bringFieldIntoView(chipContext);
+              if (!mounted) return;
+              onTap();
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: valueChip(
+              displayLabel,
+              emphasize: emphasize,
+              foregroundColor: isEditing || hasValue
+                  ? foregroundColor
+                  : theme.colorScheme.onSurface.withOpacity(0.35),
+            ),
+          ),
+        ),
+      );
+      if (fieldKey == null) return chip;
+      return TapRegion(
+        groupId: _numberPadTapRegionGroup,
+        child: chip,
+      );
+    }
+
+    Widget actionChip({
+      required IconData icon,
+      required Color color,
+      VoidCallback? onPressed,
+      String? tooltip,
+    }) {
+      final iconWidget = Icon(icon, size: 20, color: color);
+      if (onPressed == null) {
+        return SizedBox(
+          width: 28,
+          height: 28,
+          child: Center(child: iconWidget),
+        );
+      }
+      return SizedBox(
+        width: 28,
+        height: 28,
+        child: IconButton(
+          onPressed: onPressed,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+          visualDensity: VisualDensity.compact,
+          tooltip: tooltip,
+          icon: iconWidget,
+        ),
+      );
+    }
+
+    Widget flexCell({
+      required int flex,
+      required Widget child,
+      AlignmentGeometry alignment = Alignment.center,
+    }) {
+      return Expanded(
+        flex: flex,
+        child: Align(
+          alignment: alignment,
+          child: child,
+        ),
+      );
+    }
+
+    Widget headerCell(String label, int flex) {
+      return flexCell(
+        flex: flex,
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: headerStyle,
+        ),
+      );
+    }
+
+    Widget savedRowWidget(
+      Map<String, Object?> row,
+      int displayNumber,
+      Map<String, Object?>? previousRow,
+    ) {
+      final restSecondsActual =
+          (row['rest_sec_actual'] as int?) ?? _restSecondsForExercise(info);
+      final createdAt = DateTime.tryParse((row['created_at'] as String?) ?? '');
+      final rowId = row['id'] as int?;
+      final rowHasActiveTimer = rowId != null && rowId == activeRestSetId;
+      final effectiveRestSeconds = rowHasActiveTimer && activeRestDuration > 0
+          ? activeRestDuration
+          : restSecondsActual;
+      final hasRest = effectiveRestSeconds > 0;
+      final startedAt =
+          rowHasActiveTimer ? activeRestStartedAt ?? createdAt : null;
+      final effectiveRestMs = effectiveRestSeconds * 1000;
+      final elapsedMs = startedAt == null
+          ? 0
+          : _inlineRestNow.difference(startedAt).inMilliseconds;
+      final rawRemainingMs =
+          rowHasActiveTimer && hasRest ? (effectiveRestMs - elapsedMs) : 0;
+      final justFinished = rowHasActiveTimer && hasRest && rawRemainingMs <= 0;
+      final isActive = rowHasActiveTimer && !justFinished;
+      final isTimerComplete = rowId != null &&
+          (_completedRestSetIds.contains(rowId) ||
+              justFinished ||
+              _isTimerCompleteForRow(row, now: _inlineRestNow));
+      final rowContent = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: completeRowFill,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: completeBorderColor),
+            ),
+            child: Row(
+              children: [
+                flexCell(
+                  flex: setFlex,
+                  child: valueChip(
+                    '$displayNumber',
+                    emphasize: true,
+                    foregroundColor: Colors.green.shade900,
+                  ),
+                ),
+                const SizedBox(width: colGap),
+                flexCell(
+                  flex: prevFlex,
+                  child: Text(
+                    _formatPrevious(previousRow),
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: colGap),
+                flexCell(
+                  flex: weightFlex,
+                  child: editableValueChip(
+                    label: _formatSetWeight(row['weight_value'] as num?),
+                    onTap: () => _editLoggedSetWeight(
+                      info,
+                      setId: rowId!,
+                      currentWeight: row['weight_value'] as num?,
+                    ),
+                    fieldKey: rowId == null ? null : 'logged-weight-$rowId',
+                    placeholder: '—',
+                    foregroundColor: Colors.green.shade900,
+                  ),
+                ),
+                const SizedBox(width: colGap),
+                flexCell(
+                  flex: repsFlex,
+                  child: editableValueChip(
+                    label: (row['reps'] as int?)?.toString() ?? '',
+                    onTap: () => _editLoggedSetReps(
+                      info,
+                      setId: rowId!,
+                      currentReps: row['reps'] as int?,
+                    ),
+                    fieldKey: rowId == null ? null : 'logged-reps-$rowId',
+                    placeholder: '—',
+                    foregroundColor: Colors.green.shade900,
+                  ),
+                ),
+                const SizedBox(width: colGap),
+                flexCell(
+                  flex: checkFlex,
+                  child: actionChip(
+                    icon: Icons.undo_rounded,
+                    color: Colors.green.shade700,
+                    onPressed: () => _undoCompletedSet(info, row),
+                    tooltip: 'Mark incomplete',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (rowId != null && restSecondsActual > 0)
+            _buildLoggedRestRow(
+              context,
+              info,
+              setId: rowId,
+              restSeconds: restSecondsActual,
+              isActive: isActive,
+              isComplete: isTimerComplete,
+              activeStartedAt: startedAt,
+              activeDurationSeconds: effectiveRestSeconds,
+            ),
+        ],
+      );
+      if (rowId == null) return rowContent;
+      return Dismissible(
+        key: ValueKey('set-$rowId'),
+        direction: DismissDirection.startToEnd,
+        dismissThresholds: const {
+          DismissDirection.startToEnd: 0.35,
+        },
+        confirmDismiss: (_) async {
+          _pushSetDebug('[swipe] saved id=$rowId');
+          return !_isLoggingSet;
+        },
+        background: Container(
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          alignment: Alignment.centerLeft,
+          decoration: BoxDecoration(
+            color: Colors.redAccent.withOpacity(0.28),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: const Icon(Icons.delete_outline),
+        ),
+        onDismissed: (_) => _deleteSet(rowId, info),
+        child: rowContent,
+      );
+    }
+
+    Widget draftRowWidget(
+      _DraftSet draft,
+      int draftIndex,
+      int displayNumber,
+      Map<String, Object?>? previousRow,
+    ) {
+      final weightFieldKey =
+          'draft-weight-${info.sessionExerciseId}-${draft.hashCode}';
+      final repsFieldKey =
+          'draft-reps-${info.sessionExerciseId}-${draft.hashCode}';
+      final rowContent = Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: draftRowFill.withOpacity(0.82),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: borderColor),
+        ),
+        child: Row(
+          children: [
+            flexCell(
+              flex: setFlex,
+              child: valueChip('$displayNumber', emphasize: true),
+            ),
+            const SizedBox(width: colGap),
+            flexCell(
+              flex: prevFlex,
+              child: Text(
+                _formatPrevious(previousRow),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: colGap),
+            flexCell(
+              flex: weightFlex,
+              child: editableValueChip(
+                label: draft.weight.text,
+                onTap: () {
+                  _setActiveExercise(info);
+                  _editDraftWeight(info, draft, setNumber: displayNumber);
+                },
+                fieldKey: weightFieldKey,
+                placeholder: _weightUnit,
+              ),
+            ),
+            const SizedBox(width: colGap),
+            flexCell(
+              flex: repsFlex,
+              child: editableValueChip(
+                label: draft.reps.text,
+                onTap: () {
+                  _setActiveExercise(info);
+                  _editDraftReps(info, draft, setNumber: displayNumber);
+                },
+                fieldKey: repsFieldKey,
+                placeholder: draft.repsHint ?? 'Reps',
+              ),
+            ),
+            const SizedBox(width: colGap),
+            flexCell(
+              flex: checkFlex,
+              child: actionChip(
+                icon: Icons.check_rounded,
+                color: theme.colorScheme.primary,
+                onPressed: _isLoggingSet
+                    ? null
+                    : () {
+                        final activeFieldKey = _activeNumberPadFieldKey;
+                        if (activeFieldKey == weightFieldKey ||
+                            activeFieldKey == repsFieldKey) {
+                          _commitActiveNumberPad(
+                            closeSheet: true,
+                            confirmed: true,
+                          );
+                          return;
+                        }
+                        unawaited(
+                          _commitDraftSet(
+                            info,
+                            draft,
+                            setNumber: displayNumber,
+                          ),
+                        );
+                      },
+                tooltip: 'Mark complete',
+              ),
+            ),
+          ],
+        ),
+      );
+      return Dismissible(
+        key: ValueKey(
+            'draft-${info.sessionExerciseId}-$draftIndex-${draft.hashCode}'),
+        direction: DismissDirection.startToEnd,
+        dismissThresholds: const {
+          DismissDirection.startToEnd: 0.45,
+        },
+        confirmDismiss: (_) async {
+          _pushSetDebug(
+              '[swipe] draft ex=${info.sessionExerciseId} idx=$draftIndex');
+          return !_isLoggingSet;
+        },
+        background: Container(
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          alignment: Alignment.centerLeft,
+          decoration: BoxDecoration(
+            color: Colors.redAccent.withOpacity(0.28),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: const Icon(Icons.delete_outline),
+        ),
+        onDismissed: (_) => _removeDraftSet(info, draft),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            rowContent,
+            _buildDraftRestRow(context, info, draft),
+          ],
+        ),
+      );
+    }
+
+    final usedSlots = <int>{};
+    for (final row in orderedSets) {
+      final slot = row['set_index'] as int?;
+      if (slot != null && slot > 0) {
+        usedSlots.add(slot);
+      }
+    }
+    final draftSlots = <_DraftSet, int>{};
+    for (final draft in drafts) {
+      final slot = draft.targetSetIndex;
+      if (slot != null && slot > 0 && !usedSlots.contains(slot)) {
+        draftSlots[draft] = slot;
+        usedSlots.add(slot);
+      }
+    }
+    var nextFallbackSlot = 1;
+    for (final draft in drafts) {
+      if (draftSlots.containsKey(draft)) continue;
+      while (usedSlots.contains(nextFallbackSlot)) {
+        nextFallbackSlot += 1;
+      }
+      draftSlots[draft] = nextFallbackSlot;
+      usedSlots.add(nextFallbackSlot);
+      nextFallbackSlot += 1;
+    }
+
+    final renderedRows = <Widget>[];
+    final orderedDraftIndices = List<int>.generate(drafts.length, (i) => i)
+      ..sort((a, b) {
+        final aSlot = draftSlots[drafts[a]] ?? ((1 << 20) + a);
+        final bSlot = draftSlots[drafts[b]] ?? ((1 << 20) + b);
+        if (aSlot != bSlot) return aSlot.compareTo(bSlot);
+        return a.compareTo(b);
+      });
+    var savedCursor = 0;
+    var draftCursor = 0;
+    while (savedCursor < orderedSets.length ||
+        draftCursor < orderedDraftIndices.length) {
+      final nextSaved =
+          savedCursor < orderedSets.length ? orderedSets[savedCursor] : null;
+      final nextDraftIndex = draftCursor < orderedDraftIndices.length
+          ? orderedDraftIndices[draftCursor]
+          : null;
+      final nextDraft = nextDraftIndex == null ? null : drafts[nextDraftIndex];
+      final savedSlot = (nextSaved?['set_index'] as int?) ?? (1 << 20);
+      final draftSlot = nextDraft == null
+          ? (1 << 20)
+          : (draftSlots[nextDraft] ?? ((1 << 20) + draftCursor + 1));
+      if (nextDraft != null && (nextSaved == null || draftSlot <= savedSlot)) {
+        final slot = draftSlot <= 0 ? 1 : draftSlot;
+        final previousRow =
+            slot - 1 < previousSets.length ? previousSets[slot - 1] : null;
+        renderedRows.add(
+          draftRowWidget(nextDraft, nextDraftIndex!, slot, previousRow),
+        );
+        draftCursor += 1;
+        continue;
+      }
+      if (nextSaved != null) {
+        final slot = savedSlot <= 0 ? savedCursor + 1 : savedSlot;
+        final previousRow =
+            slot - 1 < previousSets.length ? previousSets[slot - 1] : null;
+        renderedRows.add(savedRowWidget(nextSaved, slot, previousRow));
+        savedCursor += 1;
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          '${sets.length + drafts.length} sets  •  Volume $volumeLabel',
+          style: summaryStyle,
+        ),
+        const SizedBox(height: 12),
         Row(
           children: [
-            Text('Sets ${sets.length + drafts.length}'),
-            const SizedBox(width: 12),
-            Text('Volume $volumeLabel'),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: () => _showRestPicker(info, restSeconds),
-              icon: const Icon(Icons.timer, size: 16),
-              label: Text('Rest ${_formatRestShort(restSeconds)}'),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-              ),
+            headerCell('Set', setFlex),
+            const SizedBox(width: colGap),
+            headerCell('Previous', prevFlex),
+            const SizedBox(width: colGap),
+            headerCell(_weightUnit, weightFlex),
+            const SizedBox(width: colGap),
+            headerCell('Reps', repsFlex),
+            const SizedBox(width: colGap),
+            flexCell(
+              flex: checkFlex,
+              child: const SizedBox.shrink(),
             ),
           ],
         ),
         const SizedBox(height: 8),
         if (sets.isEmpty && drafts.isEmpty)
-          Text(
-            'No sets yet.',
-            style: Theme.of(context).textTheme.bodySmall,
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'No sets yet.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
           )
-        else ...[
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: setColWidth,
-                  child: Center(child: Text('Set', style: headerStyle)),
-                ),
-                const SizedBox(width: colGap),
-                SizedBox(
-                  width: prevColWidth,
-                  child: Center(child: Text('Previous', style: headerStyle)),
-                ),
-                const SizedBox(width: colGap),
-                SizedBox(
-                  width: weightColWidth,
-                  child: Center(child: Text(_weightUnit, style: headerStyle)),
-                ),
-                const SizedBox(width: colGap),
-                SizedBox(
-                  width: repsColWidth,
-                  child: Center(child: Text('Reps', style: headerStyle)),
-                ),
-                const SizedBox(width: colGap),
-                SizedBox(
-                  width: checkColWidth,
-                  child: Text('', style: headerStyle),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          for (var i = 0; i < sets.length; i++)
-            Builder(
-              builder: (context) {
-                final row = sets[i];
-                final setNumber = i + 1;
-                final previousRow = i < previousSets.length ? previousSets[i] : null;
-                final restSecondsActual =
-                    (row['rest_sec_actual'] as int?) ?? _restSecondsForExercise(info);
-                final createdAt = DateTime.tryParse((row['created_at'] as String?) ?? '');
-                final rowId = row['id'] as int?;
-                final isActive = rowId != null && rowId == activeRestSetId;
-                final effectiveRestSeconds =
-                    isActive && activeRestDuration > 0 ? activeRestDuration : restSecondsActual;
-                final hasRest = effectiveRestSeconds > 0;
-                final startedAt = isActive ? activeRestStartedAt ?? createdAt : null;
-                final elapsed = startedAt == null ? 0 : _inlineRestNow.difference(startedAt).inSeconds;
-                final remaining = isActive && hasRest
-                    ? (effectiveRestSeconds - elapsed).clamp(0, effectiveRestSeconds)
-                    : 0;
-                final progress = isActive && hasRest && effectiveRestSeconds > 0
-                    ? remaining / effectiveRestSeconds
-                    : 0.0;
-                final displayProgress = hasRest ? (isActive ? progress : 1.0) : 0.0;
-                final rowContent = Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: setColWidth,
-                            child: Center(child: Text('$setNumber')),
-                          ),
-                          const SizedBox(width: colGap),
-                          SizedBox(
-                            width: prevColWidth,
-                            child: Center(child: Text(_formatPrevious(previousRow))),
-                          ),
-                          const SizedBox(width: colGap),
-                          SizedBox(
-                            width: weightColWidth,
-                            child: Center(
-                              child: Text(_formatSetWeight(row['weight_value'] as num?)),
-                            ),
-                          ),
-                          const SizedBox(width: colGap),
-                          SizedBox(
-                            width: repsColWidth,
-                            child: Center(
-                              child: Text((row['reps'] as int?)?.toString() ?? '—'),
-                            ),
-                          ),
-                          const SizedBox(width: colGap),
-                          SizedBox(
-                            width: checkColWidth,
-                            child: Center(
-                              child: IconButton(
-                                padding: EdgeInsets.zero,
-                                visualDensity: VisualDensity.compact,
-                                icon: Icon(
-                                  Icons.check_circle,
-                                  size: 18,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                tooltip: 'Undo set',
-                                onPressed: () => _undoCompletedSet(info, row),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (hasRest)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: TweenAnimationBuilder<double>(
-                                tween: Tween(begin: displayProgress, end: displayProgress),
-                                duration: const Duration(milliseconds: 250),
-                                builder: (context, value, _) {
-                                  return ClipRRect(
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: LinearProgressIndicator(
-                                      value: value,
-                                      minHeight: 6,
-                                      backgroundColor:
-                                          Theme.of(context).colorScheme.surface.withOpacity(0.25),
-                                      color: isActive
-                                          ? Theme.of(context).colorScheme.primary
-                                          : Colors.greenAccent.shade400,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              isActive ? _formatRestShort(remaining) : 'Done',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: isActive ? null : Colors.greenAccent.shade200,
-                                  ),
-                            ),
-                            if (isActive) ...[
-                              const SizedBox(width: 6),
-                              IconButton(
-                                onPressed: _completeInlineRest,
-                                padding: EdgeInsets.zero,
-                                visualDensity: VisualDensity.compact,
-                                icon: const Icon(Icons.check_circle, size: 18),
-                                tooltip: 'Complete rest',
-                              ),
-                            ] else if (rowId != null) ...[
-                              const SizedBox(width: 6),
-                              TextButton(
-                                onPressed: () => _startInlineRest(
-                                  setId: rowId,
-                                  restSeconds: restSecondsActual,
-                                  exerciseId: info.exerciseId,
-                                ),
-                                style: TextButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                  minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                child: const Text('Undo'),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                  ],
-                );
-                final setId = row['id'] as int?;
-                if (setId == null) return rowContent;
-                return Dismissible(
-                  key: ValueKey('set-$setId'),
-                  direction: DismissDirection.startToEnd,
-                  dismissThresholds: const {
-                    DismissDirection.startToEnd: 0.35,
-                  },
-                  confirmDismiss: (_) async {
-                    _pushSetDebug('[swipe] saved id=$setId');
-                    return !_isLoggingSet;
-                  },
-                  background: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    alignment: Alignment.centerLeft,
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.35),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.delete_outline),
-                  ),
-                  onDismissed: (_) => _deleteSet(setId, info),
-                  child: rowContent,
-                );
-              },
-            ),
-          for (var i = 0; i < drafts.length; i++)
-            Builder(
-              builder: (context) {
-                final setNumber = sets.length + i + 1;
-                final previousRow =
-                    (sets.length + i) < previousSets.length ? previousSets[sets.length + i] : null;
-                final rowContent = Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: setColWidth,
-                        child: Center(child: Text('$setNumber')),
-                      ),
-                      const SizedBox(width: colGap),
-                      SizedBox(
-                        width: prevColWidth,
-                        child: Center(child: Text(_formatPrevious(previousRow))),
-                      ),
-                      const SizedBox(width: colGap),
-                      SizedBox(
-                        width: weightColWidth,
-                        child: TextField(
-                          controller: drafts[i].weight,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          textAlign: TextAlign.center,
-                          onTap: () => _setActiveExercise(info),
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: colGap),
-                      SizedBox(
-                        width: repsColWidth,
-                        child: TextField(
-                          controller: drafts[i].reps,
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.center,
-                          onTap: () => _setActiveExercise(info),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                            border: OutlineInputBorder(),
-                            hintText: drafts[i].repsHint,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: colGap),
-                      SizedBox(
-                        width: checkColWidth,
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                          icon: Icon(
-                            Icons.check_circle,
-                            size: 20,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          onPressed: () {
-                            _setActiveExercise(info);
-                            _commitDraftSet(info, drafts[i]);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-                return Dismissible(
-                  key: ValueKey('draft-${info.sessionExerciseId}-$i-${drafts[i].hashCode}'),
-                  direction: DismissDirection.startToEnd,
-                  dismissThresholds: const {
-                    DismissDirection.startToEnd: 0.45,
-                  },
-                  confirmDismiss: (_) async {
-                    _pushSetDebug('[swipe] draft ex=${info.sessionExerciseId} idx=$i');
-                    return !_isLoggingSet;
-                  },
-                  background: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    alignment: Alignment.centerLeft,
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.35),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.delete_outline),
-                  ),
-                  onDismissed: (_) => _removeDraftSet(info, drafts[i]),
-                  child: rowContent,
-                );
-              },
-            ),
-        ],
-        const SizedBox(height: 8),
+        else
+          ...renderedRows,
+        const SizedBox(height: 10),
         SizedBox(
           width: double.infinity,
           child: OutlinedButton(
@@ -1098,13 +2508,18 @@ class _SessionScreenState extends State<SessionScreen> {
               _showQuickAddSet(info);
             },
             style: OutlinedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.surface.withOpacity(0.2),
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              backgroundColor: theme.colorScheme.surface.withOpacity(0.45),
+              foregroundColor: theme.colorScheme.onSurface,
+              side: BorderSide(color: borderColor),
+              padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
               ),
             ),
-            child: const Text('+ Add Set'),
+            child: Text(
+              '+ Add Set (${_formatRestShort(_restSecondsForExercise(info))})',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         ),
       ],
@@ -1114,9 +2529,12 @@ class _SessionScreenState extends State<SessionScreen> {
   Future<void> _logInlineSet(
     SessionExerciseInfo info, {
     required int reps,
+    required int restSeconds,
     double? weight,
+    int? setIndex,
   }) async {
-    final existing = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+    final existing =
+        await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
     var maxIndex = 0;
     for (final row in existing) {
       final value = row['set_index'] as int?;
@@ -1124,20 +2542,20 @@ class _SessionScreenState extends State<SessionScreen> {
         maxIndex = value;
       }
     }
-    final setIndex = maxIndex + 1;
+    final resolvedSetIndex =
+        setIndex == null || setIndex <= 0 ? maxIndex + 1 : setIndex;
     final planResult = SetPlanService().nextExpected(
       blocks: info.planBlocks,
       existingSets: existing,
     );
     final role = planResult?.nextRole ?? 'TOP';
     final isAmrap = planResult?.isAmrap ?? false;
-    final restSeconds = _restSecondsForExercise(info);
     _pushSetDebug(
-      '[log] ex=${info.sessionExerciseId} setIndex=$setIndex role=$role reps=$reps weight=$weight',
+      '[log] ex=${info.sessionExerciseId} setIndex=$resolvedSetIndex role=$role reps=$reps weight=$weight',
     );
     final id = await _workoutRepo.addSetEntry(
       sessionExerciseId: info.sessionExerciseId,
-      setIndex: setIndex,
+      setIndex: resolvedSetIndex,
       setRole: role,
       weightValue: weight,
       weightUnit: _weightUnit,
@@ -1151,10 +2569,12 @@ class _SessionScreenState extends State<SessionScreen> {
       isAmrap: isAmrap,
       restSecActual: restSeconds,
     );
-    _startInlineRest(setId: id, restSeconds: restSeconds, exerciseId: info.exerciseId);
+    _startInlineRest(
+        setId: id, restSeconds: restSeconds, exerciseId: info.exerciseId);
     _pushSetDebug('[log] inserted id=$id');
     final latest = await _workoutRepo.getSetEntryById(id);
-    final setsForExercise = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+    final setsForExercise =
+        await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
     _pushSetDebug(
       '[log] ex=${info.sessionExerciseId} nowCount=${setsForExercise.length} '
       'rows=${_summarizeSetRows(setsForExercise)}',
@@ -1218,9 +2638,12 @@ class _SessionScreenState extends State<SessionScreen> {
     final trimmed = input.trim();
     if (trimmed.isEmpty) return;
     await _refreshCloudSettingsForVoice();
-    final cloudKeyPresent = _cloudApiKey != null && _cloudApiKey!.trim().isNotEmpty;
+    final cloudKeyPresent =
+        _cloudApiKey != null && _cloudApiKey!.trim().isNotEmpty;
     final cloudStatus = _cloudEnabled
-        ? (cloudKeyPresent ? 'On (${_cloudProvider}/${_cloudModel})' : 'On (missing key)')
+        ? (cloudKeyPresent
+            ? 'On (${_cloudProvider}/${_cloudModel})'
+            : 'On (missing key)')
         : 'Off';
     _setVoiceDebug(
       transcript: trimmed,
@@ -1243,7 +2666,8 @@ class _SessionScreenState extends State<SessionScreen> {
       if (_cloudProvider == 'openai') {
         final openAiCommand = await _runOpenAiParse(trimmed);
         if (openAiCommand != null) {
-          final normalized = _normalizeLogSetFromTranscript(openAiCommand, trimmed);
+          final normalized =
+              _normalizeLogSetFromTranscript(openAiCommand, trimmed);
           _setVoiceDebug(
             openai: _describeCommand(normalized),
             decision: 'OpenAI primary',
@@ -1263,7 +2687,8 @@ class _SessionScreenState extends State<SessionScreen> {
       } else {
         final geminiCommand = await _runGeminiParse(trimmed);
         if (geminiCommand != null) {
-          final normalized = _normalizeLogSetFromTranscript(geminiCommand, trimmed);
+          final normalized =
+              _normalizeLogSetFromTranscript(geminiCommand, trimmed);
           _setVoiceDebug(
             gemini: _describeCommand(normalized),
             decision: 'Gemini primary',
@@ -1350,7 +2775,8 @@ class _SessionScreenState extends State<SessionScreen> {
     final pending = _pending;
     if (pending == null) return false;
     final wantsSame = _wantsSameAsLast(input);
-    final latest = await _workoutRepo.getLatestSetForSessionExercise(pending.exerciseInfo.sessionExerciseId);
+    final latest = await _workoutRepo
+        .getLatestSetForSessionExercise(pending.exerciseInfo.sessionExerciseId);
     final lastReps = latest?['reps'] as int?;
     final lastWeight = latest?['weight_value'] as double?;
     final lastUnit = latest?['weight_unit'] as String?;
@@ -1453,7 +2879,7 @@ class _SessionScreenState extends State<SessionScreen> {
         if (parsed.exerciseRef == null) return;
         final exerciseInfo = await _resolveExercise(parsed.exerciseRef!);
         if (exerciseInfo != null) {
-          _openExerciseModal(exerciseInfo);
+          _setActiveExercise(exerciseInfo);
           _setVoiceDebug(
             decision: 'Switch ($source)',
             resolved: 'exercise=${exerciseInfo.exerciseName}',
@@ -1481,7 +2907,8 @@ class _SessionScreenState extends State<SessionScreen> {
   }) async {
     final normalized = _normalizeLogSetFromTranscript(command, transcript);
     final wantsSame = _wantsSameAsLast(transcript);
-    final exerciseInfo = await _resolveExerciseForLogSet(normalized, transcript, wantsSame: wantsSame);
+    final exerciseInfo = await _resolveExerciseForLogSet(normalized, transcript,
+        wantsSame: wantsSame);
     if (exerciseInfo == null) {
       _setVoiceDebug(decision: 'No exercise match ($source)');
       _prompt = 'Which exercise?';
@@ -1534,7 +2961,8 @@ class _SessionScreenState extends State<SessionScreen> {
     required String transcript,
     bool wantsSame = false,
   }) async {
-    final latest = await _workoutRepo.getLatestSetForSessionExercise(exerciseInfo.sessionExerciseId);
+    final latest = await _workoutRepo
+        .getLatestSetForSessionExercise(exerciseInfo.sessionExerciseId);
     final lastReps = latest?['reps'] as int?;
     final lastWeight = latest?['weight_value'] as double?;
     final lastUnit = latest?['weight_unit'] as String?;
@@ -1614,7 +3042,8 @@ class _SessionScreenState extends State<SessionScreen> {
     );
     _setVoiceDebug(
       decision: 'Logged ($source)',
-      resolved: 'exercise=${exerciseInfo.exerciseName} reps=$resolvedReps weight=$resolvedWeight unit=$resolvedUnit',
+      resolved:
+          'exercise=${exerciseInfo.exerciseName} reps=$resolvedReps weight=$resolvedWeight unit=$resolvedUnit',
     );
   }
 
@@ -1779,7 +3208,8 @@ class _SessionScreenState extends State<SessionScreen> {
     String? openaiRaw,
     String? resolved,
   }) {
-    final hints = _parser.parseLogPartsWithOrderHints(_debugTranscript ?? transcript ?? '');
+    final hints = _parser
+        .parseLogPartsWithOrderHints(_debugTranscript ?? transcript ?? '');
     setState(() {
       _debugTranscript = transcript ?? _debugTranscript;
       _debugRule = rule ?? _debugRule;
@@ -1803,16 +3233,20 @@ class _SessionScreenState extends State<SessionScreen> {
         'rpe=${command.rpe} rir=${command.rir} rest=${command.restSeconds}';
   }
 
-  NluCommand _normalizeLogSetFromTranscript(NluCommand command, String transcript) {
+  NluCommand _normalizeLogSetFromTranscript(
+      NluCommand command, String transcript) {
     if (command.type != 'log_set') return command;
     final parts = _parser.parseLogPartsWithOrderHints(transcript);
     var weight = command.weight ?? parts.weight;
     var reps = command.reps ?? parts.reps;
     final normalized = _parser.normalize(transcript);
     final hasRepsKeyword = normalized.contains('reps');
-    final hasUnitKeyword = RegExp(r'\b(kg|kilograms|kilo|lbs|lb|pounds)\b')
-        .hasMatch(normalized);
-    if (hasRepsKeyword && hasUnitKeyword && parts.reps != null && parts.weight != null) {
+    final hasUnitKeyword =
+        RegExp(r'\b(kg|kilograms|kilo|lbs|lb|pounds)\b').hasMatch(normalized);
+    if (hasRepsKeyword &&
+        hasUnitKeyword &&
+        parts.reps != null &&
+        parts.weight != null) {
       weight = parts.weight;
       reps = parts.reps;
     }
@@ -1867,8 +3301,9 @@ class _SessionScreenState extends State<SessionScreen> {
       return null;
     }
 
-    final ExerciseMatch? selected =
-        match.isSingle ? match.matches.first : await _showDisambiguation(match.matches);
+    final ExerciseMatch? selected = match.isSingle
+        ? match.matches.first
+        : await _showDisambiguation(match.matches);
     if (selected == null) return null;
 
     final existing = _exerciseById[selected.id];
@@ -1912,8 +3347,10 @@ class _SessionScreenState extends State<SessionScreen> {
     if (result.inverse != null) {
       _undoRedo.pushUndo(result.inverse!);
     }
-    final latest = await _workoutRepo.getLatestSetForSessionExercise(info.sessionExerciseId);
-    final setsForExercise = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+    final latest = await _workoutRepo
+        .getLatestSetForSessionExercise(info.sessionExerciseId);
+    final setsForExercise =
+        await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
     final role = latest?['set_role'] as String? ?? 'TOP';
     final isAmrap = (latest?['is_amrap'] as int? ?? 0) == 1;
     final latestId = latest?['id'] as int?;
@@ -1968,7 +3405,8 @@ class _SessionScreenState extends State<SessionScreen> {
 
   Future<void> _deleteSet(int id, SessionExerciseInfo info) async {
     if (_isLoggingSet) return;
-    final beforeSets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+    final beforeSets =
+        await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
     _pushSetDebug(
       '[delete] ex=${info.sessionExerciseId} id=$id beforeCount=${beforeSets.length} '
       'rows=${_summarizeSetRows(beforeSets)}',
@@ -1977,14 +3415,26 @@ class _SessionScreenState extends State<SessionScreen> {
     if (result.inverse != null) {
       _undoRedo.pushUndo(result.inverse!);
     }
-    final afterSets = await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+    final afterSets =
+        await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
     _pushSetDebug(
       '[delete] ex=${info.sessionExerciseId} id=$id afterCount=${afterSets.length} '
       'rows=${_summarizeSetRows(afterSets)}',
     );
+    final cached = _inlineSetCache[info.sessionExerciseId];
+    if (cached != null) {
+      final updatedSets = List<Map<String, Object?>>.from(cached.sets)
+        ..removeWhere((row) => row['id'] == id);
+      _inlineSetCache[info.sessionExerciseId] = _InlineSetData(
+        sets: updatedSets,
+        previousSets: cached.previousSets,
+      );
+    }
+    _completedRestSetIds.remove(id);
     _refreshInlineSetData(info);
     if (AppShellController.instance.restActiveSetId == id) {
       _completeInlineRest();
+      _completedRestSetIds.remove(id);
     }
     if (!mounted) return;
     setState(() {});
@@ -2089,7 +3539,8 @@ class _SessionScreenState extends State<SessionScreen> {
           });
           final text = error.toString();
           if (text.contains('Microphone permission denied')) {
-            _showMessage('Microphone access is disabled. Enable it in Settings > Ora.');
+            _showMessage(
+                'Microphone access is disabled. Enable it in Settings > Ora.');
           } else {
             _showMessage('Voice error: $error');
           }
@@ -2125,8 +3576,13 @@ class _SessionScreenState extends State<SessionScreen> {
             decoration: const InputDecoration(labelText: 'Type command'),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-            ElevatedButton(onPressed: () => Navigator.of(context).pop(controller.text.trim()), child: const Text('Send')),
+            TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel')),
+            ElevatedButton(
+                onPressed: () =>
+                    Navigator.of(context).pop(controller.text.trim()),
+                child: const Text('Send')),
           ],
         );
       },
@@ -2134,7 +3590,8 @@ class _SessionScreenState extends State<SessionScreen> {
     return result;
   }
 
-  Future<ExerciseMatch?> _showDisambiguation(List<ExerciseMatch> matches) async {
+  Future<ExerciseMatch?> _showDisambiguation(
+      List<ExerciseMatch> matches) async {
     return showModalBottomSheet<ExerciseMatch>(
       context: context,
       builder: (context) {
@@ -2183,15 +3640,20 @@ class _SessionScreenState extends State<SessionScreen> {
         title: const Text('Add to session?'),
         content: Text('$name is not in this session. Add it now?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Add')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Add')),
         ],
       ),
     );
     return result ?? false;
   }
 
-  Future<SessionExerciseInfo?> _addExerciseToSession(ExerciseMatch match) async {
+  Future<SessionExerciseInfo?> _addExerciseToSession(
+      ExerciseMatch match) async {
     final row = await _exerciseRepo.getById(match.id);
     if (row == null) return null;
     final orderIndex = _sessionExercises.length;
@@ -2211,8 +3673,14 @@ class _SessionScreenState extends State<SessionScreen> {
       _sessionExercises.add(info);
       _exerciseById[info.exerciseId] = info;
       _sessionExerciseById[info.sessionExerciseId] = info;
-      _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []).add(_DraftSet());
-      _currentDayExerciseNames = _sessionExercises.map((e) => e.exerciseName).toList();
+      _draftSetsByExerciseId.putIfAbsent(info.sessionExerciseId, () => []).add(
+            _DraftSet(
+              restSeconds: _restSecondsForExercise(info),
+              targetSetIndex: 1,
+            ),
+          );
+      _currentDayExerciseNames =
+          _sessionExercises.map((e) => e.exerciseName).toList();
       _lastExerciseInfo = info;
     });
     return info;
@@ -2251,28 +3719,92 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
-  void _openExerciseModal(SessionExerciseInfo info) {
-    _lastExerciseInfo = info;
-    showModalBottomSheet<void>(
+  Future<void> _deleteExerciseFromSession(SessionExerciseInfo info) async {
+    final shouldDelete = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withOpacity(0.4),
-      builder: (_) {
-        return ExerciseModal(
-          info: info,
-          workoutRepo: _workoutRepo,
-          onAddSet: ({double? weight, required int reps, int? partials, double? rpe, double? rir}) =>
-              _logSet(info, reps: reps, weight: weight, partials: partials, rpe: rpe, rir: rir),
-          onUpdateSet: _updateSet,
-          onUndo: _undo,
-          onRedo: _redo,
-          onStartRest: _startRestTimer,
-          onClose: () => Navigator.of(context).pop(),
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete Exercise'),
+          content: Text('Remove ${info.exerciseName} from this session?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
         );
       },
     );
+    if (shouldDelete != true) return;
+    final existingSets =
+        await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
+    if (AppShellController.instance.restActiveExerciseId == info.exerciseId) {
+      _completeInlineRest();
+    }
+    for (final row in existingSets) {
+      final setId = row['id'] as int?;
+      if (setId != null) {
+        _completedRestSetIds.remove(setId);
+      }
+    }
+    await _workoutRepo.deleteSessionExercise(info.sessionExerciseId);
+    _sessionExercises.removeWhere(
+      (entry) => entry.sessionExerciseId == info.sessionExerciseId,
+    );
+    _exerciseById.remove(info.exerciseId);
+    _sessionExerciseById.remove(info.sessionExerciseId);
+    _draftSetsByExerciseId.remove(info.sessionExerciseId)?.forEach(
+          (draft) => draft.dispose(),
+        );
+    _inlineSetCache.remove(info.sessionExerciseId);
+    _inlineSetFutures.remove(info.sessionExerciseId);
+    _inlineDebugSnapshot.remove(info.sessionExerciseId);
+    _currentDayExerciseNames =
+        _sessionExercises.map((e) => e.exerciseName).toList();
+    if (_lastExerciseInfo?.sessionExerciseId == info.sessionExerciseId) {
+      _lastExerciseInfo =
+          _sessionExercises.isEmpty ? null : _sessionExercises.last;
+    }
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openExerciseHistory(SessionExerciseInfo info) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => HistoryScreen(
+          initialExerciseId: info.exerciseId,
+          mode: HistoryMode.exercise,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cancelSession() async {
+    if (widget.isEditing) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      return;
+    }
+    await _workoutRepo.deleteSession(widget.contextData.sessionId);
+    _sessionEnded = true;
+    AppShellController.instance.setActiveSession(false);
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _finishSession() async {
+    if (!widget.isEditing) {
+      await _workoutRepo.endSession(widget.contextData.sessionId);
+      _sessionEnded = true;
+      AppShellController.instance.setActiveSession(false);
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop();
   }
 
   Future<void> _promptAddExercise() async {
@@ -2289,331 +3821,458 @@ class _SessionScreenState extends State<SessionScreen> {
     await _addExerciseToSession(match);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final startedAt = _sessionStartedAt;
-    final endedAt = _sessionEndedAt;
-    final sessionTimer = startedAt == null
-        ? null
-        : _formatSessionTimer((endedAt ?? _inlineRestNow).difference(startedAt));
-    return Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        title: sessionTimer == null
-            ? const Text('Session')
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Session'),
-                  Text(
-                    sessionTimer,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white70),
-                  ),
-                ],
+  Widget _buildSessionTopBar(BuildContext context) {
+    final theme = Theme.of(context);
+    final surfaceColor = theme.colorScheme.surface.withOpacity(0.82);
+    final borderColor = theme.colorScheme.onSurface.withOpacity(0.08);
+    return Row(
+      children: [
+        SizedBox(
+          width: 52,
+          height: 52,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: surfaceColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor),
+            ),
+            child: IconButton(
+              onPressed: _cancelSession,
+              icon: const Icon(Icons.close_rounded),
+              tooltip: widget.isEditing ? 'Close' : 'Cancel session',
+            ),
+          ),
+        ),
+        Expanded(
+          child: Center(
+            child: Container(
+              width: 56,
+              height: 6,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.onSurface.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(999),
               ),
-        actions: [
-          if (widget.isEditing) ...[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
             ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Finish'),
+          ),
+        ),
+        ElevatedButton(
+          onPressed: _finishSession,
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
             ),
-            const SizedBox(width: 12),
-          ] else ...[
-            TextButton(
-              onPressed: () async {
-                await _workoutRepo.deleteSession(widget.contextData.sessionId);
-                _sessionEnded = true;
-                AppShellController.instance.setActiveSession(false);
-                if (!mounted) return;
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancel'),
+          ),
+          child: const Text('Finish'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSessionMetaChip(
+      BuildContext context, IconData icon, String label) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withOpacity(0.45),
+        borderRadius: BorderRadius.circular(12),
+        border:
+            Border.all(color: theme.colorScheme.onSurface.withOpacity(0.06)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 16,
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.8),
+              fontWeight: FontWeight.w600,
             ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: () async {
-                await _workoutRepo.endSession(widget.contextData.sessionId);
-                _sessionEnded = true;
-                AppShellController.instance.setActiveSession(false);
-                if (!mounted) return;
-                Navigator.of(context).pop();
-              },
-              child: const Text('Finish'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSessionSummaryCard(
+    BuildContext context, {
+    required DateTime? startedAt,
+    required String sessionTimer,
+  }) {
+    final theme = Theme.of(context);
+    final voiceStatus = _currentVoiceStatus();
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withOpacity(0.72),
+        borderRadius: BorderRadius.circular(24),
+        border:
+            Border.all(color: theme.colorScheme.onSurface.withOpacity(0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _sessionTitle(),
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _showVoiceDebug = !_showVoiceDebug;
+                    });
+                  },
+                  icon: const Icon(Icons.more_horiz_rounded, size: 20),
+                  tooltip: 'More',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _buildSessionMetaChip(
+                context,
+                Icons.calendar_today_rounded,
+                _formatSessionDate(startedAt),
+              ),
+              _buildSessionMetaChip(
+                context,
+                Icons.schedule_rounded,
+                sessionTimer,
+              ),
+            ],
+          ),
+          if (voiceStatus != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                voiceStatus,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
-            const SizedBox(width: 12),
           ],
         ],
       ),
-      floatingActionButton: GestureDetector(
-        onLongPressStart: (_) => _startVoiceListening(),
-        onLongPressEnd: (_) => _stopVoiceListening(),
-        child: FloatingActionButton(
-          onPressed: _runVoice,
-          child: Icon(_listening ? Icons.mic : Icons.mic_none),
+    );
+  }
+
+  List<Widget> _buildExerciseChips(
+      BuildContext context, SessionExerciseInfo info) {
+    final muscles = _musclesByExerciseId[info.exerciseId];
+    final tags = <String>[];
+    if (info.planBlocks.any((b) => b.amrapLastSet)) {
+      tags.add('AMRAP');
+    }
+    final chips = <Widget>[];
+    final primary = muscles?.primary;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final secondaryColor = Theme.of(context).colorScheme.secondary;
+    if (primary != null && primary.isNotEmpty) {
+      chips.add(
+        Chip(
+          label: Text(primary),
+          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+          backgroundColor: primaryColor.withOpacity(0.18),
+          labelStyle: TextStyle(
+            color: primaryColor,
+            fontWeight: FontWeight.w600,
+            fontSize: 11,
+          ),
+          side: BorderSide(color: primaryColor.withOpacity(0.35)),
+          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
+      );
+    }
+    for (final secondary in muscles?.secondary ?? const []) {
+      chips.add(
+        Chip(
+          label: Text(secondary),
+          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+          backgroundColor: secondaryColor.withOpacity(0.12),
+          labelStyle: TextStyle(
+            color: secondaryColor,
+            fontWeight: FontWeight.w500,
+            fontSize: 11,
+          ),
+          side: BorderSide(color: secondaryColor.withOpacity(0.28)),
+          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      );
+    }
+    for (final tag in tags) {
+      chips.add(
+        Chip(
+          label: Text(tag, style: const TextStyle(fontSize: 11)),
+          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+          backgroundColor: primaryColor.withOpacity(0.12),
+          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      );
+    }
+    return chips;
+  }
+
+  Widget _buildExerciseCard(BuildContext context, SessionExerciseInfo info) {
+    final theme = Theme.of(context);
+    final muscleChips = _buildExerciseChips(context, info);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withOpacity(0.72),
+        borderRadius: BorderRadius.circular(24),
+        border:
+            Border.all(color: theme.colorScheme.onSurface.withOpacity(0.08)),
       ),
-      body: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const GlassBackground(),
-          Column(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _sessionExercises.length + 1,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    if (index == _sessionExercises.length) {
-                      return GlassCard(
-                        padding: const EdgeInsets.all(12),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(12),
-                          onTap: _promptAddExercise,
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: Row(
-                              children: [
-                                const Icon(Icons.add_circle_outline, size: 18),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Add Exercise',
-                                  style: Theme.of(context).textTheme.titleMedium,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-                    final info = _sessionExercises[index];
-                    final muscles = _musclesByExerciseId[info.exerciseId];
-                    final tags = <String>[];
-                    if (info.planBlocks.any((b) => b.amrapLastSet)) {
-                      tags.add('AMRAP');
-                    }
-                    final muscleChips = <Widget>[];
-                    final primary = muscles?.primary;
-                    final primaryColor = Theme.of(context).colorScheme.primary;
-                    final secondaryColor = Theme.of(context).colorScheme.secondary;
-                    if (primary != null && primary.isNotEmpty) {
-                      muscleChips.add(
-                        Chip(
-                          label: Text(primary),
-                          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
-                          backgroundColor: primaryColor.withOpacity(0.22),
-                          labelStyle: TextStyle(
-                            color: primaryColor,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11,
-                          ),
-                          side: BorderSide(color: primaryColor.withOpacity(0.6)),
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      );
-                    }
-                    for (final secondary in muscles?.secondary ?? const []) {
-                      muscleChips.add(
-                        Chip(
-                          label: Text(secondary),
-                          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
-                          backgroundColor: secondaryColor.withOpacity(0.18),
-                          labelStyle: TextStyle(
-                            color: secondaryColor,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 11,
-                          ),
-                          side: BorderSide(color: secondaryColor.withOpacity(0.5)),
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      );
-                    }
-                    for (final tag in tags) {
-                      muscleChips.add(
-                        Chip(
-                          label: Text(tag, style: const TextStyle(fontSize: 11)),
-                          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
-                          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      );
-                    }
-                    return GlassCard(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  info.exerciseName,
-                                  style: Theme.of(context).textTheme.titleMedium,
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: () => _openExerciseModal(info),
-                                icon: const Icon(Icons.edit, size: 18),
-                                tooltip: 'Edit sets',
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ],
-                          ),
-                          if (muscleChips.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: muscleChips,
-                              ),
-                            ),
-                          const SizedBox(height: 8),
-                          FutureBuilder<_InlineSetData>(
-                            future: _getInlineSetFuture(info),
-                            builder: (context, snapshot) {
-                              final cached = _inlineSetCache[info.sessionExerciseId];
-                              if (snapshot.hasError) {
-                                _pushSetDebug(
-                                  '[builder] ex=${info.sessionExerciseId} error=${snapshot.error}',
-                                );
-                              }
-                              final useCache = (snapshot.connectionState != ConnectionState.done ||
-                                      snapshot.hasError ||
-                                      snapshot.data == null) &&
-                                  cached != null;
-                              final sets = useCache ? cached!.sets : snapshot.data?.sets ?? [];
-                              final previousSets =
-                                  useCache ? cached!.previousSets : snapshot.data?.previousSets ?? [];
-                              final drafts =
-                                  _draftSetsByExerciseId[info.sessionExerciseId] ?? const <_DraftSet>[];
-                              return _buildInlineSets(
-                                context,
-                                info,
-                                sets,
-                                previousSets,
-                                drafts,
-                                renderSource: useCache ? 'render-cache' : 'render-snapshot',
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                child: Text(
+                  info.exerciseName,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_wakeWordEnabled)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          children: const [
-                            Icon(Icons.hearing, size: 16),
-                            SizedBox(width: 6),
-                            Text('Listening for “Hey Ora”'),
-                          ],
-                        ),
-                      ),
-                    if (_voicePartial != null)
-                      Text(
-                        'Listening: $_voicePartial',
-                        style: TextStyle(color: Theme.of(context).colorScheme.primary),
-                      ),
-                    if (_prompt != null)
-                      Text(
-                        _prompt!,
-                        style: TextStyle(color: Theme.of(context).colorScheme.primary),
-                      ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _voiceController,
-                            decoration: const InputDecoration(
-                              labelText: 'Voice command (type to simulate)',
-                              border: OutlineInputBorder(),
-                            ),
-                            onSubmitted: (value) {
-                              _handleVoiceInput(value);
-                              _voiceController.clear();
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () {
-                            final text = _voiceController.text;
-                            _voiceController.clear();
-                            _handleVoiceInput(text);
-                          },
-                          child: const Text('Send'),
-                        )
-                      ],
+              Container(
+                width: 38,
+                height: 38,
+                margin: const EdgeInsets.only(left: 8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: IconButton(
+                  onPressed: () => _openExerciseHistory(info),
+                  icon: const Icon(Icons.history_rounded, size: 18),
+                  tooltip: 'Exercise history',
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              Container(
+                width: 38,
+                height: 38,
+                margin: const EdgeInsets.only(left: 8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.more_horiz_rounded, size: 18),
+                  tooltip: 'Exercise actions',
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  onSelected: (value) {
+                    if (value == 'timer') {
+                      _editExerciseRestTimers(info);
+                      return;
+                    }
+                    if (value == 'delete') {
+                      _deleteExerciseFromSession(info);
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem<String>(
+                      value: 'timer',
+                      child: Text('Edit Exercise Timers'),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            setState(() {
-                              _showVoiceDebug = !_showVoiceDebug;
-                            });
-                          },
-                          child: Text(_showVoiceDebug ? 'Hide voice debug' : 'Show voice debug'),
-                        ),
-                      ],
+                    PopupMenuItem<String>(
+                      value: 'delete',
+                      child: Text('Delete Exercise'),
                     ),
-                    if (_showVoiceDebug)
-                      GlassCard(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Transcript: ${_debugTranscript ?? '-'}'),
-                            const SizedBox(height: 6),
-                            Text('Rule: ${_debugRule ?? '-'}'),
-                            const SizedBox(height: 6),
-                            Text('LLM: ${_debugLlm ?? '-'}'),
-                            const SizedBox(height: 6),
-                            Text('Gemini: ${_debugGemini ?? '-'}'),
-                            const SizedBox(height: 6),
-                            Text('OpenAI: ${_debugOpenAi ?? '-'}'),
-                            const SizedBox(height: 6),
-                            Text('Cloud: ${_debugCloud ?? '-'}'),
-                            const SizedBox(height: 6),
-                            Text('Hints: ${_debugParts ?? '-'}'),
-                            const SizedBox(height: 6),
-                            Text('Decision: ${_debugDecision ?? '-'}'),
-                            const SizedBox(height: 6),
-                            Text('Resolved: ${_debugResolved ?? '-'}'),
-                            const SizedBox(height: 6),
-                            Text('LLM raw: ${_debugLlmRaw ?? '-'}'),
-                            const SizedBox(height: 6),
-                            Text('Gemini raw: ${_debugGeminiRaw ?? '-'}'),
-                            const SizedBox(height: 6),
-                            Text('OpenAI raw: ${_debugOpenAiRaw ?? '-'}'),
-                          ],
-                        ),
-                      ),
                   ],
                 ),
               ),
             ],
           ),
+          if (muscleChips.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: muscleChips,
+            ),
+          ],
+          const SizedBox(height: 12),
+          FutureBuilder<_InlineSetData>(
+            future: _getInlineSetFuture(info),
+            builder: (context, snapshot) {
+              final cached = _inlineSetCache[info.sessionExerciseId];
+              if (snapshot.hasError) {
+                _pushSetDebug(
+                  '[builder] ex=${info.sessionExerciseId} error=${snapshot.error}',
+                );
+              }
+              final useCache =
+                  (snapshot.connectionState != ConnectionState.done ||
+                          snapshot.hasError ||
+                          snapshot.data == null) &&
+                      cached != null;
+              final sets = useCache ? cached!.sets : snapshot.data?.sets ?? [];
+              final previousSets = useCache
+                  ? cached!.previousSets
+                  : snapshot.data?.previousSets ?? [];
+              final drafts = _draftSetsByExerciseId[info.sessionExerciseId] ??
+                  const <_DraftSet>[];
+              return _buildInlineSets(
+                context,
+                info,
+                sets,
+                previousSets,
+                drafts,
+                renderSource: useCache ? 'render-cache' : 'render-snapshot',
+              );
+            },
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAddExerciseButton(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _promptAddExercise,
+        style: ElevatedButton.styleFrom(
+          elevation: 0,
+          backgroundColor: theme.colorScheme.primary.withOpacity(0.16),
+          foregroundColor: theme.colorScheme.primary,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        child: const Text(
+          'Add Exercises',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final startedAt = _sessionStartedAt;
+    final endedAt = _sessionEndedAt;
+    final sessionTimer = startedAt == null
+        ? '0:00'
+        : _formatSessionTimer(
+            (endedAt ?? _inlineRestNow).difference(startedAt));
+    return TapRegionSurface(
+      child: Scaffold(
+        key: _scaffoldKey,
+        floatingActionButton: GestureDetector(
+          onLongPressStart: (_) => _startVoiceListening(),
+          onLongPressEnd: (_) => _stopVoiceListening(),
+          child: FloatingActionButton(
+            onPressed: _runVoice,
+            child: Icon(_listening ? Icons.mic : Icons.mic_none),
+          ),
+        ),
+        body: Stack(
+          children: [
+            const GlassBackground(),
+            SafeArea(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                children: [
+                  _buildSessionTopBar(context),
+                  const SizedBox(height: 18),
+                  _buildSessionSummaryCard(
+                    context,
+                    startedAt: startedAt,
+                    sessionTimer: sessionTimer,
+                  ),
+                  if (_sessionExercises.isNotEmpty) const SizedBox(height: 18),
+                  for (var i = 0; i < _sessionExercises.length; i++) ...[
+                    _buildExerciseCard(context, _sessionExercises[i]),
+                    if (i != _sessionExercises.length - 1)
+                      const SizedBox(height: 16),
+                  ],
+                  const SizedBox(height: 20),
+                  _buildAddExerciseButton(context),
+                  if (_showVoiceDebug) ...[
+                    const SizedBox(height: 16),
+                    GlassCard(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Transcript: ${_debugTranscript ?? '-'}'),
+                          const SizedBox(height: 6),
+                          Text('Rule: ${_debugRule ?? '-'}'),
+                          const SizedBox(height: 6),
+                          Text('LLM: ${_debugLlm ?? '-'}'),
+                          const SizedBox(height: 6),
+                          Text('Gemini: ${_debugGemini ?? '-'}'),
+                          const SizedBox(height: 6),
+                          Text('OpenAI: ${_debugOpenAi ?? '-'}'),
+                          const SizedBox(height: 6),
+                          Text('Cloud: ${_debugCloud ?? '-'}'),
+                          const SizedBox(height: 6),
+                          Text('Hints: ${_debugParts ?? '-'}'),
+                          const SizedBox(height: 6),
+                          Text('Decision: ${_debugDecision ?? '-'}'),
+                          const SizedBox(height: 6),
+                          Text('Resolved: ${_debugResolved ?? '-'}'),
+                          const SizedBox(height: 6),
+                          Text('LLM raw: ${_debugLlmRaw ?? '-'}'),
+                          const SizedBox(height: 6),
+                          Text('Gemini raw: ${_debugGeminiRaw ?? '-'}'),
+                          const SizedBox(height: 6),
+                          Text('OpenAI raw: ${_debugOpenAiRaw ?? '-'}'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

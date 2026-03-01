@@ -57,10 +57,16 @@ class _AppShellState extends State<AppShell> {
             left: 0,
             right: 0,
             bottom: 0,
-            child: _BottomNavBar(
-              currentIndex: _index,
-              appearanceEnabled: _appearanceEnabled,
-              onTap: (value) => setState(() => _index = value),
+            child: ValueListenableBuilder<bool>(
+              valueListenable: AppShellController.instance.orbHidden,
+              builder: (context, orbHidden, _) {
+                return _BottomNavBar(
+                  currentIndex: _index,
+                  appearanceEnabled: _appearanceEnabled,
+                  orbHidden: orbHidden,
+                  onTap: (value) => setState(() => _index = value),
+                );
+              },
             ),
           ),
           Positioned(
@@ -144,11 +150,13 @@ class _BottomNavBar extends StatelessWidget {
   const _BottomNavBar({
     required this.currentIndex,
     required this.appearanceEnabled,
+    required this.orbHidden,
     required this.onTap,
   });
 
   final int currentIndex;
   final bool appearanceEnabled;
+  final bool orbHidden;
   final ValueChanged<int> onTap;
 
   static const double navHeight = 68;
@@ -158,6 +166,35 @@ class _BottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final items = _buildItems();
+    final baseContainer = Container(
+      height: navHeight + MediaQuery.of(context).padding.bottom,
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
+      decoration: BoxDecoration(
+        color: scheme.surface.withOpacity(0.86),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.28),
+            blurRadius: 24,
+            offset: const Offset(0, -8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          for (final item in items)
+            _NavItem(
+              icon: item.icon,
+              label: item.label,
+              selected: currentIndex == item.index,
+              onTap: () => onTap(item.index),
+            ),
+        ],
+      ),
+    );
+    if (orbHidden) {
+      return baseContainer;
+    }
+
     final left = items.take(2).toList();
     final right = items.skip(2).toList();
 

@@ -151,7 +151,33 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
     if (!mounted) return;
     final value = AppShellController.instance.orbHidden.value;
     if (_hidden == value) return;
-    setState(() => _hidden = value);
+    if (!value) {
+      final size = _layoutSize;
+      final padding = MediaQuery.of(context).padding;
+      final dockPos = size == null ? null : _dockPosition(size, padding);
+      setState(() {
+        _hidden = false;
+        _expanded = false;
+        _showDockTarget = false;
+        _docked = true;
+        _driftOffset = Offset.zero;
+        if (dockPos != null) {
+          _position = dockPos;
+          _positionReady = true;
+        } else {
+          _positionReady = false;
+        }
+      });
+      _settingsRepo.setOrbDocked(true);
+      if (dockPos != null) {
+        _persistPosition();
+      }
+      return;
+    }
+    setState(() {
+      _hidden = true;
+      _expanded = false;
+    });
   }
 
   @override
@@ -187,12 +213,6 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
                 left: deckOffset.dx,
                 top: deckOffset.dy,
                 child: _buildDeck(),
-              ),
-            if (_hidden)
-              Positioned(
-                right: 0,
-                top: math.max(padding.top + 80, size.height * 0.35),
-                child: _HiddenTab(onTap: _showOrb),
               ),
             if (_routing && !_hidden)
               Positioned(
@@ -530,9 +550,26 @@ class _OraOrbState extends State<OraOrb> with TickerProviderStateMixin {
   }
 
   void _showOrb() {
+    final size = _layoutSize;
+    final padding = MediaQuery.of(context).padding;
+    final dockPos = size == null ? null : _dockPosition(size, padding);
     setState(() {
       _hidden = false;
+      _expanded = false;
+      _showDockTarget = false;
+      _docked = true;
+      _driftOffset = Offset.zero;
+      if (dockPos != null) {
+        _position = dockPos;
+        _positionReady = true;
+      } else {
+        _positionReady = false;
+      }
     });
+    _settingsRepo.setOrbDocked(true);
+    if (dockPos != null) {
+      _persistPosition();
+    }
     _settingsRepo.setOrbHidden(false);
     AppShellController.instance.setOrbHidden(false);
   }
