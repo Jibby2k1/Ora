@@ -57,6 +57,7 @@ flutter:
     - assets/vosk/vosk-model-small-en-us-0.15.zip
     - assets/branding/ora_logo_blue.png
     - assets/branding/ora.png
+    - Examples/Raul Split - HILV Program.xlsx
     - assets/models/llm/
     - assets/anatomy/
     - assets/anatomy/codecanyon/codecanyon-I0qdAu3M-interactive-human-body-muscle-diagram-male-and-female-diagrams/source/with_tooltip_and_colours/

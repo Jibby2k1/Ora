@@ -1,7 +1,9 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:flutter/services.dart';
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../../data/db/db.dart';
 import '../../../data/repositories/program_repo.dart';
@@ -53,6 +55,8 @@ class ProgramsScreen extends StatefulWidget {
 
 class _ProgramsScreenState extends State<ProgramsScreen> {
   static const int _createProgramId = -1;
+  static const String _raulTemplateAssetPath = 'Examples/Raul Split - HILV Program.xlsx';
+  static const String _raulTemplateFileName = 'Raul Split - HILV Program.xlsx';
 
   late final ProgramRepo _programRepo;
   late final WorkoutRepo _workoutRepo;
@@ -80,6 +84,7 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     AppShellController.instance.pendingInput.addListener(_handlePendingInput);
     AppShellController.instance.programsRevision.addListener(_handleProgramsRefresh);
     _loadAppearancePrefs();
+    Future.microtask(_ensureProgramUploadTemplateExists);
   }
 
   @override
@@ -380,6 +385,19 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     AppShellController.instance.setActiveSession(hasActive);
     AppShellController.instance.setActiveSessionIndicatorHidden(false);
     AppShellController.instance.refreshActiveSession();
+  }
+
+  Future<void> _ensureProgramUploadTemplateExists() async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final file = File('${docs.path}/$_raulTemplateFileName');
+      if (await file.exists()) return;
+      final data = await rootBundle.load(_raulTemplateAssetPath);
+      final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      await file.writeAsBytes(bytes, flush: true);
+    } catch (error) {
+      debugPrint('Failed to seed program template: $error');
+    }
   }
 
   Future<void> _createProgram() async {
@@ -882,78 +900,134 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                   const SizedBox(height: 16),
                   GlassCard(
                     padding: const EdgeInsets.all(16),
-                    child: programs.isEmpty
-                        ? const Center(child: Text('Create your first program.'))
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Programs'),
-                              const SizedBox(height: 8),
-                              ...programs.map((program) {
-                                final id = program['id'] as int;
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: GlassCard(
-                                    padding: EdgeInsets.zero,
-                                    child: ListTile(
-                                      title: Text(program['name'] as String),
-                                      subtitle: const Text('Tap to start or edit days'),
-                                      onTap: () async {
-                                        await Navigator.of(context).push(
-                                          MaterialPageRoute(builder: (_) => DayPickerScreen(programId: id)),
-                                        );
-                                        await _syncActiveSessionBanner();
-                                        if (!mounted) return;
-                                        setState(() {});
-                                      },
-                                      trailing: PopupMenuButton<String>(
-                                        onSelected: (value) async {
-                                          if (value == 'edit') {
-                                            await Navigator.of(context).push(
-                                              MaterialPageRoute(
-                                                builder: (_) => ProgramEditorScreen(programId: id),
-                                              ),
-                                            );
-                                            setState(() {});
-                                          } else if (value == 'delete') {
-                                            final confirm = await showDialog<bool>(
-                                              context: context,
-                                              builder: (context) {
-                                                return AlertDialog(
-                                                  title: const Text('Delete program?'),
-                                                  content: const Text(
-                                                    'This removes the program and its days. Sessions remain in history.',
-                                                  ),
-                                                  actions: [
-                                                    TextButton(
-                                                      onPressed: () => Navigator.of(context).pop(false),
-                                                      child: const Text('Cancel'),
-                                                    ),
-                                                    ElevatedButton(
-                                                      onPressed: () => Navigator.of(context).pop(true),
-                                                      child: const Text('Delete'),
-                                                    ),
-                                                  ],
-                                                );
-                                              },
-                                            );
-                                            if (confirm == true) {
-                                              await _programRepo.deleteProgram(id);
-                                              setState(() {});
-                                            }
-                                          }
-                                        },
-                                        itemBuilder: (_) => const [
-                                          PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                          PopupMenuItem(value: 'delete', child: Text('Delete')),
-                                        ],
-                                      ),
-                                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Programs'),
+                        const SizedBox(height: 12),
+                        Column(
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () async {
+                                  await _createProgram();
+                                  if (!mounted) return;
+                                  setState(() {});
+                                },
+                                icon: const Icon(Icons.add, size: 18),
+                                label: const Text('Create New Program'),
+                                style: ElevatedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
                                   ),
-                                );
-                              }),
-                            ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await _uploadProgram();
+                                  if (!mounted) return;
+                                  setState(() {});
+                                },
+                                icon: const Icon(Icons.upload_file, size: 18),
+                                label: const Text('Upload Program'),
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        if (programs.isEmpty)
+                          Text(
+                            'No programs yet. Create one or upload from a file.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          )
+                        else
+                          Builder(
+                            builder: (context) {
+                              final listHeight = ((programs.length * 86.0) + 8).clamp(150.0, 360.0).toDouble();
+                              return SizedBox(
+                                height: listHeight,
+                                child: ListView.separated(
+                                  primary: false,
+                                  padding: EdgeInsets.zero,
+                                  itemCount: programs.length,
+                                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                                  itemBuilder: (context, index) {
+                                    final program = programs[index];
+                                    final id = program['id'] as int;
+                                    return GlassCard(
+                                      padding: EdgeInsets.zero,
+                                      child: ListTile(
+                                        title: Text(program['name'] as String),
+                                        subtitle: const Text('Tap to start or edit days'),
+                                        onTap: () async {
+                                          await Navigator.of(context).push(
+                                            MaterialPageRoute(builder: (_) => DayPickerScreen(programId: id)),
+                                          );
+                                          await _syncActiveSessionBanner();
+                                          if (!mounted) return;
+                                          setState(() {});
+                                        },
+                                        trailing: PopupMenuButton<String>(
+                                          onSelected: (value) async {
+                                            if (value == 'edit') {
+                                              await Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (_) => ProgramEditorScreen(programId: id),
+                                                ),
+                                              );
+                                              setState(() {});
+                                            } else if (value == 'delete') {
+                                              final confirm = await showDialog<bool>(
+                                                context: context,
+                                                builder: (context) {
+                                                  return AlertDialog(
+                                                    title: const Text('Delete program?'),
+                                                    content: const Text(
+                                                      'This removes the program and its days. Sessions remain in history.',
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () => Navigator.of(context).pop(false),
+                                                        child: const Text('Cancel'),
+                                                      ),
+                                                      ElevatedButton(
+                                                        onPressed: () => Navigator.of(context).pop(true),
+                                                        child: const Text('Delete'),
+                                                      ),
+                                                    ],
+                                                  );
+                                                },
+                                              );
+                                              if (confirm == true) {
+                                                await _programRepo.deleteProgram(id);
+                                                setState(() {});
+                                              }
+                                            }
+                                          },
+                                          itemBuilder: (_) => const [
+                                            PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                            PopupMenuItem(value: 'delete', child: Text('Delete')),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              );
+                            },
                           ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
                   GlassCard(

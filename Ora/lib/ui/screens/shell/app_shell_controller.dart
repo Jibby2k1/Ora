@@ -11,15 +11,20 @@ class AppShellController {
 
   final ValueNotifier<int> tabIndex = ValueNotifier<int>(0);
   final ValueNotifier<bool> appearanceEnabled = ValueNotifier<bool>(true);
-  final ValueNotifier<bool> appearanceProfileEnabled = ValueNotifier<bool>(false);
-  final ValueNotifier<String> appearanceProfileSex = ValueNotifier<String>('neutral');
+  final ValueNotifier<bool> appearanceProfileEnabled =
+      ValueNotifier<bool>(false);
+  final ValueNotifier<String> appearanceProfileSex =
+      ValueNotifier<String>('neutral');
   final ValueNotifier<bool> orbHidden = ValueNotifier<bool>(false);
   final ValueNotifier<bool> activeSession = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> activeSessionIndicatorHidden = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> activeSessionIndicatorHidden =
+      ValueNotifier<bool>(false);
   final ValueNotifier<int> restRemainingSeconds = ValueNotifier<int>(0);
   final ValueNotifier<bool> restAlertActive = ValueNotifier<bool>(false);
-  final ValueNotifier<InputDispatch?> pendingInput = ValueNotifier<InputDispatch?>(null);
-  final ValueNotifier<String?> pendingSessionVoice = ValueNotifier<String?>(null);
+  final ValueNotifier<InputDispatch?> pendingInput =
+      ValueNotifier<InputDispatch?>(null);
+  final ValueNotifier<String?> pendingSessionVoice =
+      ValueNotifier<String?>(null);
   final ValueNotifier<int> programsRevision = ValueNotifier<int>(0);
   Timer? _restTicker;
   DateTime? _restStartedAt;
@@ -99,7 +104,8 @@ class AppShellController {
     _restEndsAt = _restStartedAt!.add(Duration(seconds: seconds));
     restAlertActive.value = false;
     _tickRest();
-    _restTicker ??= Timer.periodic(const Duration(seconds: 1), (_) => _tickRest());
+    _restTicker ??=
+        Timer.periodic(const Duration(milliseconds: 16), (_) => _tickRest());
   }
 
   void completeRestTimer({bool showAlert = false}) {
@@ -119,8 +125,8 @@ class AppShellController {
       _stopRestTicker();
       return;
     }
-    final remaining = _restEndsAt!.difference(DateTime.now()).inSeconds;
-    if (remaining <= 0) {
+    final remainingMs = _restEndsAt!.difference(DateTime.now()).inMilliseconds;
+    if (remainingMs <= 0) {
       _restSetId = null;
       _restExerciseId = null;
       _restStartedAt = null;
@@ -131,7 +137,7 @@ class AppShellController {
       _stopRestTicker();
       return;
     }
-    restRemainingSeconds.value = remaining;
+    restRemainingSeconds.value = ((remainingMs - 1) ~/ 1000) + 1;
   }
 
   void _clearRestState() {
