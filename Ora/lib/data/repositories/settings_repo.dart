@@ -18,6 +18,7 @@ class SettingsRepo {
   static const String keyWakeWordEnabled = 'wake_word_enabled';
   static const String keyCloudEnabled = 'cloud_enabled';
   static const String keyCloudApiKey = 'cloud_api_key';
+  static const String keyCloudApiKeyPresent = 'cloud_api_key_present';
   static const String keyCloudModel = 'cloud_model';
   static const String keyCloudProvider = 'cloud_provider';
   static const String keyCloudConsentDiet = 'cloud_consent_diet';
@@ -96,19 +97,43 @@ class SettingsRepo {
 
   Future<String?> getCloudApiKey() async {
     if (_supportsSecureStorage()) {
+      final marker = await _get(keyCloudApiKeyPresent);
+      final legacy = await _get(keyCloudApiKey);
+      if (marker != '1' &&
+          (legacy == null || legacy.trim().isEmpty)) {
+        return null;
+      }
       final secure = await _secureStorage.read(key: keyCloudApiKey);
       if (secure != null && secure.trim().isNotEmpty) {
+        await _set(keyCloudApiKeyPresent, '1');
         return secure.trim();
       }
-      final legacy = await _get(keyCloudApiKey);
       if (legacy != null && legacy.trim().isNotEmpty) {
         await _secureStorage.write(key: keyCloudApiKey, value: legacy.trim());
         await _delete(keyCloudApiKey);
+        await _set(keyCloudApiKeyPresent, '1');
         return legacy.trim();
       }
+      await _set(keyCloudApiKeyPresent, '0');
       return null;
     }
     return _get(keyCloudApiKey);
+  }
+
+  Future<bool> hasCloudApiKey() async {
+    if (!_supportsSecureStorage()) {
+      final raw = await _get(keyCloudApiKey);
+      return raw != null && raw.trim().isNotEmpty;
+    }
+    if ((await _get(keyCloudApiKeyPresent)) == '1') {
+      return true;
+    }
+    final legacy = await _get(keyCloudApiKey);
+    if (legacy != null && legacy.trim().isNotEmpty) {
+      await _set(keyCloudApiKeyPresent, '1');
+      return true;
+    }
+    return false;
   }
 
   Future<void> setCloudApiKey(String? apiKey) async {
@@ -118,6 +143,7 @@ class SettingsRepo {
       } else {
         await _delete(keyCloudApiKey);
       }
+      await _set(keyCloudApiKeyPresent, '0');
       return;
     }
     if (_supportsSecureStorage()) {
@@ -126,6 +152,7 @@ class SettingsRepo {
     } else {
       await _set(keyCloudApiKey, apiKey.trim());
     }
+    await _set(keyCloudApiKeyPresent, '1');
   }
 
   Future<String> getCloudModel() async {

@@ -21,7 +21,7 @@ class FoodDatabaseService {
     'USDA_API_KEY',
     defaultValue: 'DEMO_KEY',
   );
-  static const String _openFoodFactsHost = 'world.openfoodfacts.org';
+  static const String _openFoodFactsHost = 'world.openfoodfacts.net';
 
   final FoodCacheRepo _cacheRepo;
   final FoodOverrideRepo _overrideRepo;

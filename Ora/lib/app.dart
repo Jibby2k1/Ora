@@ -8,7 +8,7 @@ import 'ui/screens/shell/app_shell.dart';
 import 'ui/screens/settings/cloud_required_screen.dart';
 
 class OraApp extends StatefulWidget {
-  OraApp({super.key});
+  const OraApp({super.key});
 
   static final GlobalKey<ScaffoldMessengerState> messengerKey =
       GlobalKey<ScaffoldMessengerState>();
@@ -40,8 +40,7 @@ class _OraAppState extends State<OraApp> {
 
   Future<bool> _checkCloudReady() async {
     final settings = SettingsRepo(AppDatabase.instance);
-    final apiKey = await settings.getCloudApiKey();
-    return apiKey != null && apiKey.trim().isNotEmpty;
+    return settings.hasCloudApiKey();
   }
 
   void _refreshCloud() {

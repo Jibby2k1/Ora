@@ -87,6 +87,9 @@ class AppDatabase {
 
     for (final statements in batches) {
       for (final sql in statements) {
+        if (await _shouldSkipSql(db, sql)) {
+          continue;
+        }
         try {
           await db.execute(sql);
         } on DatabaseException catch (error) {
@@ -102,6 +105,27 @@ class AppDatabase {
   bool _isDuplicateColumnError(DatabaseException error) {
     final message = error.toString().toLowerCase();
     return message.contains('duplicate column name');
+  }
+
+  Future<bool> _shouldSkipSql(Database db, String sql) async {
+    final spec = _parseAddColumnSql(sql);
+    if (spec == null) return false;
+    final columns = await db.rawQuery('PRAGMA table_info(${spec.tableName})');
+    return columns.any(
+      (row) => row['name']?.toString().toLowerCase() == spec.columnName,
+    );
+  }
+
+  _AddColumnSpec? _parseAddColumnSql(String sql) {
+    final match = RegExp(
+      r'^\s*ALTER\s+TABLE\s+([a-zA-Z0-9_]+)\s+ADD\s+COLUMN\s+([a-zA-Z0-9_]+)\b',
+      caseSensitive: false,
+    ).firstMatch(sql);
+    if (match == null) return null;
+    return _AddColumnSpec(
+      tableName: match.group(1)!,
+      columnName: match.group(2)!.toLowerCase(),
+    );
   }
 
   Future<void> seedExercisesIfNeeded(String jsonAssetOrPath,
@@ -257,4 +281,14 @@ class AppDatabase {
     final file = File(jsonAssetOrPath);
     return file.readAsString();
   }
+}
+
+class _AddColumnSpec {
+  const _AddColumnSpec({
+    required this.tableName,
+    required this.columnName,
+  });
+
+  final String tableName;
+  final String columnName;
 }
