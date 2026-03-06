@@ -15,8 +15,7 @@ import 'migrations/m0005_appearance.dart';
 import 'migrations/m0006_diet_micros.dart';
 import 'migrations/m0007_diet_images.dart';
 import 'migrations/m0008_appearance_images.dart';
-import 'migrations/m0009_food_database.dart';
-import 'migrations/m0010_diet_meal_types.dart';
+import 'migrations/m0009_food_cache.dart';
 import 'schema.dart';
 
 class AppDatabase {
@@ -34,8 +33,7 @@ class AppDatabase {
 
   Future<Database> _open() async {
     if (kIsWeb) {
-      throw Exception(
-          'Web is not supported for local SQLite in this demo. Use desktop or mobile.');
+      throw Exception('Web is not supported for local SQLite in this demo. Use desktop or mobile.');
     }
     final Directory dir = await getApplicationDocumentsDirectory();
     final String path = p.join(dir.path, dbName);
@@ -81,15 +79,9 @@ class AppDatabase {
     if (from < 9 && to >= 9) {
       batches.add(migration0009());
     }
-    if (from < 10 && to >= 10) {
-      batches.add(migration0010());
-    }
 
     for (final statements in batches) {
       for (final sql in statements) {
-        if (await _shouldSkipSql(db, sql)) {
-          continue;
-        }
         try {
           await db.execute(sql);
         } on DatabaseException catch (error) {
@@ -107,33 +99,9 @@ class AppDatabase {
     return message.contains('duplicate column name');
   }
 
-  Future<bool> _shouldSkipSql(Database db, String sql) async {
-    final spec = _parseAddColumnSql(sql);
-    if (spec == null) return false;
-    final columns = await db.rawQuery('PRAGMA table_info(${spec.tableName})');
-    return columns.any(
-      (row) => row['name']?.toString().toLowerCase() == spec.columnName,
-    );
-  }
-
-  _AddColumnSpec? _parseAddColumnSql(String sql) {
-    final match = RegExp(
-      r'^\s*ALTER\s+TABLE\s+([a-zA-Z0-9_]+)\s+ADD\s+COLUMN\s+([a-zA-Z0-9_]+)\b',
-      caseSensitive: false,
-    ).firstMatch(sql);
-    if (match == null) return null;
-    return _AddColumnSpec(
-      tableName: match.group(1)!,
-      columnName: match.group(2)!.toLowerCase(),
-    );
-  }
-
-  Future<void> seedExercisesIfNeeded(String jsonAssetOrPath,
-      {bool fromAsset = true}) async {
+  Future<void> seedExercisesIfNeeded(String jsonAssetOrPath, {bool fromAsset = true}) async {
     final db = await database;
-    final count = Sqflite.firstIntValue(
-            await db.rawQuery('SELECT COUNT(*) FROM exercise;')) ??
-        0;
+    final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM exercise;')) ?? 0;
     if (count > 0) return;
 
     final source = await _loadSeed(jsonAssetOrPath, fromAsset: fromAsset);
@@ -154,12 +122,8 @@ class AppDatabase {
     final results = await batch.commit();
 
     // Insert aliases after IDs are created.
-    final exercises =
-        await db.query('exercise', columns: ['id', 'canonical_name']);
-    final nameToId = {
-      for (final row in exercises)
-        row['canonical_name'] as String: row['id'] as int
-    };
+    final exercises = await db.query('exercise', columns: ['id', 'canonical_name']);
+    final nameToId = {for (final row in exercises) row['canonical_name'] as String: row['id'] as int};
     final aliasBatch = db.batch();
     for (final item in data) {
       final map = item as Map<String, dynamic>;
@@ -167,20 +131,13 @@ class AppDatabase {
       if (exerciseId == null) continue;
       final aliases = (map['aliases'] as List<dynamic>? ?? []).cast<String>();
       for (final alias in aliases) {
-        final normalized = alias
-            .toLowerCase()
-            .replaceAll(RegExp(r'[^a-z0-9 ]'), ' ')
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim();
+        final normalized = alias.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
         if (normalized.isEmpty) continue;
-        aliasBatch.insert(
-            'exercise_alias',
-            {
-              'exercise_id': exerciseId,
-              'alias_normalized': normalized,
-              'source': 'builtin',
-            },
-            conflictAlgorithm: ConflictAlgorithm.ignore);
+        aliasBatch.insert('exercise_alias', {
+          'exercise_id': exerciseId,
+          'alias_normalized': normalized,
+          'source': 'builtin',
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
     }
     await aliasBatch.commit(noResult: true);
@@ -189,8 +146,7 @@ class AppDatabase {
     }
   }
 
-  Future<void> ensureExercisesFromSeed(String jsonAssetOrPath,
-      {bool fromAsset = true}) async {
+  Future<void> ensureExercisesFromSeed(String jsonAssetOrPath, {bool fromAsset = true}) async {
     final db = await database;
     final source = await _loadSeed(jsonAssetOrPath, fromAsset: fromAsset);
     final List<dynamic> data = jsonDecode(source) as List<dynamic>;
@@ -236,8 +192,7 @@ class AppDatabase {
     }
   }
 
-  Future<void> applyMuscleMapSeed(String jsonAssetOrPath,
-      {bool fromAsset = true}) async {
+  Future<void> applyMuscleMapSeed(String jsonAssetOrPath, {bool fromAsset = true}) async {
     final db = await database;
     final source = await _loadSeed(jsonAssetOrPath, fromAsset: fromAsset);
     final List<dynamic> data = jsonDecode(source) as List<dynamic>;
@@ -254,13 +209,10 @@ class AppDatabase {
       );
       if (rows.isEmpty) continue;
       final existingPrimary = rows.first['primary_muscle'] as String?;
-      if (existingPrimary != null && existingPrimary.trim().isNotEmpty) {
-        continue;
-      }
+      if (existingPrimary != null && existingPrimary.trim().isNotEmpty) continue;
       final primary = (map['primary_muscle'] as String?)?.trim();
       if (primary == null || primary.isEmpty) continue;
-      final secondary =
-          (map['secondary_muscles'] as List<dynamic>? ?? []).cast<String>();
+      final secondary = (map['secondary_muscles'] as List<dynamic>? ?? []).cast<String>();
       await db.update(
         'exercise',
         {
@@ -273,22 +225,11 @@ class AppDatabase {
     }
   }
 
-  Future<String> _loadSeed(String jsonAssetOrPath,
-      {required bool fromAsset}) async {
+  Future<String> _loadSeed(String jsonAssetOrPath, {required bool fromAsset}) async {
     if (fromAsset) {
       return rootBundle.loadString(jsonAssetOrPath);
     }
     final file = File(jsonAssetOrPath);
     return file.readAsString();
   }
-}
-
-class _AddColumnSpec {
-  const _AddColumnSpec({
-    required this.tableName,
-    required this.columnName,
-  });
-
-  final String tableName;
-  final String columnName;
 }

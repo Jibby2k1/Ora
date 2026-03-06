@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import '../../../data/repositories/workout_repo.dart';
 import '../../../domain/services/calorie_service.dart';
 import '../../../domain/services/import_service.dart';
 import '../../../domain/services/session_service.dart';
+import '../../../domain/services/steps_service.dart';
 import '../day_picker/day_picker_screen.dart';
 import '../history/exercise_catalog_screen.dart';
 import '../session/session_screen.dart';
@@ -19,7 +21,9 @@ import '../shell/app_shell_controller.dart';
 import '../../../core/input/input_router.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
+import '../../widgets/steps/steps_summary_card.dart';
 import 'program_editor_screen.dart';
+import 'steps_detail_page.dart';
 
 class _ProgramDayMatch {
   const _ProgramDayMatch({
@@ -37,10 +41,12 @@ class _ProgramDayMatch {
 
 enum _VoiceDayChoiceType { freeStyle, programDay }
 
-
 class _VoiceDayChoice {
-  const _VoiceDayChoice.freeStyle() : type = _VoiceDayChoiceType.freeStyle, programDayId = null;
-  const _VoiceDayChoice.programDay(this.programDayId) : type = _VoiceDayChoiceType.programDay;
+  const _VoiceDayChoice.freeStyle()
+      : type = _VoiceDayChoiceType.freeStyle,
+        programDayId = null;
+  const _VoiceDayChoice.programDay(this.programDayId)
+      : type = _VoiceDayChoiceType.programDay;
 
   final _VoiceDayChoiceType type;
   final int? programDayId;
@@ -53,9 +59,11 @@ class ProgramsScreen extends StatefulWidget {
   State<ProgramsScreen> createState() => _ProgramsScreenState();
 }
 
-class _ProgramsScreenState extends State<ProgramsScreen> {
+class _ProgramsScreenState extends State<ProgramsScreen>
+    with WidgetsBindingObserver {
   static const int _createProgramId = -1;
-  static const String _raulTemplateAssetPath = 'Examples/Raul Split - HILV Program.xlsx';
+  static const String _raulTemplateAssetPath =
+      'Examples/Raul Split - HILV Program.xlsx';
   static const String _raulTemplateFileName = 'Raul Split - HILV Program.xlsx';
 
   late final ProgramRepo _programRepo;
@@ -63,6 +71,7 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
   late final SessionService _sessionService;
   late final SettingsRepo _settingsRepo;
   late final CalorieService _calorieService;
+  StepsService? _stepsService;
   int? _selectedProgramId;
   String? _selectedProgramName;
   bool _appearanceProfileEnabled = false;
@@ -73,32 +82,145 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final db = AppDatabase.instance;
     _programRepo = ProgramRepo(db);
     _workoutRepo = WorkoutRepo(db);
     _sessionService = SessionService(db);
     _settingsRepo = SettingsRepo(db);
     _calorieService = CalorieService(db);
-    AppShellController.instance.appearanceProfileEnabled.addListener(_syncAppearancePrefsFromController);
-    AppShellController.instance.appearanceProfileSex.addListener(_syncAppearancePrefsFromController);
+    _stepsService = StepsService(db);
+    AppShellController.instance.appearanceProfileEnabled
+        .addListener(_syncAppearancePrefsFromController);
+    AppShellController.instance.appearanceProfileSex
+        .addListener(_syncAppearancePrefsFromController);
     AppShellController.instance.pendingInput.addListener(_handlePendingInput);
-    AppShellController.instance.programsRevision.addListener(_handleProgramsRefresh);
+    AppShellController.instance.programsRevision
+        .addListener(_handleProgramsRefresh);
+    AppShellController.instance.tabIndex.addListener(_handleTabRefresh);
     _loadAppearancePrefs();
     Future.microtask(_ensureProgramUploadTemplateExists);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_initializeStepsAndMaybePrompt());
+    });
   }
 
   @override
   void dispose() {
-    AppShellController.instance.appearanceProfileEnabled.removeListener(_syncAppearancePrefsFromController);
-    AppShellController.instance.appearanceProfileSex.removeListener(_syncAppearancePrefsFromController);
-    AppShellController.instance.pendingInput.removeListener(_handlePendingInput);
-    AppShellController.instance.programsRevision.removeListener(_handleProgramsRefresh);
+    WidgetsBinding.instance.removeObserver(this);
+    AppShellController.instance.appearanceProfileEnabled
+        .removeListener(_syncAppearancePrefsFromController);
+    AppShellController.instance.appearanceProfileSex
+        .removeListener(_syncAppearancePrefsFromController);
+    AppShellController.instance.pendingInput
+        .removeListener(_handlePendingInput);
+    AppShellController.instance.programsRevision
+        .removeListener(_handleProgramsRefresh);
+    AppShellController.instance.tabIndex.removeListener(_handleTabRefresh);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshStepsIfReady());
+      return;
+    }
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _stepsService?.pauseLiveTracking();
+      return;
+    }
+    if (state == AppLifecycleState.detached) {
+      _stepsService?.stopLiveTracking();
+    }
   }
 
   void _handleProgramsRefresh() {
     if (!mounted) return;
     setState(() {});
+  }
+
+  void _handleTabRefresh() {
+    if (AppShellController.instance.tabIndex.value == 0) {
+      unawaited(_refreshStepsIfReady());
+      return;
+    }
+    _stepsService?.pauseLiveTracking();
+  }
+
+  Future<void> _initializeStepsAndMaybePrompt() async {
+    final service = _ensureStepsService();
+    await service.initialize();
+    if (!mounted) return;
+    await _maybeShowFirstRunStepsDialog();
+  }
+
+  Future<void> _refreshStepsIfReady() async {
+    final service = _ensureStepsService();
+    if (!service.isInitialized) return;
+    await service.refresh();
+  }
+
+  Future<void> _maybeShowFirstRunStepsDialog() async {
+    final service = _ensureStepsService();
+    final shouldPrompt = await service.consumeFirstRunPrompt();
+    if (!mounted || !shouldPrompt) return;
+    final enable = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        return AlertDialog(
+          title: const Text('Enable step access'),
+          content: Text(
+            'Allow step access so the Training page can show your steps and progress.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Not now'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Enable'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!mounted || enable != true) return;
+    await service.requestAccess();
+  }
+
+  Future<void> _openStepsDetails() async {
+    final stepsService = _ensureStepsService();
+    if (!stepsService.isPermissionGranted) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => StepsDetailPage(stepsService: stepsService),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  StepsService _ensureStepsService() {
+    final existing = _stepsService;
+    if (existing != null) {
+      return existing;
+    }
+    final service = StepsService(AppDatabase.instance);
+    _stepsService = service;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _stepsService != service) return;
+      unawaited(_initializeStepsAndMaybePrompt());
+    });
+    return service;
   }
 
   Future<void> _handlePendingInput() async {
@@ -118,7 +240,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
         if (hasActive) {
           await _resumeActiveSessionWithVoice(transcript);
         } else {
-          await _promptVoiceLogDaySelection(transcript, entity: dispatch.entity);
+          await _promptVoiceLogDaySelection(transcript,
+              entity: dispatch.entity);
         }
       } else {
         await _confirmTrainingText(displayText, voiceTranscript: transcript);
@@ -127,7 +250,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     _handlingInput = false;
   }
 
-  Future<void> _confirmTrainingText(String text, {String? voiceTranscript}) async {
+  Future<void> _confirmTrainingText(String text,
+      {String? voiceTranscript}) async {
     final approved = await showModalBottomSheet<bool>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -167,9 +291,11 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
         );
       },
     );
+    if (!mounted) return;
     if (approved == null) {
       await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ExerciseCatalogScreen(initialQuery: text)),
+        MaterialPageRoute(
+            builder: (_) => ExerciseCatalogScreen(initialQuery: text)),
       );
       return;
     }
@@ -192,7 +318,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     await _syncActiveSessionBanner();
   }
 
-  Future<void> _promptVoiceLogDaySelection(String text, {String? entity}) async {
+  Future<void> _promptVoiceLogDaySelection(String text,
+      {String? entity}) async {
     final programId = _selectedProgramId;
     if (programId == null) {
       await _confirmTrainingText(entity ?? text, voiceTranscript: text);
@@ -222,7 +349,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: () => Navigator.of(context).pop(const _VoiceDayChoice.freeStyle()),
+                    onPressed: () => Navigator.of(context)
+                        .pop(const _VoiceDayChoice.freeStyle()),
                     icon: const Icon(Icons.bolt),
                     label: const Text('Free Style'),
                   ),
@@ -242,16 +370,35 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                       separatorBuilder: (_, __) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final match = matches[index];
-                        final preview = match.matchingExercises.take(3).join(', ');
+                        final preview =
+                            match.matchingExercises.take(3).join(', ');
                         final dayLabel = 'Day ${match.dayIndex + 1}';
-                        final subtitle = preview.isEmpty ? dayLabel : '$dayLabel • $preview';
+                        final subtitle =
+                            preview.isEmpty ? dayLabel : '$dayLabel • $preview';
                         return ListTile(
-                          tileColor: Theme.of(context).colorScheme.surface.withOpacity(0.2),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          tileColor: Theme.of(context)
+                              .colorScheme
+                              .surface
+                              .withOpacity(0.2),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
                           title: Text(match.dayName),
-                          subtitle: Text(subtitle),
+                          subtitle: Text(
+                            subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.62),
+                                      fontSize: 12,
+                                    ),
+                          ),
                           trailing: const Icon(Icons.chevron_right),
-                          onTap: () => Navigator.of(context).pop(_VoiceDayChoice.programDay(match.dayId)),
+                          onTap: () => Navigator.of(context)
+                              .pop(_VoiceDayChoice.programDay(match.dayId)),
                         );
                       },
                     ),
@@ -264,9 +411,11 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     );
     if (choice == null) return;
     if (choice.type == _VoiceDayChoiceType.freeStyle) {
-      await _startFreeStyleSession(programId: programId, initialVoiceInput: text);
+      await _startFreeStyleSession(
+          programId: programId, initialVoiceInput: text);
     } else if (choice.programDayId != null) {
-      await _startProgramDaySession(choice.programDayId!, initialVoiceInput: text);
+      await _startProgramDaySession(choice.programDayId!,
+          initialVoiceInput: text);
     }
   }
 
@@ -276,7 +425,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     String? entity,
   }) async {
     final days = await _programRepo.getProgramDays(programId);
-    final namesByDay = await _programRepo.getExerciseNamesByDayForProgram(programId);
+    final namesByDay =
+        await _programRepo.getExerciseNamesByDayForProgram(programId);
     final loweredText = text.toLowerCase();
     final loweredEntity = (entity ?? '').toLowerCase().trim();
     final matches = <_ProgramDayMatch>[];
@@ -311,19 +461,23 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     return matches;
   }
 
-  Future<void> _startFreeStyleSession({int? programId, String? initialVoiceInput}) async {
-    final contextData = await _sessionService.startFreeSession(programId: programId);
+  Future<void> _startFreeStyleSession(
+      {int? programId, String? initialVoiceInput}) async {
+    final contextData =
+        await _sessionService.startFreeSession(programId: programId);
     if (!mounted) return;
     if (initialVoiceInput != null && initialVoiceInput.trim().isNotEmpty) {
-      AppShellController.instance.setPendingSessionVoice(initialVoiceInput.trim());
+      AppShellController.instance
+          .setPendingSessionVoice(initialVoiceInput.trim());
     }
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => SessionScreen(contextData: contextData)),
+      SessionScreen.route(contextData: contextData),
     );
     await _syncActiveSessionBanner();
   }
 
-  Future<void> _startProgramDaySession(int programDayId, {String? initialVoiceInput}) async {
+  Future<void> _startProgramDaySession(int programDayId,
+      {String? initialVoiceInput}) async {
     final programId = _selectedProgramId;
     if (programId == null) return;
     final contextData = await _sessionService.startSessionForProgramDay(
@@ -332,10 +486,11 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     );
     if (!mounted) return;
     if (initialVoiceInput != null && initialVoiceInput.trim().isNotEmpty) {
-      AppShellController.instance.setPendingSessionVoice(initialVoiceInput.trim());
+      AppShellController.instance
+          .setPendingSessionVoice(initialVoiceInput.trim());
     }
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => SessionScreen(contextData: contextData)),
+      SessionScreen.route(contextData: contextData),
     );
     await _syncActiveSessionBanner();
   }
@@ -352,11 +507,10 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     }
     AppShellController.instance.setPendingSessionVoice(transcript.trim());
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => SessionScreen(contextData: contextData)),
+      SessionScreen.route(contextData: contextData),
     );
     await _syncActiveSessionBanner();
   }
-
 
   Future<void> _loadAppearancePrefs() async {
     final enabled = await _settingsRepo.getAppearanceProfileEnabled();
@@ -393,7 +547,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
       final file = File('${docs.path}/$_raulTemplateFileName');
       if (await file.exists()) return;
       final data = await rootBundle.load(_raulTemplateAssetPath);
-      final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      final bytes =
+          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
       await file.writeAsBytes(bytes, flush: true);
     } catch (error) {
       debugPrint('Failed to seed program template: $error');
@@ -413,9 +568,12 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
             autofocus: true,
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel')),
             ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+              onPressed: () =>
+                  Navigator.of(context).pop(controller.text.trim()),
               child: const Text('Create'),
             ),
           ],
@@ -427,10 +585,34 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     if (name.isEmpty) return;
     final programId = await _programRepo.createProgram(name: name);
     if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ProgramEditorScreen(programId: programId)),
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ProgramEditorScreen(
+          programId: programId,
+          isNewProgram: true,
+        ),
+      ),
     );
+    if (!mounted) return;
     setState(() {});
+    if (saved == true) {
+      await _showProgramSavedAlert();
+    }
+  }
+
+  Future<void> _showProgramSavedAlert() {
+    final messenger = ScaffoldMessenger.of(context);
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Program has been saved.'),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.fromLTRB(16, 0, 16, bottomInset + 80),
+      ),
+    );
+    return Future.value();
   }
 
   DateTimeRange _todayRange() {
@@ -445,7 +627,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     return GlassCard(
       padding: const EdgeInsets.all(16),
       child: FutureBuilder<WorkoutCalorieEstimate>(
-        future: _calorieService.estimateWorkoutCaloriesForRange(range.start, range.end),
+        future: _calorieService.estimateWorkoutCaloriesForRange(
+            range.start, range.end),
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
@@ -511,7 +694,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
       return;
     }
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => DayPickerScreen(programId: selectedProgramId)),
+      MaterialPageRoute(
+          builder: (_) => DayPickerScreen(programId: selectedProgramId)),
     );
     await _syncActiveSessionBanner();
     if (!mounted) return;
@@ -530,20 +714,23 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     if (days.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No days yet. Add one in the program editor.')),
+        const SnackBar(
+            content: Text('No days yet. Add one in the program editor.')),
       );
       return;
     }
-    final lastIndex = await _workoutRepo.getLastCompletedDayIndex(selectedProgramId);
+    final lastIndex =
+        await _workoutRepo.getLastCompletedDayIndex(selectedProgramId);
     final nextIndex = lastIndex == null ? 0 : (lastIndex + 1) % days.length;
-    final day = days.firstWhere((d) => d['day_index'] == nextIndex, orElse: () => days.first);
+    final day = days.firstWhere((d) => d['day_index'] == nextIndex,
+        orElse: () => days.first);
     final contextData = await _sessionService.startSessionForProgramDay(
       programId: selectedProgramId,
       programDayId: day['id'] as int,
     );
     if (!mounted) return;
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => SessionScreen(contextData: contextData)),
+      SessionScreen.route(contextData: contextData),
     );
     await _syncActiveSessionBanner();
   }
@@ -588,7 +775,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
       final snack = missingCount == 0
           ? 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises.'
           : 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises. Missing $missingCount exercises.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(snack)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(snack)));
 
       if (missingCount > 0) {
         await showDialog<void>(
@@ -600,7 +788,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                 width: double.maxFinite,
                 child: ListView(
                   shrinkWrap: true,
-                  children: result.missingExercises.map((e) => Text('• $e')).toList(),
+                  children:
+                      result.missingExercises.map((e) => Text('• $e')).toList(),
                 ),
               ),
               actions: [
@@ -626,7 +815,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     if (!mounted) return;
     int? selectedProgramId = _selectedProgramId;
     if (programs.isNotEmpty &&
-        (selectedProgramId == null || !programs.any((p) => p['id'] == selectedProgramId))) {
+        (selectedProgramId == null ||
+            !programs.any((p) => p['id'] == selectedProgramId))) {
       selectedProgramId = programs.first['id'] as int;
     }
     await showModalBottomSheet<void>(
@@ -688,20 +878,19 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                               isExpanded: true,
                               items: programs
                                   .map(
-                                    (program) => DropdownMenuItem<int>(
-                                      value: program['id'] as int,
-                                      child: Text(program['name'] as String),
-                                    ),
-                                  )
+                                (program) => DropdownMenuItem<int>(
+                                  value: program['id'] as int,
+                                  child: Text(program['name'] as String),
+                                ),
+                              )
                                   .followedBy(
-                                    const [
-                                      DropdownMenuItem<int>(
-                                        value: _createProgramId,
-                                        child: Text('Create new program...'),
-                                      ),
-                                    ],
-                                  )
-                                  .toList(),
+                                const [
+                                  DropdownMenuItem<int>(
+                                    value: _createProgramId,
+                                    child: Text('Create new program...'),
+                                  ),
+                                ],
+                              ).toList(),
                               onChanged: (value) {
                                 if (value == null) return;
                                 if (value == _createProgramId) {
@@ -709,13 +898,15 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                                   Future.microtask(() => _createProgram());
                                   return;
                                 }
-                                final program = programs.firstWhere((p) => p['id'] == value);
+                                final program = programs
+                                    .firstWhere((p) => p['id'] == value);
                                 setModalState(() {
                                   selectedProgramId = value;
                                 });
                                 setState(() {
                                   _selectedProgramId = value;
-                                  _selectedProgramName = program['name'] as String;
+                                  _selectedProgramName =
+                                      program['name'] as String;
                                 });
                               },
                             ),
@@ -730,7 +921,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                                     ? null
                                     : () async {
                                         Navigator.of(context).pop();
-                                        await _startManualDay(programId: selectedProgramId);
+                                        await _startManualDay(
+                                            programId: selectedProgramId);
                                       },
                                 icon: const Icon(Icons.view_list),
                                 label: const Text('Manual Day'),
@@ -743,7 +935,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                                     ? null
                                     : () async {
                                         Navigator.of(context).pop();
-                                        await _startSmartDay(programId: selectedProgramId);
+                                        await _startSmartDay(
+                                            programId: selectedProgramId);
                                       },
                                 icon: const Icon(Icons.auto_awesome),
                                 label: const Text('Smart Day'),
@@ -764,7 +957,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
   }
 
   Widget _buildSelectedMuscleStats(String muscle) {
-    final stats = _muscleStats[muscle] ?? const _MuscleStats(pr: '—', volume: '—', prCount: '—');
+    final stats = _muscleStats[muscle] ??
+        const _MuscleStats(pr: '—', volume: '—', prCount: '—');
     return GlassCard(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -805,7 +999,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.35)),
+        border: Border.all(
+            color: Theme.of(context).colorScheme.outline.withOpacity(0.35)),
         color: Theme.of(context).colorScheme.surface.withOpacity(0.2),
       ),
       child: Text(
@@ -825,7 +1020,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
             icon: const Icon(Icons.list),
             onPressed: () async {
               await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ExerciseCatalogScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const ExerciseCatalogScreen()),
               );
             },
           ),
@@ -846,7 +1042,8 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                 _selectedProgramName = null;
               } else {
                 final selectedExists = _selectedProgramId != null &&
-                    programs.any((program) => program['id'] == _selectedProgramId);
+                    programs
+                        .any((program) => program['id'] == _selectedProgramId);
                 if (!selectedExists) {
                   final first = programs.first;
                   _selectedProgramId = first['id'] as int;
@@ -857,6 +1054,11 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
               return ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  StepsSummaryCard(
+                    stepsService: _ensureStepsService(),
+                    onOpenDetails: _openStepsDetails,
+                  ),
+                  const SizedBox(height: 12),
                   GlassCard(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -870,13 +1072,18 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                             onPressed: () => _startFreeStyleSession(),
                             child: const Text('Start Workout'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(context).colorScheme.primary,
-                              foregroundColor: Theme.of(context).colorScheme.surface,
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primary,
+                              foregroundColor:
+                                  Theme.of(context).colorScheme.surface,
                               minimumSize: const Size.fromHeight(64),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              textStyle: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                              textStyle: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                           ),
                         ),
@@ -953,14 +1160,17 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                         else
                           Builder(
                             builder: (context) {
-                              final listHeight = ((programs.length * 86.0) + 8).clamp(150.0, 360.0).toDouble();
+                              final listHeight = ((programs.length * 86.0) + 8)
+                                  .clamp(150.0, 360.0)
+                                  .toDouble();
                               return SizedBox(
                                 height: listHeight,
                                 child: ListView.separated(
                                   primary: false,
                                   padding: EdgeInsets.zero,
                                   itemCount: programs.length,
-                                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(height: 12),
                                   itemBuilder: (context, index) {
                                     final program = programs[index];
                                     final id = program['id'] as int;
@@ -968,10 +1178,24 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                                       padding: EdgeInsets.zero,
                                       child: ListTile(
                                         title: Text(program['name'] as String),
-                                        subtitle: const Text('Tap to start or edit days'),
+                                        subtitle: Text(
+                                          'Tap to start or edit days',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurface
+                                                    .withValues(alpha: 0.62),
+                                                fontSize: 12,
+                                              ),
+                                        ),
                                         onTap: () async {
                                           await Navigator.of(context).push(
-                                            MaterialPageRoute(builder: (_) => DayPickerScreen(programId: id)),
+                                            MaterialPageRoute(
+                                                builder: (_) => DayPickerScreen(
+                                                    programId: id)),
                                           );
                                           await _syncActiveSessionBanner();
                                           if (!mounted) return;
@@ -980,43 +1204,66 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                                         trailing: PopupMenuButton<String>(
                                           onSelected: (value) async {
                                             if (value == 'edit') {
-                                              await Navigator.of(context).push(
+                                              final saved =
+                                                  await Navigator.of(context)
+                                                      .push<bool>(
                                                 MaterialPageRoute(
-                                                  builder: (_) => ProgramEditorScreen(programId: id),
+                                                  builder: (_) =>
+                                                      ProgramEditorScreen(
+                                                          programId: id),
                                                 ),
                                               );
+                                              if (!mounted) return;
                                               setState(() {});
+                                              if (saved == true) {
+                                                await _showProgramSavedAlert();
+                                              }
                                             } else if (value == 'delete') {
-                                              final confirm = await showDialog<bool>(
+                                              final confirm =
+                                                  await showDialog<bool>(
                                                 context: context,
                                                 builder: (context) {
                                                   return AlertDialog(
-                                                    title: const Text('Delete program?'),
+                                                    title: const Text(
+                                                        'Delete program?'),
                                                     content: const Text(
                                                       'This removes the program and its days. Sessions remain in history.',
                                                     ),
                                                     actions: [
                                                       TextButton(
-                                                        onPressed: () => Navigator.of(context).pop(false),
-                                                        child: const Text('Cancel'),
+                                                        onPressed: () =>
+                                                            Navigator.of(
+                                                                    context)
+                                                                .pop(false),
+                                                        child: const Text(
+                                                            'Cancel'),
                                                       ),
                                                       ElevatedButton(
-                                                        onPressed: () => Navigator.of(context).pop(true),
-                                                        child: const Text('Delete'),
+                                                        onPressed: () =>
+                                                            Navigator.of(
+                                                                    context)
+                                                                .pop(true),
+                                                        child: const Text(
+                                                            'Delete'),
                                                       ),
                                                     ],
                                                   );
                                                 },
                                               );
                                               if (confirm == true) {
-                                                await _programRepo.deleteProgram(id);
+                                                await _programRepo
+                                                    .deleteProgram(id);
                                                 setState(() {});
                                               }
                                             }
                                           },
                                           itemBuilder: (_) => const [
-                                            PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                            PopupMenuItem(value: 'delete', child: Text('Delete')),
+                                            PopupMenuItem(
+                                                value: 'edit',
+                                                child: Text('Edit')),
+                                            PopupMenuItem(
+                                                value: 'delete',
+                                                child: Text('Delete')),
                                           ],
                                         ),
                                       ),
@@ -1043,7 +1290,10 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
-                              value: muscleOptions.contains(_selectedStatsMuscle) ? _selectedStatsMuscle : null,
+                              value:
+                                  muscleOptions.contains(_selectedStatsMuscle)
+                                      ? _selectedStatsMuscle
+                                      : null,
                               hint: const Text('Select a muscle group'),
                               menuMaxHeight: 320,
                               isExpanded: true,
@@ -1062,7 +1312,9 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        _selectedStatsMuscle == null ? _buildStatsPlaceholder() : _buildSelectedMuscleStats(_selectedStatsMuscle!),
+                        _selectedStatsMuscle == null
+                            ? _buildStatsPlaceholder()
+                            : _buildSelectedMuscleStats(_selectedStatsMuscle!),
                       ],
                     ),
                   ),
@@ -1089,7 +1341,8 @@ class _StatPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.4)),
+        border: Border.all(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.4)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1105,7 +1358,8 @@ class _StatPill extends StatelessWidget {
 }
 
 class _CaloriesBar extends StatelessWidget {
-  const _CaloriesBar({required this.workoutCalories, required this.bmrCalories});
+  const _CaloriesBar(
+      {required this.workoutCalories, required this.bmrCalories});
 
   final double workoutCalories;
   final double bmrCalories;
@@ -1129,7 +1383,9 @@ class _CaloriesBar extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
             child: Stack(
               children: [
-                Container(color: Theme.of(context).colorScheme.surface.withOpacity(0.4)),
+                Container(
+                    color:
+                        Theme.of(context).colorScheme.surface.withOpacity(0.4)),
                 Positioned(
                   left: 0,
                   top: 0,
@@ -1139,8 +1395,14 @@ class _CaloriesBar extends StatelessWidget {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Theme.of(context).colorScheme.primary.withOpacity(0.85),
-                          Theme.of(context).colorScheme.primary.withOpacity(0.55),
+                          Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withOpacity(0.85),
+                          Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withOpacity(0.55),
                         ],
                       ),
                     ),
@@ -1155,8 +1417,14 @@ class _CaloriesBar extends StatelessWidget {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Theme.of(context).colorScheme.secondary.withOpacity(0.7),
-                          Theme.of(context).colorScheme.secondary.withOpacity(0.4),
+                          Theme.of(context)
+                              .colorScheme
+                              .secondary
+                              .withOpacity(0.7),
+                          Theme.of(context)
+                              .colorScheme
+                              .secondary
+                              .withOpacity(0.4),
                         ],
                       ),
                     ),
@@ -1286,7 +1554,8 @@ class _AnatomyPreviewState extends State<_AnatomyPreview> {
 }
 
 class _MuscleStats {
-  const _MuscleStats({required this.pr, required this.volume, required this.prCount});
+  const _MuscleStats(
+      {required this.pr, required this.volume, required this.prCount});
 
   final String pr;
   final String volume;
@@ -1342,18 +1611,22 @@ const Map<String, _MuscleSvgTargets> _muscleTargets = {
   'Chest': _MuscleSvgTargets(front: ['pectoralis_major'], back: []),
   'Traps': _MuscleSvgTargets(front: ['trapezius'], back: ['trapezius_lower']),
   'Lats': _MuscleSvgTargets(front: [], back: ['latissimus_dorsi']),
-  'Back': _MuscleSvgTargets(front: [], back: ['latissimus_dorsi', 'trapezius_lower']),
+  'Back': _MuscleSvgTargets(
+      front: [], back: ['latissimus_dorsi', 'trapezius_lower']),
   'Front Delts': _MuscleSvgTargets(front: ['deltoid'], back: []),
   'Side Delts': _MuscleSvgTargets(front: ['deltoid'], back: ['deltoid']),
   'Rear Delts': _MuscleSvgTargets(front: [], back: ['deltoid']),
   'Biceps': _MuscleSvgTargets(front: ['biceps'], back: []),
   'Triceps': _MuscleSvgTargets(front: ['triceps'], back: ['triceps']),
-  'Forearms': _MuscleSvgTargets(front: ['brachioradialis', 'finger_flexors'], back: ['brachioradialis', 'finger_flexors']),
+  'Forearms': _MuscleSvgTargets(
+      front: ['brachioradialis', 'finger_flexors'],
+      back: ['brachioradialis', 'finger_flexors']),
   'Abs': _MuscleSvgTargets(front: ['abdominals', 'external_oblique'], back: []),
   'Glutes': _MuscleSvgTargets(front: [], back: ['gluteus_maximus']),
   'Quads': _MuscleSvgTargets(front: ['quadriceps'], back: []),
   'Hamstrings': _MuscleSvgTargets(front: [], back: ['hamstrings']),
-  'Calves': _MuscleSvgTargets(front: ['gastrocnemius'], back: ['gastrocnemius', 'soleus']),
+  'Calves': _MuscleSvgTargets(
+      front: ['gastrocnemius'], back: ['gastrocnemius', 'soleus']),
 };
 
 class _AnatomyAssetSet {
@@ -1363,20 +1636,27 @@ class _AnatomyAssetSet {
   final String fallback;
 }
 
-_AnatomyAssetSet _resolveAnatomyAssets({required String sex, required bool isBack}) {
+_AnatomyAssetSet _resolveAnatomyAssets(
+    {required String sex, required bool isBack}) {
   final primaryBase =
       'assets/anatomy/codecanyon/codecanyon-I0qdAu3M-interactive-human-body-muscle-diagram-male-and-female-diagrams/source/with_tooltip_and_colours';
   final fallbackBase =
       'assets/anatomy/codecanyon/codecanyon-I0qdAu3M-interactive-human-body-muscle-diagram-male-and-female-diagrams/source/no_tooltip';
   if (sex == 'female') {
     return _AnatomyAssetSet(
-      primary: isBack ? '$primaryBase/woman-back.svg' : '$primaryBase/woman-front.svg',
-      fallback: isBack ? '$fallbackBase/woman-back.svg' : '$fallbackBase/woman-front.svg',
+      primary: isBack
+          ? '$primaryBase/woman-back.svg'
+          : '$primaryBase/woman-front.svg',
+      fallback: isBack
+          ? '$fallbackBase/woman-back.svg'
+          : '$fallbackBase/woman-front.svg',
     );
   }
   return _AnatomyAssetSet(
-    primary: isBack ? '$primaryBase/man-back.svg' : '$primaryBase/man-front.svg',
-    fallback: isBack ? '$fallbackBase/man-back.svg' : '$fallbackBase/man-front.svg',
+    primary:
+        isBack ? '$primaryBase/man-back.svg' : '$primaryBase/man-front.svg',
+    fallback:
+        isBack ? '$fallbackBase/man-back.svg' : '$fallbackBase/man-front.svg',
   );
 }
 
@@ -1408,7 +1688,8 @@ Future<String> _buildHighlightedSvg({
         }
         return updated;
       } catch (fallbackError) {
-        debugPrint('[Anatomy] Fallback asset load failed: $fallbackAsset ($fallbackError)');
+        debugPrint(
+            '[Anatomy] Fallback asset load failed: $fallbackAsset ($fallbackError)');
       }
     }
     return '<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 260 80\">'

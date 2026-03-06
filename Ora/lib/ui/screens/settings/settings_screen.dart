@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../data/db/db.dart';
 import '../../../data/repositories/settings_repo.dart';
+import '../../../diagnostics/diagnostics_page.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 import 'account_screen.dart';
@@ -36,8 +37,6 @@ class _SettingsContentState extends State<SettingsContent> {
   bool _loading = true;
 
   String _unit = 'lb';
-  double _increment = 2.5;
-  int _restDefault = 120;
   bool _voiceEnabled = true;
   bool _wakeWordEnabled = false;
   String _cloudProvider = 'gemini';
@@ -77,8 +76,6 @@ class _SettingsContentState extends State<SettingsContent> {
     final orbHidden = await _settingsRepo.getOrbHidden();
     setState(() {
       _unit = unit;
-      _increment = increment;
-      _restDefault = rest;
       _voiceEnabled = voiceEnabled;
       _wakeWordEnabled = wakeWordEnabled;
       _incrementController.text = increment.toStringAsFixed(2);
@@ -94,14 +91,12 @@ class _SettingsContentState extends State<SettingsContent> {
   Future<void> _saveIncrement() async {
     final value = double.tryParse(_incrementController.text.trim());
     if (value == null) return;
-    setState(() => _increment = value);
     await _settingsRepo.setIncrement(value);
   }
 
   Future<void> _saveRest() async {
     final value = int.tryParse(_restController.text.trim());
     if (value == null) return;
-    setState(() => _restDefault = value);
     await _settingsRepo.setRestDefault(value);
   }
 
@@ -263,10 +258,11 @@ class _SettingsContentState extends State<SettingsContent> {
                       alignment: Alignment.centerLeft,
                       child: TextButton.icon(
                         onPressed: () async {
+                          final messenger = ScaffoldMessenger.of(context);
                           _cloudKeyController.clear();
                           await _settingsRepo.setCloudApiKey(null);
                           if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          messenger.showSnackBar(
                             const SnackBar(content: Text('API key cleared.')),
                           );
                         },
@@ -403,6 +399,32 @@ class _SettingsContentState extends State<SettingsContent> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const Text('Diagnostics'),
+                    const SizedBox(height: 8),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('View crash logs'),
+                      subtitle: const Text(
+                        'Inspect recent startup errors and share the local log file.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const DiagnosticsPage(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              GlassCard(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     const Text('About'),
                     const SizedBox(height: 8),
                     const Text('Local-first. Accounts optional for cloud features.'),
@@ -424,4 +446,3 @@ class _SettingsContentState extends State<SettingsContent> {
     );
   }
 }
-
