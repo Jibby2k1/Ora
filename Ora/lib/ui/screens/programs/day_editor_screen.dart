@@ -1380,6 +1380,7 @@ class _SetPlanEditorSheetState extends State<_SetPlanEditorSheet> {
       onTapOutside: (_) => _closeNumberPad(),
       child: SafeArea(
         top: false,
+        bottom: false,
         child: ClipRRect(
           borderRadius: const BorderRadius.vertical(
             top: Radius.circular(28),

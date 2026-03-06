@@ -15,6 +15,7 @@ import 'migrations/m0005_appearance.dart';
 import 'migrations/m0006_diet_micros.dart';
 import 'migrations/m0007_diet_images.dart';
 import 'migrations/m0008_appearance_images.dart';
+import 'migrations/m0009_food_cache.dart';
 import 'schema.dart';
 
 class AppDatabase {
@@ -74,6 +75,9 @@ class AppDatabase {
     }
     if (from < 8 && to >= 8) {
       batches.add(migration0008());
+    }
+    if (from < 9 && to >= 9) {
+      batches.add(migration0009());
     }
 
     for (final statements in batches) {

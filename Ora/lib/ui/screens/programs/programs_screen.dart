@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import '../../../data/repositories/workout_repo.dart';
 import '../../../domain/services/calorie_service.dart';
 import '../../../domain/services/import_service.dart';
 import '../../../domain/services/session_service.dart';
+import '../../../domain/services/steps_service.dart';
 import '../day_picker/day_picker_screen.dart';
 import '../history/exercise_catalog_screen.dart';
 import '../session/session_screen.dart';
@@ -19,7 +21,9 @@ import '../shell/app_shell_controller.dart';
 import '../../../core/input/input_router.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
+import '../../widgets/steps/steps_summary_card.dart';
 import 'program_editor_screen.dart';
+import 'steps_detail_page.dart';
 
 class _ProgramDayMatch {
   const _ProgramDayMatch({
@@ -55,7 +59,8 @@ class ProgramsScreen extends StatefulWidget {
   State<ProgramsScreen> createState() => _ProgramsScreenState();
 }
 
-class _ProgramsScreenState extends State<ProgramsScreen> {
+class _ProgramsScreenState extends State<ProgramsScreen>
+    with WidgetsBindingObserver {
   static const int _createProgramId = -1;
   static const String _raulTemplateAssetPath =
       'Examples/Raul Split - HILV Program.xlsx';
@@ -66,6 +71,7 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
   late final SessionService _sessionService;
   late final SettingsRepo _settingsRepo;
   late final CalorieService _calorieService;
+  StepsService? _stepsService;
   int? _selectedProgramId;
   String? _selectedProgramName;
   bool _appearanceProfileEnabled = false;
@@ -76,12 +82,14 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final db = AppDatabase.instance;
     _programRepo = ProgramRepo(db);
     _workoutRepo = WorkoutRepo(db);
     _sessionService = SessionService(db);
     _settingsRepo = SettingsRepo(db);
     _calorieService = CalorieService(db);
+    _stepsService = StepsService(db);
     AppShellController.instance.appearanceProfileEnabled
         .addListener(_syncAppearancePrefsFromController);
     AppShellController.instance.appearanceProfileSex
@@ -89,12 +97,17 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
     AppShellController.instance.pendingInput.addListener(_handlePendingInput);
     AppShellController.instance.programsRevision
         .addListener(_handleProgramsRefresh);
+    AppShellController.instance.tabIndex.addListener(_handleTabRefresh);
     _loadAppearancePrefs();
     Future.microtask(_ensureProgramUploadTemplateExists);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_initializeStepsAndMaybePrompt());
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     AppShellController.instance.appearanceProfileEnabled
         .removeListener(_syncAppearancePrefsFromController);
     AppShellController.instance.appearanceProfileSex
@@ -103,12 +116,111 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
         .removeListener(_handlePendingInput);
     AppShellController.instance.programsRevision
         .removeListener(_handleProgramsRefresh);
+    AppShellController.instance.tabIndex.removeListener(_handleTabRefresh);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshStepsIfReady());
+      return;
+    }
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _stepsService?.pauseLiveTracking();
+      return;
+    }
+    if (state == AppLifecycleState.detached) {
+      _stepsService?.stopLiveTracking();
+    }
   }
 
   void _handleProgramsRefresh() {
     if (!mounted) return;
     setState(() {});
+  }
+
+  void _handleTabRefresh() {
+    if (AppShellController.instance.tabIndex.value == 0) {
+      unawaited(_refreshStepsIfReady());
+      return;
+    }
+    _stepsService?.pauseLiveTracking();
+  }
+
+  Future<void> _initializeStepsAndMaybePrompt() async {
+    final service = _ensureStepsService();
+    await service.initialize();
+    if (!mounted) return;
+    await _maybeShowFirstRunStepsDialog();
+  }
+
+  Future<void> _refreshStepsIfReady() async {
+    final service = _ensureStepsService();
+    if (!service.isInitialized) return;
+    await service.refresh();
+  }
+
+  Future<void> _maybeShowFirstRunStepsDialog() async {
+    final service = _ensureStepsService();
+    final shouldPrompt = await service.consumeFirstRunPrompt();
+    if (!mounted || !shouldPrompt) return;
+    final enable = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        return AlertDialog(
+          title: const Text('Enable step access'),
+          content: Text(
+            'Allow step access so the Training page can show your steps and progress.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Not now'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Enable'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!mounted || enable != true) return;
+    await service.requestAccess();
+  }
+
+  Future<void> _openStepsDetails() async {
+    final stepsService = _ensureStepsService();
+    if (!stepsService.isPermissionGranted) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => StepsDetailPage(stepsService: stepsService),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  StepsService _ensureStepsService() {
+    final existing = _stepsService;
+    if (existing != null) {
+      return existing;
+    }
+    final service = StepsService(AppDatabase.instance);
+    _stepsService = service;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _stepsService != service) return;
+      unawaited(_initializeStepsAndMaybePrompt());
+    });
+    return service;
   }
 
   Future<void> _handlePendingInput() async {
@@ -942,6 +1054,11 @@ class _ProgramsScreenState extends State<ProgramsScreen> {
               return ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  StepsSummaryCard(
+                    stepsService: _ensureStepsService(),
+                    onOpenDetails: _openStepsDetails,
+                  ),
+                  const SizedBox(height: 12),
                   GlassCard(
                     padding: const EdgeInsets.all(16),
                     child: Column(

@@ -4,23 +4,44 @@ import 'core/theme/app_theme.dart';
 import 'data/db/db.dart';
 import 'data/seed/demo_history_seed.dart';
 import 'data/repositories/settings_repo.dart';
+import 'diagnostics/diagnostics_log.dart';
 import 'ui/screens/shell/app_shell.dart';
 import 'ui/screens/settings/cloud_required_screen.dart';
 
 class OraApp extends StatefulWidget {
-  OraApp({super.key});
+  const OraApp({super.key});
 
   static final GlobalKey<ScaffoldMessengerState> messengerKey =
       GlobalKey<ScaffoldMessengerState>();
 
   static Future<void> _initialize() async {
-    final db = AppDatabase.instance;
-    await db.database;
-    await db.seedExercisesIfNeeded('lib/data/seed/exercise_catalog_seed.json', fromAsset: true);
-    await db.ensureExercisesFromSeed('lib/data/seed/exercise_catalog_seed.json', fromAsset: true);
-    await db.applyMuscleMapSeed('lib/data/seed/muscle_map_seed.json', fromAsset: true);
-    await DemoHistorySeed(db).ensureHistorySeed();
-    await SettingsRepo(db).setCloudEnabled(true);
+    try {
+      DiagnosticsLog.instance.record('OraApp initialization begin');
+      final db = AppDatabase.instance;
+      await db.database;
+      await db.seedExercisesIfNeeded(
+        'lib/data/seed/exercise_catalog_seed.json',
+        fromAsset: true,
+      );
+      await db.ensureExercisesFromSeed(
+        'lib/data/seed/exercise_catalog_seed.json',
+        fromAsset: true,
+      );
+      await db.applyMuscleMapSeed(
+        'lib/data/seed/muscle_map_seed.json',
+        fromAsset: true,
+      );
+      await DemoHistorySeed(db).ensureHistorySeed();
+      await SettingsRepo(db).setCloudEnabled(true);
+      DiagnosticsLog.instance.record('OraApp initialization complete');
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.recordError(
+        error,
+        stackTrace,
+        context: 'OraApp initialization failed',
+      );
+      rethrow;
+    }
   }
 
   @override

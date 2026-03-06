@@ -1356,6 +1356,16 @@ class _SessionScreenState extends State<SessionScreen> {
     return fieldKey != null && fieldKey.startsWith('draft-reps-');
   }
 
+  bool _isInlineNumberPadFieldKey(String? fieldKey) {
+    if (fieldKey == null) return false;
+    return fieldKey.startsWith('logged-rest-') ||
+        fieldKey.startsWith('logged-weight-') ||
+        fieldKey.startsWith('logged-reps-') ||
+        fieldKey.startsWith('draft-rest-') ||
+        fieldKey.startsWith('draft-weight-') ||
+        fieldKey.startsWith('draft-reps-');
+  }
+
   void _confirmNumberPadEntry() {
     final fieldKey = _activeNumberPadFieldKey;
     final isDraftWeight = _isDraftWeightFieldKey(fieldKey);
@@ -1710,6 +1720,40 @@ class _SessionScreenState extends State<SessionScreen> {
       );
     }
 
+    Widget sheetValuePreview() {
+      final displayValue = _activeNumberPadValue;
+      final isSelected =
+          _numberPadReplacePending && displayValue.trim().isNotEmpty;
+      return Container(
+        height: 52,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface.withOpacity(0.52),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: theme.colorScheme.onSurface.withOpacity(0.08),
+          ),
+        ),
+        child: isSelected
+            ? _buildSelectedInlineLabel(
+                value: displayValue,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+                textColor: theme.colorScheme.onSurface,
+                highlightColor: theme.colorScheme.primary.withOpacity(0.18),
+              )
+            : _buildInlineEditingField(
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface,
+                ),
+                cursorColor: theme.colorScheme.primary,
+              ),
+      );
+    }
+
     controller = scaffoldState.showBottomSheet(
       (sheetContext) {
         return StatefulBuilder(
@@ -1763,6 +1807,12 @@ class _SessionScreenState extends State<SessionScreen> {
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
+                            if (!_isInlineNumberPadFieldKey(
+                              _activeNumberPadFieldKey,
+                            )) ...[
+                              const SizedBox(height: 12),
+                              sheetValuePreview(),
+                            ],
                             const SizedBox(height: 12),
                             Row(
                               children: [
@@ -2044,8 +2094,12 @@ class _SessionScreenState extends State<SessionScreen> {
     final rows =
         await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
     final now = DateTime.now();
-    final activeSetId = AppShellController.instance.restActiveSetId;
-    var shouldRestartActive = false;
+    final controller = AppShellController.instance;
+    final activeSetId = controller.restActiveSetId;
+    final activeExerciseId = controller.restActiveExerciseId;
+    final activeRemaining = controller.restRemainingSeconds.value;
+    final hasActiveTimerForExercise =
+        activeSetId != null && activeExerciseId == info.exerciseId;
     for (final row in rows) {
       final setId = row['id'] as int?;
       final rowRestSeconds = (row['rest_sec_actual'] as int?) ?? 0;
@@ -2055,9 +2109,6 @@ class _SessionScreenState extends State<SessionScreen> {
         id: setId,
         restSecActual: selected,
       );
-      if (setId == activeSetId) {
-        shouldRestartActive = true;
-      }
     }
     final drafts = _draftSetsByExerciseId[info.sessionExerciseId];
     if (drafts != null) {
@@ -2069,19 +2120,22 @@ class _SessionScreenState extends State<SessionScreen> {
       }
     }
     _restSecondsByExerciseId[info.exerciseId] = selected;
-    if (shouldRestartActive && activeSetId != null) {
-      if (selected > 0) {
-        AppShellController.instance.startRestTimer(
-          seconds: selected,
-          setId: activeSetId,
+    final runningSetId = hasActiveTimerForExercise ? activeSetId : null;
+    if (runningSetId != null) {
+      final deltaSeconds = selected - currentSeconds;
+      final adjustedRemaining = activeRemaining + deltaSeconds;
+      if (adjustedRemaining <= 0) {
+        controller.completeRestTimer();
+        _completedRestSetIds.add(runningSetId);
+        _lastObservedInlineRestSetId = null;
+      } else if (deltaSeconds != 0) {
+        controller.startRestTimer(
+          seconds: adjustedRemaining,
+          setId: runningSetId,
           exerciseId: info.exerciseId,
         );
-        _completedRestSetIds.remove(activeSetId);
-        _lastObservedInlineRestSetId = activeSetId;
-      } else {
-        AppShellController.instance.completeRestTimer();
-        _completedRestSetIds.remove(activeSetId);
-        _lastObservedInlineRestSetId = null;
+        _completedRestSetIds.remove(runningSetId);
+        _lastObservedInlineRestSetId = runningSetId;
       }
     }
     _refreshInlineSetData(info);
@@ -4906,10 +4960,6 @@ class _SessionScreenState extends State<SessionScreen> {
   List<Widget> _buildExerciseChips(
       BuildContext context, SessionExerciseInfo info) {
     final muscles = _musclesByExerciseId[info.exerciseId];
-    final tags = <String>[];
-    if (info.planBlocks.any((b) => b.amrapLastSet)) {
-      tags.add('AMRAP');
-    }
     final chips = <Widget>[];
     final primary = muscles?.primary;
     final primaryColor = Theme.of(context).colorScheme.primary;
@@ -4943,17 +4993,6 @@ class _SessionScreenState extends State<SessionScreen> {
             fontSize: 11,
           ),
           side: BorderSide(color: secondaryColor.withOpacity(0.28)),
-          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-      );
-    }
-    for (final tag in tags) {
-      chips.add(
-        Chip(
-          label: Text(tag, style: const TextStyle(fontSize: 11)),
-          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
-          backgroundColor: primaryColor.withOpacity(0.12),
           labelPadding: const EdgeInsets.symmetric(horizontal: 6),
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),

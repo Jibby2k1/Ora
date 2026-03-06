@@ -1,5 +1,5 @@
 const dbName = 'ora.db';
-const dbVersion = 8;
+const dbVersion = 9;
 
 const createTableExercise = '''
 CREATE TABLE exercise(
@@ -173,6 +173,16 @@ CREATE TABLE appearance_entry(
   measurements TEXT,
   notes TEXT,
   image_path TEXT
+);
+''';
+
+const createTableFoodCache = '''
+CREATE TABLE food_cache(
+  cache_key TEXT PRIMARY KEY,
+  payload_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  schema_version INTEGER NOT NULL DEFAULT 1
 );
 ''';
 
