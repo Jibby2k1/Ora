@@ -28,7 +28,8 @@ class AppearanceScreen extends StatefulWidget {
 class _AppearanceScreenState extends State<AppearanceScreen> {
   late final SettingsRepo _settingsRepo;
   late final AppearanceRepo _appearanceRepo;
-  final AppearanceAnalysisService _appearanceAnalysis = AppearanceAnalysisService();
+  final AppearanceAnalysisService _appearanceAnalysis =
+      AppearanceAnalysisService();
   bool _accessReady = false;
   AppearanceAssessment _assessment = AppearanceAssessment.physique;
   double _skinScore = 0;
@@ -40,7 +41,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   String _selectedFeedbackCategory = 'skin';
   Future<List<AppearanceEntry>>? _timelineFuture;
   bool _handlingInput = false;
-  
+
   // Gemini API state
   String? _geminiResponse;
   bool _geminiLoading = false;
@@ -59,7 +60,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
 
   @override
   void dispose() {
-    AppShellController.instance.pendingInput.removeListener(_handlePendingInput);
+    AppShellController.instance.pendingInput
+        .removeListener(_handlePendingInput);
     _adviceInputController.dispose();
     super.dispose();
   }
@@ -67,7 +69,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   Future<void> _handlePendingInput() async {
     if (!mounted || _handlingInput) return;
     final dispatch = AppShellController.instance.pendingInput.value;
-    if (dispatch == null || dispatch.intent != InputIntent.appearanceLog) return;
+    if (dispatch == null || dispatch.intent != InputIntent.appearanceLog)
+      return;
     _handlingInput = true;
     AppShellController.instance.clearPendingInput();
     final event = dispatch.event;
@@ -75,19 +78,23 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
       await _processAppearanceImage(event.file!);
     } else if ((dispatch.entity ?? event.text)?.trim().isNotEmpty == true) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Appearance logs require a photo upload.')),
+        const SnackBar(
+            content: Text('Appearance logs require a photo upload.')),
       );
     }
     _handlingInput = false;
   }
 
   Future<void> _processAppearanceImage(File file) async {
-    final consent = await CloudConsent.ensureAppearanceConsent(context, _settingsRepo);
+    final consent =
+        await CloudConsent.ensureAppearanceConsent(context, _settingsRepo);
     if (!consent || !mounted) return;
     final enabled = await _settingsRepo.getCloudEnabled();
     final apiKey = await _settingsRepo.getCloudApiKey();
     final provider = await _settingsRepo.getCloudProvider();
-    final model = await _settingsRepo.getCloudModel();
+    final model = await _settingsRepo.getCloudModelForTask(
+      CloudModelTask.documentImageAnalysis,
+    );
     if (!enabled || apiKey == null || apiKey.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cloud analysis requires an API key.')),
@@ -266,11 +273,14 @@ Remember: you are only giving guidance, the user will determine their own score.
       final enabled = await _settingsRepo.getCloudEnabled();
       final apiKey = await _settingsRepo.getCloudApiKey();
       final provider = await _settingsRepo.getCloudProvider();
-      final model = await _settingsRepo.getCloudModel();
+      final model = await _settingsRepo.getCloudModelForTask(
+        CloudModelTask.documentImageAnalysis,
+      );
       if (!enabled || apiKey == null || apiKey.trim().isEmpty) {
         if (mounted) {
           setState(() {
-            _geminiError = 'Cloud API key not configured. Please set it in settings.';
+            _geminiError =
+                'Cloud API key not configured. Please set it in settings.';
             _geminiLoading = false;
           });
         }
@@ -318,7 +328,8 @@ Remember: you are only giving guidance, the user will determine their own score.
           final data = jsonDecode(response.body) as Map<String, dynamic>;
           final candidates = data['candidates'] as List<dynamic>? ?? [];
           if (candidates.isNotEmpty) {
-            final content = candidates.first['content'] as Map<String, dynamic>?;
+            final content =
+                candidates.first['content'] as Map<String, dynamic>?;
             final parts = content?['parts'] as List<dynamic>? ?? [];
             if (parts.isNotEmpty) {
               final text = parts.first['text']?.toString() ?? '';
@@ -355,7 +366,8 @@ Remember: you are only giving guidance, the user will determine their own score.
     }
   }
 
-  Future<void> _requestOpenAiAdvice(String prompt, String apiKey, String model) async {
+  Future<void> _requestOpenAiAdvice(
+      String prompt, String apiKey, String model) async {
     final useResponses = _openAiUsesResponses(model);
     final uri = Uri.https(
       'api.openai.com',
@@ -399,8 +411,9 @@ Remember: you are only giving guidance, the user will determine their own score.
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final text =
-            useResponses ? (_extractResponseText(data) ?? '') : _extractChatContent(data);
+        final text = useResponses
+            ? (_extractResponseText(data) ?? '')
+            : _extractChatContent(data);
         if (text.trim().isEmpty) {
           setState(() {
             _geminiError = 'No response from OpenAI.';
@@ -441,7 +454,8 @@ Remember: you are only giving guidance, the user will determine their own score.
   String? _extractResponseText(Map<String, dynamic> data) {
     final output = data['output'] as List<dynamic>? ?? [];
     for (final item in output) {
-      final content = (item as Map<String, dynamic>)['content'] as List<dynamic>? ?? [];
+      final content =
+          (item as Map<String, dynamic>)['content'] as List<dynamic>? ?? [];
       for (final part in content) {
         final map = part as Map<String, dynamic>;
         final type = map['type']?.toString();
@@ -466,7 +480,8 @@ Remember: you are only giving guidance, the user will determine their own score.
 
   Widget _buildAssessmentCard() {
     final categoryName = _assessment.toString().split('.').last;
-    final categoryDisplay = categoryName[0].toUpperCase() + categoryName.substring(1);
+    final categoryDisplay =
+        categoryName[0].toUpperCase() + categoryName.substring(1);
 
     return GlassCard(
       padding: const EdgeInsets.all(16),
@@ -478,9 +493,12 @@ Remember: you are only giving guidance, the user will determine their own score.
           TextField(
             controller: _adviceInputController,
             decoration: InputDecoration(
-              hintText: 'What advice would you like to improve your $categoryDisplay?',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              hintText:
+                  'What advice would you like to improve your $categoryDisplay?',
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             ),
             maxLines: 3,
           ),
@@ -490,7 +508,8 @@ Remember: you are only giving guidance, the user will determine their own score.
             child: FilledButton(
               onPressed: _geminiLoading
                   ? null
-                  : () => _requestGeminiAdvice(categoryName, _adviceInputController.text),
+                  : () => _requestGeminiAdvice(
+                      categoryName, _adviceInputController.text),
               child: _geminiLoading
                   ? const SizedBox(
                       height: 16,
@@ -592,7 +611,8 @@ Remember: you are only giving guidance, the user will determine their own score.
               final entries = snapshot.data ?? [];
               final filtered = entries.where((entry) {
                 final data = _decodeMeasurements(entry.measurements);
-                return data['type'] == 'feedback' && data['category'] == _selectedFeedbackCategory;
+                return data['type'] == 'feedback' &&
+                    data['category'] == _selectedFeedbackCategory;
               }).toList();
               if (filtered.isEmpty) {
                 return const Text('No feedback yet.');
@@ -604,16 +624,20 @@ Remember: you are only giving guidance, the user will determine their own score.
                   final delta = data['score_delta'];
                   final score = data['score'];
                   final uploadName = data['upload_name']?.toString();
-                  final deltaLabel = delta == null ? null : 'Δ ${delta.toString()}';
-                  final scoreLabel = score == null ? null : 'Score ${score.toString()}';
+                  final deltaLabel =
+                      delta == null ? null : 'Δ ${delta.toString()}';
+                  final scoreLabel =
+                      score == null ? null : 'Score ${score.toString()}';
                   final meta = [
                     if (scoreLabel != null) scoreLabel,
                     if (deltaLabel != null) deltaLabel,
-                    if (uploadName != null && uploadName.trim().isNotEmpty) uploadName.trim(),
+                    if (uploadName != null && uploadName.trim().isNotEmpty)
+                      uploadName.trim(),
                   ].join(' • ');
                   final imagePath = entry.imagePath;
-                  final imageFile =
-                      imagePath == null || imagePath.isEmpty ? null : File(imagePath);
+                  final imageFile = imagePath == null || imagePath.isEmpty
+                      ? null
+                      : File(imagePath);
                   final hasImage = imageFile != null && imageFile.existsSync();
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -631,10 +655,13 @@ Remember: you are only giving guidance, the user will determine their own score.
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         title: Text(
-                          feedback == null || feedback.isEmpty ? 'Feedback logged.' : feedback,
+                          feedback == null || feedback.isEmpty
+                              ? 'Feedback logged.'
+                              : feedback,
                         ),
                         subtitle: meta.isEmpty ? null : Text(meta),
-                        trailing: Text(_formatDate(entry.createdAt), style: Theme.of(context).textTheme.bodySmall),
+                        trailing: Text(_formatDate(entry.createdAt),
+                            style: Theme.of(context).textTheme.bodySmall),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -666,10 +693,13 @@ Remember: you are only giving guidance, the user will determine their own score.
               skinColor: _skinColor,
               styleColor: _styleColor,
               selectedAssessment: _assessment,
-              onPhysiqueColorChanged: (color) => setState(() => _physiqueColor = color),
+              onPhysiqueColorChanged: (color) =>
+                  setState(() => _physiqueColor = color),
               onSkinColorChanged: (color) => setState(() => _skinColor = color),
-              onStyleColorChanged: (color) => setState(() => _styleColor = color),
-              onAssessmentChanged: (assessment) => setState(() => _assessment = assessment),
+              onStyleColorChanged: (color) =>
+                  setState(() => _styleColor = color),
+              onAssessmentChanged: (assessment) =>
+                  setState(() => _assessment = assessment),
             ),
           ),
           const SizedBox(height: 8),
@@ -825,8 +855,10 @@ class _StackedRings extends StatelessWidget {
               label: 'Physique',
               value: (physique * 100).round(),
               onColorChanged: onPhysiqueColorChanged,
-              isHighlighted: selectedAssessment == AppearanceAssessment.physique,
-              onButtonPressed: () => onAssessmentChanged(AppearanceAssessment.physique),
+              isHighlighted:
+                  selectedAssessment == AppearanceAssessment.physique,
+              onButtonPressed: () =>
+                  onAssessmentChanged(AppearanceAssessment.physique),
             ),
             const SizedBox(height: 12),
             _LegendItem(
@@ -835,7 +867,8 @@ class _StackedRings extends StatelessWidget {
               value: (skin * 100).round(),
               onColorChanged: onSkinColorChanged,
               isHighlighted: selectedAssessment == AppearanceAssessment.skin,
-              onButtonPressed: () => onAssessmentChanged(AppearanceAssessment.skin),
+              onButtonPressed: () =>
+                  onAssessmentChanged(AppearanceAssessment.skin),
             ),
             const SizedBox(height: 12),
             _LegendItem(
@@ -844,7 +877,8 @@ class _StackedRings extends StatelessWidget {
               value: (style * 100).round(),
               onColorChanged: onStyleColorChanged,
               isHighlighted: selectedAssessment == AppearanceAssessment.style,
-              onButtonPressed: () => onAssessmentChanged(AppearanceAssessment.style),
+              onButtonPressed: () =>
+                  onAssessmentChanged(AppearanceAssessment.style),
             ),
           ],
         ),
@@ -905,7 +939,12 @@ class _LegendItem extends StatelessWidget {
                 color: color.withOpacity(isHighlighted ? 1.0 : 0.85),
                 borderRadius: BorderRadius.circular(6),
                 boxShadow: isHighlighted
-                    ? [BoxShadow(color: color.withOpacity(0.4), blurRadius: 8, spreadRadius: 1)]
+                    ? [
+                        BoxShadow(
+                            color: color.withOpacity(0.4),
+                            blurRadius: 8,
+                            spreadRadius: 1)
+                      ]
                     : null,
               ),
               child: Text(
@@ -926,7 +965,8 @@ class _LegendItem extends StatelessWidget {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: isHighlighted ? color.withOpacity(0.2) : Colors.transparent,
+                color:
+                    isHighlighted ? color.withOpacity(0.2) : Colors.transparent,
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
                   color: isHighlighted ? color : Colors.grey.withOpacity(0.3),
@@ -938,7 +978,9 @@ class _LegendItem extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
                   fontSize: 13,
-                  color: isHighlighted ? color : Theme.of(context).textTheme.bodyMedium?.color,
+                  color: isHighlighted
+                      ? color
+                      : Theme.of(context).textTheme.bodyMedium?.color,
                 ),
               ),
             ),
@@ -1037,8 +1079,8 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
                 Text(
                   '${widget.label} Color',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
                 Container(
                   width: 32,
@@ -1084,7 +1126,11 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
                               ? Border.all(color: Colors.white, width: 3)
                               : Border.all(color: Colors.grey.withOpacity(0.3)),
                           boxShadow: isSelected
-                              ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 8)]
+                              ? [
+                                  BoxShadow(
+                                      color: color.withOpacity(0.5),
+                                      blurRadius: 8)
+                                ]
                               : null,
                         ),
                       ),
@@ -1102,11 +1148,14 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
                   controller: _valueController,
                   decoration: InputDecoration(
                     hintText: 'Enter value',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
                     counterText: '',
                   ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: false),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: false),
                   maxLength: 3,
                   onChanged: (value) {
                     final parsed = int.tryParse(value);
@@ -1125,9 +1174,12 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
                 TextField(
                   controller: _notesController,
                   decoration: InputDecoration(
-                    hintText: 'Add personal notes about your ${widget.label}...',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    hintText:
+                        'Add personal notes about your ${widget.label}...',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
                     alignLabelWithHint: true,
                   ),
                   maxLines: 6,
@@ -1193,9 +1245,24 @@ class _RingsPainter extends CustomPainter {
 
     // Ring configurations (outermost to innermost)
     final rings = [
-      (radius: size.width / 2 - 8, value: physique, color: physiqueColor, assessment: AppearanceAssessment.physique),
-      (radius: size.width / 2 - 28, value: skin, color: skinColor, assessment: AppearanceAssessment.skin),
-      (radius: size.width / 2 - 48, value: style, color: styleColor, assessment: AppearanceAssessment.style),
+      (
+        radius: size.width / 2 - 8,
+        value: physique,
+        color: physiqueColor,
+        assessment: AppearanceAssessment.physique
+      ),
+      (
+        radius: size.width / 2 - 28,
+        value: skin,
+        color: skinColor,
+        assessment: AppearanceAssessment.skin
+      ),
+      (
+        radius: size.width / 2 - 48,
+        value: style,
+        color: styleColor,
+        assessment: AppearanceAssessment.style
+      ),
     ];
 
     for (final ring in rings) {

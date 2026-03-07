@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../data/repositories/diet_repo.dart';
+import '../../../domain/models/diet_entry.dart';
 import '../../../domain/models/food_models.dart';
 import '../../../domain/services/food_nutrient_scaler.dart';
 import '../../widgets/diet/food_source_badge.dart';
@@ -44,7 +45,8 @@ class FoodDetailPage extends StatefulWidget {
 class _FoodDetailPageState extends State<FoodDetailPage> {
   final FoodNutrientScaler _scaler = const FoodNutrientScaler();
   final NumberFormat _decimal = NumberFormat('#,##0.##');
-  final TextEditingController _quantityController = TextEditingController(text: '1');
+  final TextEditingController _quantityController =
+      TextEditingController(text: '1');
 
   static const List<String> _mealSlots = [
     'Breakfast',
@@ -123,6 +125,7 @@ class _FoodDetailPageState extends State<FoodDetailPage> {
     await widget.dietRepo.addEntry(
       mealName: widget.food.name,
       loggedAt: DateTime.now(),
+      mealType: _mealTypeFromSlot(_mealSlot),
       calories: scaled.calories,
       proteinG: scaled.protein,
       carbsG: scaled.carbs,
@@ -142,6 +145,21 @@ class _FoodDetailPageState extends State<FoodDetailPage> {
       ),
     );
     Navigator.of(context).pop(true);
+  }
+
+  DietMealType _mealTypeFromSlot(String mealSlot) {
+    switch (mealSlot.trim().toLowerCase()) {
+      case 'breakfast':
+        return DietMealType.breakfast;
+      case 'lunch':
+        return DietMealType.lunch;
+      case 'dinner':
+        return DietMealType.dinner;
+      case 'snacks':
+      case 'snack':
+      default:
+        return DietMealType.snack;
+    }
   }
 
   void _adjustQuantity(double delta) {
@@ -167,7 +185,10 @@ class _FoodDetailPageState extends State<FoodDetailPage> {
     if (value == value.roundToDouble()) {
       return value.toStringAsFixed(0);
     }
-    return value.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+    return value
+        .toStringAsFixed(2)
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
   }
 
   String _formatNutrientAmount(double amount) {
@@ -180,10 +201,14 @@ class _FoodDetailPageState extends State<FoodDetailPage> {
     if (amount.abs() >= 100) {
       return amount.toStringAsFixed(1);
     }
-    return amount.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+    return amount
+        .toStringAsFixed(2)
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
   }
 
-  Map<NutrientGroup, List<NutrientValue>> _groupedNutrients(FoodScaledView scaled) {
+  Map<NutrientGroup, List<NutrientValue>> _groupedNutrients(
+      FoodScaledView scaled) {
     final grouped = <NutrientGroup, List<NutrientValue>>{
       for (final group in NutrientGroup.values) group: <NutrientValue>[],
     };
@@ -273,7 +298,8 @@ class _FoodDetailPageState extends State<FoodDetailPage> {
                       Text(
                         'Barcode: ${widget.food.barcode}',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.7),
                         ),
                       ),
                     ],
@@ -283,7 +309,8 @@ class _FoodDetailPageState extends State<FoodDetailPage> {
                       Text(
                         widget.food.ingredientsText!,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.68),
                         ),
                         maxLines: 4,
                         overflow: TextOverflow.ellipsis,
@@ -335,8 +362,10 @@ class _FoodDetailPageState extends State<FoodDetailPage> {
                           child: TextField(
                             controller: _quantityController,
                             textAlign: TextAlign.center,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(labelText: 'Quantity'),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            decoration:
+                                const InputDecoration(labelText: 'Quantity'),
                             onSubmitted: (_) => _applyQuantityText(),
                             onEditingComplete: _applyQuantityText,
                           ),
@@ -353,7 +382,8 @@ class _FoodDetailPageState extends State<FoodDetailPage> {
                         child: Text(
                           'Approximate conversion: source did not provide full gram weight details for this serving.',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.72),
                           ),
                         ),
                       ),
@@ -377,7 +407,8 @@ class _FoodDetailPageState extends State<FoodDetailPage> {
                     Text(
                       'Calories',
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.68),
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -465,7 +496,8 @@ class _FoodDetailPageState extends State<FoodDetailPage> {
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Copy to Custom Food is coming soon.'),
+                            content:
+                                Text('Copy to Custom Food is coming soon.'),
                             behavior: SnackBarBehavior.floating,
                           ),
                         );
@@ -496,7 +528,8 @@ class _FoodDetailPageState extends State<FoodDetailPage> {
         const SizedBox(height: 4),
         Text(
           '${_formatNutrientAmount(value)} $unit',
-          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          style: theme.textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w700),
         ),
       ],
     );

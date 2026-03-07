@@ -47,7 +47,8 @@ class UploadService extends ChangeNotifier {
 
   final List<UploadItem> queue = [];
   final List<UploadEvaluation> _evaluations = [];
-  final AppearanceAnalysisService _appearanceAnalysis = AppearanceAnalysisService();
+  final AppearanceAnalysisService _appearanceAnalysis =
+      AppearanceAnalysisService();
 
   bool get isSupported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
@@ -105,7 +106,8 @@ class UploadService extends ChangeNotifier {
       item.status = UploadStatus.error;
       item.error = e.toString();
       item.retryCount += 1;
-      item.nextRetryAt = DateTime.now().add(Duration(seconds: 1 << item.retryCount.clamp(1, 5)));
+      item.nextRetryAt = DateTime.now()
+          .add(Duration(seconds: 1 << item.retryCount.clamp(1, 5)));
       notifyListeners();
     }
   }
@@ -119,7 +121,8 @@ class UploadService extends ChangeNotifier {
 
   String _buildPath(String uid, UploadItem item) {
     final today = DateTime.now();
-    final day = '${today.year}${today.month.toString().padLeft(2, '0')}${today.day.toString().padLeft(2, '0')}';
+    final day =
+        '${today.year}${today.month.toString().padLeft(2, '0')}${today.day.toString().padLeft(2, '0')}';
     final prefix = item.type == UploadType.diet ? 'diet' : 'appearance';
     return 'users/$uid/$prefix/$day/${item.name}';
   }
@@ -134,7 +137,8 @@ class UploadService extends ChangeNotifier {
     } else {
       AppShellController.instance.selectTab(2);
       messenger?.showSnackBar(
-        SnackBar(content: Text('Appearance upload complete. Sent for evaluation.')),
+        SnackBar(
+            content: Text('Appearance upload complete. Sent for evaluation.')),
       );
     }
     _simulateEvaluation(item);
@@ -153,7 +157,8 @@ class UploadService extends ChangeNotifier {
       ));
       notifyListeners();
       if (item.type == UploadType.appearance) {
-        _logAppearanceFeedback(item, item.evaluationSummary ?? 'Awaiting feedback.');
+        _logAppearanceFeedback(
+            item, item.evaluationSummary ?? 'Awaiting feedback.');
       }
     });
   }
@@ -179,12 +184,15 @@ class UploadService extends ChangeNotifier {
     );
   }
 
-  Future<String> _inferAppearanceCategory(UploadItem item, String summary) async {
+  Future<String> _inferAppearanceCategory(
+      UploadItem item, String summary) async {
     final settings = SettingsRepo(AppDatabase.instance);
     final enabled = await settings.getCloudEnabled();
     final apiKey = await settings.getCloudApiKey();
     final provider = await settings.getCloudProvider();
-    final model = await settings.getCloudModel();
+    final model = await settings.getCloudModelForTask(
+      CloudModelTask.documentImageAnalysis,
+    );
     if (!enabled || apiKey == null || apiKey.trim().isEmpty) {
       return 'skin';
     }
@@ -220,7 +228,8 @@ class UploadService extends ChangeNotifier {
     try {
       final file = File(path);
       if (!await file.exists()) return null;
-      final persisted = await ImageDownscaler.persistImageToSubdir(file, 'appearance/$category');
+      final persisted = await ImageDownscaler.persistImageToSubdir(
+          file, 'appearance/$category');
       return persisted.path;
     } catch (_) {
       return null;

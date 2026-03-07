@@ -5,6 +5,46 @@ import 'package:sqflite/sqflite.dart';
 
 import '../db/db.dart';
 
+enum CloudModelTask {
+  inputRouting,
+  voiceCommandParsing,
+  programInterpretation,
+  documentImageAnalysis,
+  exerciseEnrichment,
+}
+
+extension CloudModelTaskMeta on CloudModelTask {
+  String get label {
+    switch (this) {
+      case CloudModelTask.inputRouting:
+        return 'Input routing';
+      case CloudModelTask.voiceCommandParsing:
+        return 'Voice command parsing';
+      case CloudModelTask.programInterpretation:
+        return 'Program interpretation';
+      case CloudModelTask.documentImageAnalysis:
+        return 'Document + image analysis';
+      case CloudModelTask.exerciseEnrichment:
+        return 'Exercise enrichment';
+    }
+  }
+
+  String get description {
+    switch (this) {
+      case CloudModelTask.inputRouting:
+        return 'Classifies Orb text/file/camera inputs into app intents.';
+      case CloudModelTask.voiceCommandParsing:
+        return 'Parses workout voice commands during sessions.';
+      case CloudModelTask.programInterpretation:
+        return 'Extracts structured plans from uploaded program files.';
+      case CloudModelTask.documentImageAnalysis:
+        return 'Runs deeper cloud analysis for uploaded docs and images.';
+      case CloudModelTask.exerciseEnrichment:
+        return 'Infers muscles and metadata for exercises.';
+    }
+  }
+}
+
 class SettingsRepo {
   SettingsRepo(this._db);
 
@@ -20,11 +60,21 @@ class SettingsRepo {
   static const String keyCloudApiKey = 'cloud_api_key';
   static const String keyCloudApiKeyPresent = 'cloud_api_key_present';
   static const String keyCloudModel = 'cloud_model';
+  static const String keyCloudModelInputRouting = 'cloud_model_input_routing';
+  static const String keyCloudModelVoiceCommandParsing =
+      'cloud_model_voice_command_parsing';
+  static const String keyCloudModelProgramInterpretation =
+      'cloud_model_program_interpretation';
+  static const String keyCloudModelDocumentImageAnalysis =
+      'cloud_model_document_image_analysis';
+  static const String keyCloudModelExerciseEnrichment =
+      'cloud_model_exercise_enrichment';
   static const String keyCloudProvider = 'cloud_provider';
   static const String keyCloudConsentDiet = 'cloud_consent_diet';
   static const String keyCloudConsentAppearance = 'cloud_consent_appearance';
   static const String keyCloudConsentLeaderboard = 'cloud_consent_leaderboard';
-  static const String keyAppearanceProfileEnabled = 'appearance_profile_enabled';
+  static const String keyAppearanceProfileEnabled =
+      'appearance_profile_enabled';
   static const String keyAppearanceProfileSex = 'appearance_profile_sex';
   static const String keyAppearanceAccessEnabled = 'appearance_access_enabled';
   static const String keyOrbHidden = 'orb_hidden';
@@ -32,6 +82,15 @@ class SettingsRepo {
   static const String keyOrbPosX = 'orb_pos_x';
   static const String keyOrbPosY = 'orb_pos_y';
   static const String keyProfileAvatarPath = 'profile_avatar_path';
+  static const String keySnackbarHighContrast = 'snackbar_high_contrast';
+
+  static const List<CloudModelTask> configurableCloudModelTasks = [
+    CloudModelTask.programInterpretation,
+    CloudModelTask.documentImageAnalysis,
+    CloudModelTask.inputRouting,
+    CloudModelTask.voiceCommandParsing,
+    CloudModelTask.exerciseEnrichment,
+  ];
 
   Future<String> getUnit() async {
     return (await _get(keyUnit)) ?? 'lb';
@@ -99,8 +158,7 @@ class SettingsRepo {
     if (_supportsSecureStorage()) {
       final marker = await _get(keyCloudApiKeyPresent);
       final legacy = await _get(keyCloudApiKey);
-      if (marker != '1' &&
-          (legacy == null || legacy.trim().isEmpty)) {
+      if (marker != '1' && (legacy == null || legacy.trim().isEmpty)) {
         return null;
       }
       final secure = await _secureStorage.read(key: keyCloudApiKey);
@@ -161,6 +219,100 @@ class SettingsRepo {
 
   Future<void> setCloudModel(String model) async {
     await _set(keyCloudModel, model.trim());
+  }
+
+  Future<String> getCloudModelForTask(CloudModelTask task) async {
+    final raw = await _get(_cloudModelTaskKey(task));
+    if (raw != null && raw.trim().isNotEmpty) {
+      return raw.trim();
+    }
+    final provider = await getCloudProvider();
+    return defaultCloudModelForTask(provider: provider, task: task);
+  }
+
+  Future<void> setCloudModelForTask(CloudModelTask task, String model) async {
+    await _set(_cloudModelTaskKey(task), model.trim());
+  }
+
+  String _cloudModelTaskKey(CloudModelTask task) {
+    switch (task) {
+      case CloudModelTask.inputRouting:
+        return keyCloudModelInputRouting;
+      case CloudModelTask.voiceCommandParsing:
+        return keyCloudModelVoiceCommandParsing;
+      case CloudModelTask.programInterpretation:
+        return keyCloudModelProgramInterpretation;
+      case CloudModelTask.documentImageAnalysis:
+        return keyCloudModelDocumentImageAnalysis;
+      case CloudModelTask.exerciseEnrichment:
+        return keyCloudModelExerciseEnrichment;
+    }
+  }
+
+  static String defaultCloudModelForTask({
+    required String provider,
+    required CloudModelTask task,
+  }) {
+    final normalizedProvider = provider.trim().toLowerCase();
+    if (normalizedProvider == 'openai') {
+      switch (task) {
+        case CloudModelTask.programInterpretation:
+          return 'gpt-5-mini';
+        case CloudModelTask.documentImageAnalysis:
+          return 'gpt-5';
+        case CloudModelTask.inputRouting:
+          return 'gpt-5-mini';
+        case CloudModelTask.voiceCommandParsing:
+          return 'gpt-5-mini';
+        case CloudModelTask.exerciseEnrichment:
+          return 'gpt-5-mini';
+      }
+    }
+    switch (task) {
+      case CloudModelTask.programInterpretation:
+        return 'gemini-2.0-flash';
+      case CloudModelTask.documentImageAnalysis:
+        return 'gemini-2.5-pro';
+      case CloudModelTask.inputRouting:
+        return 'gemini-2.0-flash';
+      case CloudModelTask.voiceCommandParsing:
+        return 'gemini-2.0-flash';
+      case CloudModelTask.exerciseEnrichment:
+        return 'gemini-2.0-flash';
+    }
+  }
+
+  static List<String> cloudModelOptionsForTask({
+    required String provider,
+    required CloudModelTask task,
+  }) {
+    final normalizedProvider = provider.trim().toLowerCase();
+    if (normalizedProvider == 'openai') {
+      switch (task) {
+        case CloudModelTask.programInterpretation:
+          return const ['gpt-5-mini', 'gpt-5', 'gpt-5-nano', 'gpt-4o'];
+        case CloudModelTask.documentImageAnalysis:
+          return const ['gpt-5', 'gpt-5-mini', 'gpt-4o'];
+        case CloudModelTask.inputRouting:
+          return const ['gpt-5-mini', 'gpt-5-nano', 'gpt-4o-mini', 'gpt-4o'];
+        case CloudModelTask.voiceCommandParsing:
+          return const ['gpt-5-mini', 'gpt-5-nano', 'gpt-4o-mini', 'gpt-4o'];
+        case CloudModelTask.exerciseEnrichment:
+          return const ['gpt-5-mini', 'gpt-5-nano', 'gpt-4o-mini', 'gpt-4o'];
+      }
+    }
+    switch (task) {
+      case CloudModelTask.programInterpretation:
+        return const ['gemini-2.0-flash', 'gemini-2.5-pro', 'gemini-1.5-flash'];
+      case CloudModelTask.documentImageAnalysis:
+        return const ['gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+      case CloudModelTask.inputRouting:
+        return const ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'];
+      case CloudModelTask.voiceCommandParsing:
+        return const ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'];
+      case CloudModelTask.exerciseEnrichment:
+        return const ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'];
+    }
   }
 
   Future<String> getCloudProvider() async {
@@ -240,6 +392,16 @@ class SettingsRepo {
       return;
     }
     await _set(keyProfileAvatarPath, path.trim());
+  }
+
+  Future<bool> getSnackbarHighContrast() async {
+    final raw = await _get(keySnackbarHighContrast);
+    if (raw == null) return true;
+    return raw == '1';
+  }
+
+  Future<void> setSnackbarHighContrast(bool value) async {
+    await _set(keySnackbarHighContrast, value ? '1' : '0');
   }
 
   Future<void> setOrbHidden(bool value) async {

@@ -7,9 +7,14 @@ import '../../widgets/glass/glass_card.dart';
 import 'day_editor_screen.dart';
 
 class ProgramEditorScreen extends StatefulWidget {
-  const ProgramEditorScreen({super.key, required this.programId});
+  const ProgramEditorScreen({
+    super.key,
+    required this.programId,
+    this.isNewProgram = false,
+  });
 
   final int programId;
+  final bool isNewProgram;
 
   @override
   State<ProgramEditorScreen> createState() => _ProgramEditorScreenState();
@@ -30,7 +35,8 @@ class _ProgramEditorScreenState extends State<ProgramEditorScreen> {
 
   Future<void> _load() async {
     final programs = await _programRepo.getPrograms();
-    final program = programs.firstWhere((p) => p['id'] == widget.programId, orElse: () => {});
+    final program = programs.firstWhere((p) => p['id'] == widget.programId,
+        orElse: () => {});
     if (program.isNotEmpty) {
       _nameController.text = program['name'] as String? ?? '';
     }
@@ -58,9 +64,12 @@ class _ProgramEditorScreenState extends State<ProgramEditorScreen> {
             autofocus: true,
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel')),
             ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+              onPressed: () =>
+                  Navigator.of(context).pop(controller.text.trim()),
               child: const Text('Add'),
             ),
           ],
@@ -134,7 +143,8 @@ class _ProgramEditorScreenState extends State<ProgramEditorScreen> {
                       return const Center(child: Text('Add your first day.'));
                     }
                     return ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
                       itemCount: days.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
@@ -144,7 +154,8 @@ class _ProgramEditorScreenState extends State<ProgramEditorScreen> {
                           padding: EdgeInsets.zero,
                           child: ListTile(
                             title: Text(day['day_name'] as String),
-                            subtitle: Text("Day ${(day['day_index'] as int) + 1}"),
+                            subtitle:
+                                Text("Day ${(day['day_index'] as int) + 1}"),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () async {
                               await Navigator.of(context).push(
@@ -167,7 +178,8 @@ class _ProgramEditorScreenState extends State<ProgramEditorScreen> {
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: GlassCard(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     children: [
                       const Icon(Icons.add_circle_outline),

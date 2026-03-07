@@ -16,6 +16,7 @@ class AppShellController {
   final ValueNotifier<String> appearanceProfileSex =
       ValueNotifier<String>('neutral');
   final ValueNotifier<bool> orbHidden = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> highContrastSnackbars = ValueNotifier<bool>(true);
   final ValueNotifier<bool> activeSession = ValueNotifier<bool>(false);
   final ValueNotifier<bool> activeSessionIndicatorHidden =
       ValueNotifier<bool>(false);
@@ -61,6 +62,11 @@ class AppShellController {
   void setOrbHidden(bool value) {
     if (orbHidden.value == value) return;
     orbHidden.value = value;
+  }
+
+  void setHighContrastSnackbars(bool value) {
+    if (highContrastSnackbars.value == value) return;
+    highContrastSnackbars.value = value;
   }
 
   void setActiveSession(bool value) {

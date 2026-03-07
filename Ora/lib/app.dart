@@ -6,6 +6,7 @@ import 'data/seed/demo_history_seed.dart';
 import 'data/repositories/settings_repo.dart';
 import 'diagnostics/diagnostics_log.dart';
 import 'ui/screens/shell/app_shell.dart';
+import 'ui/screens/shell/app_shell_controller.dart';
 import 'ui/screens/settings/cloud_required_screen.dart';
 
 class OraApp extends StatefulWidget {
@@ -55,8 +56,14 @@ class _OraAppState extends State<OraApp> {
   @override
   void initState() {
     super.initState();
-    _initFuture = OraApp._initialize();
+    _initFuture = OraApp._initialize().then((_) => _loadUiSettings());
     _cloudReadyFuture = _checkCloudReady();
+  }
+
+  Future<void> _loadUiSettings() async {
+    final settings = SettingsRepo(AppDatabase.instance);
+    final highContrast = await settings.getSnackbarHighContrast();
+    AppShellController.instance.setHighContrastSnackbars(highContrast);
   }
 
   Future<bool> _checkCloudReady() async {
@@ -72,38 +79,20 @@ class _OraAppState extends State<OraApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Ora',
-      debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.dark,
-      darkTheme: AppTheme.dark(),
-      scaffoldMessengerKey: OraApp.messengerKey,
-      home: FutureBuilder<void>(
-        future: _initFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return Scaffold(
-              backgroundColor: const Color(0xFF1D4ED8),
-              body: Center(
-                child: Image.asset(
-                  'assets/branding/ora.png',
-                  width: 180,
-                  height: 180,
-                ),
-              ),
-            );
-          }
-          if (snapshot.hasError) {
-            return Scaffold(
-              body: Center(
-                child: Text('Init failed: ${snapshot.error}'),
-              ),
-            );
-          }
-          return FutureBuilder<bool>(
-            future: _cloudReadyFuture,
-            builder: (context, cloudSnap) {
-              if (cloudSnap.connectionState != ConnectionState.done) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AppShellController.instance.highContrastSnackbars,
+      builder: (context, highContrastSnackbars, _) {
+        return MaterialApp(
+          title: 'Ora',
+          debugShowCheckedModeBanner: false,
+          themeMode: ThemeMode.dark,
+          darkTheme:
+              AppTheme.dark(highContrastSnackbars: highContrastSnackbars),
+          scaffoldMessengerKey: OraApp.messengerKey,
+          home: FutureBuilder<void>(
+            future: _initFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
                 return Scaffold(
                   backgroundColor: const Color(0xFF1D4ED8),
                   body: Center(
@@ -115,14 +104,38 @@ class _OraAppState extends State<OraApp> {
                   ),
                 );
               }
-              if (cloudSnap.data != true) {
-                return CloudRequiredScreen(onRefresh: _refreshCloud);
+              if (snapshot.hasError) {
+                return Scaffold(
+                  body: Center(
+                    child: Text('Init failed: ${snapshot.error}'),
+                  ),
+                );
               }
-              return const AppShell();
+              return FutureBuilder<bool>(
+                future: _cloudReadyFuture,
+                builder: (context, cloudSnap) {
+                  if (cloudSnap.connectionState != ConnectionState.done) {
+                    return Scaffold(
+                      backgroundColor: const Color(0xFF1D4ED8),
+                      body: Center(
+                        child: Image.asset(
+                          'assets/branding/ora.png',
+                          width: 180,
+                          height: 180,
+                        ),
+                      ),
+                    );
+                  }
+                  if (cloudSnap.data != true) {
+                    return CloudRequiredScreen(onRefresh: _refreshCloud);
+                  }
+                  return const AppShell();
+                },
+              );
             },
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

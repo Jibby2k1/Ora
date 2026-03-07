@@ -82,70 +82,94 @@ class InputRouter {
     final settings = SettingsRepo(_db);
     final cloudEnabled = await settings.getCloudEnabled();
     final provider = await settings.getCloudProvider();
-    final model = await settings.getCloudModel();
+    final model = await settings.getCloudModelForTask(
+      CloudModelTask.inputRouting,
+    );
     final apiKey = await settings.getCloudApiKey();
     final keyMissing = apiKey == null || apiKey.trim().isEmpty;
     if (!cloudEnabled || keyMissing) {
-      if (event.file != null && _isSpreadsheet(event.file!)) {
+      if (event.file != null && _isProgramFile(event.file!)) {
         return InputRouteResult(
           intent: InputIntent.programImport,
           confidence: 0.35,
-          reason: cloudEnabled ? 'Spreadsheet file fallback' : 'Spreadsheet file (cloud disabled)',
+          reason: cloudEnabled
+              ? 'Program file fallback'
+              : 'Program file (cloud disabled)',
           entity: event.fileName,
         );
       }
-      _showSnack(cloudEnabled ? 'Cloud API key required.' : 'Cloud parsing disabled.');
+      _showSnack(
+          cloudEnabled ? 'Cloud API key required.' : 'Cloud parsing disabled.');
       return null;
     }
 
-    final prompt = _buildPrompt(event);
-    InputRouteResult? result;
-    if (provider == 'openai') {
-      if (event.file != null && _isImage(event.file!)) {
-        result = await _classifyOpenAiWithImage(prompt, apiKey, model);
+    try {
+      final prompt = _buildPrompt(event);
+      InputRouteResult? result;
+      if (provider == 'openai') {
+        if (event.file != null && _isImage(event.file!)) {
+          result = await _classifyOpenAiWithImage(prompt, apiKey, model);
+        } else {
+          result = await _classifyOpenAi(prompt, apiKey, model);
+        }
       } else {
-        result = await _classifyOpenAi(prompt, apiKey, model);
+        result = await _classifyGemini(prompt, apiKey, model);
       }
-    } else {
-      result = await _classifyGemini(prompt, apiKey, model);
-    }
 
-    if (result == null && event.file != null && _isSpreadsheet(event.file!)) {
-      return InputRouteResult(
-        intent: InputIntent.programImport,
-        confidence: 0.35,
-        reason: 'Spreadsheet file fallback',
-        entity: event.fileName,
-      );
+      if (result == null && event.file != null && _isProgramFile(event.file!)) {
+        return InputRouteResult(
+          intent: InputIntent.programImport,
+          confidence: 0.35,
+          reason: 'Program file fallback',
+          entity: event.fileName,
+        );
+      }
+      return result;
+    } catch (error, stackTrace) {
+      debugPrint('[InputRouter][classify] $error\n$stackTrace');
+      if (event.file != null && _isProgramFile(event.file!)) {
+        return InputRouteResult(
+          intent: InputIntent.programImport,
+          confidence: 0.35,
+          reason: 'Program file fallback after cloud error',
+          entity: event.fileName,
+        );
+      }
+      _showSnack('Cloud classification unavailable right now.');
+      return null;
     }
-    return result;
   }
 
   Future<void> routeAndHandle(BuildContext context, InputEvent event) async {
-    final result = await classify(event);
-    if (result == null) return;
+    try {
+      final result = await classify(event);
+      if (result == null) return;
 
-    _selectTab(result.intent);
-    _showSnack('Routed to ${_labelFor(result.intent)}');
-    if (result.intent == InputIntent.programImport && event.file != null) {
-      await _handleProgramImport(context, event.file!);
-      return;
+      _selectTab(result.intent);
+      _showSnack('Routed to ${_labelFor(result.intent)}');
+      if (result.intent == InputIntent.programImport && event.file != null) {
+        await _handleProgramImport(context, event.file!);
+        return;
+      }
+      AppShellController.instance.setPendingInput(
+        InputDispatch(
+          intent: result.intent,
+          event: event,
+          confidence: result.confidence,
+          reason: result.reason,
+          entity: result.entity,
+        ),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('[InputRouter][route] $error\n$stackTrace');
+      _showSnack('Input routing failed. Please try again.');
     }
-    AppShellController.instance.setPendingInput(
-      InputDispatch(
-        intent: result.intent,
-        event: event,
-        confidence: result.confidence,
-        reason: result.reason,
-        entity: result.entity,
-      ),
-    );
   }
 
   Future<void> _handleProgramImport(BuildContext context, File file) async {
     final service = ImportService(_db);
     try {
-      final result = await service.importFromXlsxPath(file.path);
+      final result = await service.importFromSharedProgramPath(file.path);
       final missingCount = result.missingExercises.length;
       final snack = missingCount == 0
           ? 'Imported ${result.dayCount} days, ${result.exerciseCount} exercises.'
@@ -163,22 +187,27 @@ class InputRouter {
                 width: double.maxFinite,
                 child: ListView(
                   shrinkWrap: true,
-                  children: result.missingExercises.map((e) => Text('• $e')).toList(),
+                  children:
+                      result.missingExercises.map((e) => Text('• $e')).toList(),
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
+                TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('OK')),
               ],
             );
           },
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('[InputRouter][program-import] $e\n$stackTrace');
       _showSnack('Import failed: $e');
     }
   }
 
-  Future<InputRouteResult?> _classifyOpenAi(String prompt, String apiKey, String model) async {
+  Future<InputRouteResult?> _classifyOpenAi(
+      String prompt, String apiKey, String model) async {
     final useResponses = _openAiUsesResponses(model);
     final uri = Uri.https(
       'api.openai.com',
@@ -224,7 +253,8 @@ class InputRouter {
         .timeout(const Duration(seconds: 12));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      debugPrint('[OpenAI][classify] ${response.statusCode} ${_trimBody(response.body)}');
+      debugPrint(
+          '[OpenAI][classify] ${response.statusCode} ${_trimBody(response.body)}');
       _showSnack('OpenAI error: ${response.statusCode}');
       return null;
     }
@@ -234,7 +264,10 @@ class InputRouter {
       final content = useResponses
           ? (_extractResponseText(data) ?? '')
           : ((data['choices'] as List<dynamic>? ?? []).isNotEmpty
-              ? ((data['choices'] as List<dynamic>).first['message']?['content']?.toString() ?? '')
+              ? ((data['choices'] as List<dynamic>)
+                      .first['message']?['content']
+                      ?.toString() ??
+                  '')
               : '');
       if (content.trim().isEmpty) return null;
       final jsonText = _extractJson(content);
@@ -281,7 +314,8 @@ class InputRouter {
         .timeout(const Duration(seconds: 12));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      debugPrint('[OpenAI][classify-image] ${response.statusCode} ${_trimBody(response.body)}');
+      debugPrint(
+          '[OpenAI][classify-image] ${response.statusCode} ${_trimBody(response.body)}');
       _showSnack('OpenAI error: ${response.statusCode}');
       return null;
     }
@@ -305,7 +339,8 @@ class InputRouter {
   String? _extractResponseText(Map<String, dynamic> data) {
     final output = data['output'] as List<dynamic>? ?? [];
     for (final item in output) {
-      final content = (item as Map<String, dynamic>)['content'] as List<dynamic>? ?? [];
+      final content =
+          (item as Map<String, dynamic>)['content'] as List<dynamic>? ?? [];
       for (final part in content) {
         final map = part as Map<String, dynamic>;
         final type = map['type']?.toString();
@@ -317,7 +352,8 @@ class InputRouter {
     return null;
   }
 
-  Future<InputRouteResult?> _classifyGemini(String prompt, String apiKey, String model) async {
+  Future<InputRouteResult?> _classifyGemini(
+      String prompt, String apiKey, String model) async {
     if (_pendingImageBytes != null && _pendingImageMime != null) {
       return _classifyGeminiWithImage(prompt, apiKey, model);
     }
@@ -457,13 +493,15 @@ class InputRouter {
     final buffer = StringBuffer();
     buffer.writeln('You are a classifier for a fitness app.');
     buffer.writeln('Return ONLY a JSON object.');
-    buffer.writeln('Schema: {"intent": "training_log|diet_log|appearance_log|program_import|leaderboard|settings|unknown", "confidence": number, "reason": string, "entity": string|null}');
+    buffer.writeln(
+        'Schema: {"intent": "training_log|diet_log|appearance_log|program_import|leaderboard|settings|unknown", "confidence": number, "reason": string, "entity": string|null}');
     buffer.writeln('Input source: ${event.source.name}');
     if (event.text != null && event.text!.trim().isNotEmpty) {
       buffer.writeln('User text: "${event.text!.trim()}"');
     }
     if (event.file != null) {
-      buffer.writeln('File name: ${event.fileName ?? event.file!.uri.pathSegments.last}');
+      buffer.writeln(
+          'File name: ${event.fileName ?? event.file!.uri.pathSegments.last}');
       buffer.writeln('MIME: ${event.mimeType ?? 'unknown'}');
       final preview = _filePreview(event.file!);
       if (preview != null && preview.trim().isNotEmpty) {
@@ -479,9 +517,12 @@ class InputRouter {
     buffer.writeln('- Workout terms -> training_log');
     buffer.writeln('- Meal/macro/nutrition terms -> diet_log');
     buffer.writeln('- Style/physique/progress/photo terms -> appearance_log');
-    buffer.writeln('- Spreadsheet files (.xlsx/.csv) with program or exercise keywords -> program_import');
-    buffer.writeln('- For training_log, set entity to the exercise name if present.');
-    buffer.writeln('- For diet_log, set entity to the meal or food if present.');
+    buffer.writeln(
+        '- Program files (.xlsx/.csv/.txt/.pdf) with workout structure -> program_import');
+    buffer.writeln(
+        '- For training_log, set entity to the exercise name if present.');
+    buffer
+        .writeln('- For diet_log, set entity to the meal or food if present.');
     buffer.writeln('Return JSON only.');
     return buffer.toString();
   }
@@ -543,7 +584,8 @@ class InputRouter {
     buffer.writeln('Sheet: $sheetName');
     for (var r = 0; r < sheet.rows.length && r < 10; r++) {
       final row = sheet.rows[r];
-      final values = row.take(4).map((cell) => cell?.value?.toString() ?? '').join(' | ');
+      final values =
+          row.take(4).map((cell) => cell?.value?.toString() ?? '').join(' | ');
       if (values.trim().isNotEmpty) buffer.writeln(values);
     }
     final output = buffer.toString().trim();
@@ -573,9 +615,12 @@ class InputRouter {
         lower.endsWith('.heic');
   }
 
-  bool _isSpreadsheet(File file) {
+  bool _isProgramFile(File file) {
     final lower = file.path.toLowerCase();
-    return lower.endsWith('.xlsx') || lower.endsWith('.csv');
+    return lower.endsWith('.xlsx') ||
+        lower.endsWith('.csv') ||
+        lower.endsWith('.txt') ||
+        lower.endsWith('.pdf');
   }
 
   String _guessMimeType(String path) {
@@ -624,7 +669,8 @@ class InputRouter {
   }
 
   void _selectTab(InputIntent intent) {
-    final appearanceEnabled = AppShellController.instance.appearanceEnabled.value;
+    final appearanceEnabled =
+        AppShellController.instance.appearanceEnabled.value;
     final index = switch (intent) {
       InputIntent.trainingLog => 0,
       InputIntent.dietLog => 1,

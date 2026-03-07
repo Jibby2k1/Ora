@@ -719,11 +719,35 @@ class _ProgramsScreenState extends State<ProgramsScreen>
       );
       return;
     }
+    final sortedDays = List<Map<String, Object?>>.from(days)
+      ..sort(
+          (a, b) => (a['day_index'] as int).compareTo(b['day_index'] as int));
+    final trainingDays = <Map<String, Object?>>[];
+    for (final day in sortedDays) {
+      final dayId = day['id'] as int;
+      final exercises = await _programRepo.getProgramDayExercises(dayId);
+      if (exercises.isNotEmpty) {
+        trainingDays.add(day);
+      }
+    }
+    if (trainingDays.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No exercises found in this program.')),
+      );
+      return;
+    }
     final lastIndex =
         await _workoutRepo.getLastCompletedDayIndex(selectedProgramId);
-    final nextIndex = lastIndex == null ? 0 : (lastIndex + 1) % days.length;
-    final day = days.firstWhere((d) => d['day_index'] == nextIndex,
-        orElse: () => days.first);
+    final nextFromIndex = lastIndex == null ? 0 : lastIndex + 1;
+    var day = trainingDays.first;
+    for (final candidate in trainingDays) {
+      final idx = candidate['day_index'] as int;
+      if (idx >= nextFromIndex) {
+        day = candidate;
+        break;
+      }
+    }
     final contextData = await _sessionService.startSessionForProgramDay(
       programId: selectedProgramId,
       programDayId: day['id'] as int,
@@ -738,22 +762,24 @@ class _ProgramsScreenState extends State<ProgramsScreen>
   Future<void> _uploadProgram() async {
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['xlsx'],
-      withData: false,
+      allowedExtensions: const ['xlsx', 'csv', 'txt', 'pdf'],
+      withData: true,
+      withReadStream: true,
     );
     if (picked == null || picked.files.isEmpty) return;
-    final path = picked.files.first.path;
-    if (path == null || path.trim().isEmpty) {
+    final importFile = await _materializePickedFile(picked.files.first);
+    if (importFile == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Unable to read the selected file.')),
       );
       return;
     }
+    final path = importFile.path;
 
     final service = ImportService(AppDatabase.instance);
     try {
-      final result = await service.importFromXlsxPath(path);
+      final result = await service.importFromSharedProgramPath(path);
       final refreshedPrograms = await _programRepo.getPrograms();
       Map<String, Object?>? importedProgram;
       for (final program in refreshedPrograms) {
@@ -808,6 +834,49 @@ class _ProgramsScreenState extends State<ProgramsScreen>
         SnackBar(content: Text('Import failed: $error')),
       );
     }
+  }
+
+  Future<File?> _materializePickedFile(PlatformFile picked) async {
+    final rawPath = picked.path;
+    if (rawPath != null && rawPath.trim().isNotEmpty) {
+      final file = File(rawPath);
+      if (await file.exists()) return file;
+    }
+
+    Future<File?> writeBytes(List<int> bytes) async {
+      if (bytes.isEmpty) return null;
+      final dir = await getTemporaryDirectory();
+      final ext = _extensionFromName(picked.name);
+      final outPath =
+          '${dir.path}/ora_program_${DateTime.now().microsecondsSinceEpoch}$ext';
+      final file = File(outPath);
+      await file.writeAsBytes(bytes, flush: true);
+      return file;
+    }
+
+    final bytes = picked.bytes;
+    if (bytes != null && bytes.isNotEmpty) {
+      return writeBytes(bytes);
+    }
+
+    final stream = picked.readStream;
+    if (stream != null) {
+      final data = <int>[];
+      await for (final chunk in stream) {
+        data.addAll(chunk);
+      }
+      return writeBytes(data);
+    }
+
+    return null;
+  }
+
+  String _extensionFromName(String name) {
+    final slash = name.lastIndexOf(RegExp(r'[\\/]'));
+    final base = slash == -1 ? name : name.substring(slash + 1);
+    final dot = base.lastIndexOf('.');
+    if (dot <= 0 || dot == base.length - 1) return '';
+    return base.substring(dot);
   }
 
   Future<void> _showProgramDaySheet() async {

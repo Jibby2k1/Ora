@@ -587,7 +587,9 @@ class _SessionScreenState extends State<SessionScreen> {
   Future<void> _loadCloudSettings() async {
     final enabled = await _settingsRepo.getCloudEnabled();
     final apiKey = await _settingsRepo.getCloudApiKey();
-    final model = await _settingsRepo.getCloudModel();
+    final model = await _settingsRepo.getCloudModelForTask(
+      CloudModelTask.voiceCommandParsing,
+    );
     final provider = await _settingsRepo.getCloudProvider();
     final wakeWordEnabled = await _settingsRepo.getWakeWordEnabled();
     if (!mounted) return;
@@ -838,7 +840,9 @@ class _SessionScreenState extends State<SessionScreen> {
       final cloudEnabled = await _settingsRepo.getCloudEnabled();
       final apiKey = await _settingsRepo.getCloudApiKey();
       final provider = await _settingsRepo.getCloudProvider();
-      final model = await _settingsRepo.getCloudModel();
+      final model = await _settingsRepo.getCloudModelForTask(
+        CloudModelTask.exerciseEnrichment,
+      );
       final canEnrich =
           cloudEnabled && apiKey != null && apiKey.trim().isNotEmpty;
       final enricher = canEnrich ? MuscleEnricher() : null;
@@ -3346,7 +3350,9 @@ class _SessionScreenState extends State<SessionScreen> {
   Future<void> _refreshCloudSettingsForVoice() async {
     final enabled = await _settingsRepo.getCloudEnabled();
     final apiKey = await _settingsRepo.getCloudApiKey();
-    final model = await _settingsRepo.getCloudModel();
+    final model = await _settingsRepo.getCloudModelForTask(
+      CloudModelTask.voiceCommandParsing,
+    );
     final provider = await _settingsRepo.getCloudProvider();
     if (!mounted) return;
     if (enabled != _cloudEnabled ||

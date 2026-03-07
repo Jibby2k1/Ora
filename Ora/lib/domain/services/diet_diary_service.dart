@@ -113,6 +113,7 @@ class DietDiaryService {
     return _dietRepo.addEntry(
       mealName: entry.mealName,
       loggedAt: entry.loggedAt,
+      mealType: entry.mealType,
       calories: entry.calories,
       proteinG: entry.proteinG,
       carbsG: entry.carbsG,
@@ -137,10 +138,12 @@ class DietDiaryService {
     required double sodiumMg,
     String? notes,
   }) {
+    final loggedAt = _entryTimestampForDay(day);
     final mealLineNotes = _upsertMealLine(notes, mealSlot);
     return _dietRepo.addEntry(
       mealName: foodName,
-      loggedAt: _entryTimestampForDay(day),
+      loggedAt: loggedAt,
+      mealType: _mealTypeForSlot(mealSlot, fallbackTime: loggedAt),
       calories: calories,
       proteinG: proteinG,
       carbsG: carbsG,
@@ -184,10 +187,12 @@ class DietDiaryService {
     required DateTime day,
     required String mealSlot,
   }) {
+    final loggedAt = _entryTimestampForDay(day);
     final notes = _upsertMealLine(entry.notes, mealSlot);
     return _dietRepo.addEntry(
       mealName: entry.mealName,
-      loggedAt: _entryTimestampForDay(day),
+      loggedAt: loggedAt,
+      mealType: _mealTypeForSlot(mealSlot, fallbackTime: loggedAt),
       calories: entry.calories,
       proteinG: entry.proteinG,
       carbsG: entry.carbsG,
@@ -243,6 +248,23 @@ class DietDiaryService {
       return line;
     }
     return '1 serving';
+  }
+
+  DietMealType _mealTypeForSlot(String mealSlot,
+      {required DateTime fallbackTime}) {
+    switch (mealSlot.trim().toLowerCase()) {
+      case 'breakfast':
+        return DietMealType.breakfast;
+      case 'lunch':
+        return DietMealType.lunch;
+      case 'dinner':
+        return DietMealType.dinner;
+      case 'snacks':
+      case 'snack':
+        return DietMealType.snack;
+      default:
+        return DietMealTypeX.inferFromLoggedAt(fallbackTime);
+    }
   }
 
   List<DietHighlightedNutrient> _buildHighlightedNutrients({

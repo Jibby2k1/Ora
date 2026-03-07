@@ -9,8 +9,7 @@ List<String> migration0009() {
     'ALTER TABLE diet_entry ADD COLUMN portion_grams REAL;',
     'ALTER TABLE diet_entry ADD COLUMN portion_amount REAL;',
     'ALTER TABLE diet_entry ADD COLUMN portion_unit TEXT;',
-    createTableFoodLookupCache,
-    createTableFoodCustomOverride,
-    ...createFoodIndexes,
+    createTableFoodCache,
+    'CREATE INDEX IF NOT EXISTS idx_food_cache_expires ON food_cache(expires_at);',
   ];
 }

@@ -27,7 +27,12 @@ class ExerciseModal extends StatefulWidget {
 
   final SessionExerciseInfo info;
   final WorkoutRepo workoutRepo;
-  final Future<void> Function({double? weight, required int reps, int? partials, double? rpe, double? rir}) onAddSet;
+  final Future<void> Function(
+      {double? weight,
+      required int reps,
+      int? partials,
+      double? rpe,
+      double? rir}) onAddSet;
   final Future<void> Function(
     int id, {
     double? weight,
@@ -107,7 +112,9 @@ class _ExerciseModalState extends State<ExerciseModal> {
       return;
     }
     if (key == '.') {
-      final allowsDecimal = controller == _weightController || controller == _rpeController || controller == _rirController;
+      final allowsDecimal = controller == _weightController ||
+          controller == _rpeController ||
+          controller == _rirController;
       if (!allowsDecimal) return;
       if (text.contains('.')) return;
       controller.text = text.isEmpty ? '0.' : '$text.';
@@ -117,7 +124,8 @@ class _ExerciseModalState extends State<ExerciseModal> {
   }
 
   Widget _buildMuscleChips() {
-    if (_loadingMuscles && (_primaryMuscle == null || _primaryMuscle!.isEmpty)) {
+    if (_loadingMuscles &&
+        (_primaryMuscle == null || _primaryMuscle!.isEmpty)) {
       return const Text('Muscles: loading...');
     }
     final primary = _primaryMuscle?.trim();
@@ -139,7 +147,8 @@ class _ExerciseModalState extends State<ExerciseModal> {
         Chip(
           label: Text(secondary),
           backgroundColor: secondaryColor.withOpacity(0.18),
-          labelStyle: TextStyle(color: secondaryColor, fontWeight: FontWeight.w500),
+          labelStyle:
+              TextStyle(color: secondaryColor, fontWeight: FontWeight.w500),
           side: BorderSide(color: secondaryColor.withOpacity(0.5)),
         ),
       );
@@ -165,7 +174,9 @@ class _ExerciseModalState extends State<ExerciseModal> {
         try {
           final decoded = jsonDecode(secondaryJson);
           if (decoded is List) {
-            secondary.addAll(decoded.map((e) => e.toString()).where((e) => e.trim().isNotEmpty));
+            secondary.addAll(decoded
+                .map((e) => e.toString())
+                .where((e) => e.trim().isNotEmpty));
           }
         } catch (_) {}
       }
@@ -181,7 +192,9 @@ class _ExerciseModalState extends State<ExerciseModal> {
         final cloudEnabled = await settings.getCloudEnabled();
         final apiKey = await settings.getCloudApiKey();
         final provider = await settings.getCloudProvider();
-        final model = await settings.getCloudModel();
+        final model = await settings.getCloudModelForTask(
+          CloudModelTask.exerciseEnrichment,
+        );
         if (cloudEnabled && apiKey != null && apiKey.trim().isNotEmpty) {
           final enricher = MuscleEnricher();
           final info = await enricher.enrich(
@@ -224,7 +237,8 @@ class _ExerciseModalState extends State<ExerciseModal> {
     await widget.onAddSet(
       weight: weight,
       reps: reps,
-      partials: _showPartials ? int.tryParse(_partialsController.text.trim()) : 0,
+      partials:
+          _showPartials ? int.tryParse(_partialsController.text.trim()) : 0,
       rpe: _showRpeRir ? double.tryParse(_rpeController.text.trim()) : null,
       rir: _showRpeRir ? double.tryParse(_rirController.text.trim()) : null,
     );
@@ -256,8 +270,10 @@ class _ExerciseModalState extends State<ExerciseModal> {
   }
 
   Future<_ExerciseModalData> _loadData() async {
-    final sets = await widget.workoutRepo.getSetsForSessionExercise(widget.info.sessionExerciseId);
-    final history = await PrRepo(AppDatabase.instance).getSetsForExercise(widget.info.exerciseId);
+    final sets = await widget.workoutRepo
+        .getSetsForSessionExercise(widget.info.sessionExerciseId);
+    final history = await PrRepo(AppDatabase.instance)
+        .getSetsForExercise(widget.info.exerciseId);
     return _ExerciseModalData(sets: sets, history: history);
   }
 
@@ -274,24 +290,30 @@ class _ExerciseModalState extends State<ExerciseModal> {
         final restRange = (block.restSecMin != null || block.restSecMax != null)
             ? '${block.restSecMin ?? ''}-${block.restSecMax ?? ''}s rest'
             : 'Rest open';
-        final rpeRange = (block.targetRpeMin != null || block.targetRpeMax != null)
-            ? 'RPE ${block.targetRpeMin ?? ''}-${block.targetRpeMax ?? ''}'
-            : null;
-        final rirRange = (block.targetRirMin != null || block.targetRirMax != null)
-            ? 'RIR ${block.targetRirMin ?? ''}-${block.targetRirMax ?? ''}'
-            : null;
-        final partialsRange = (block.partialsTargetMin != null || block.partialsTargetMax != null)
+        final rpeRange =
+            (block.targetRpeMin != null || block.targetRpeMax != null)
+                ? 'RPE ${block.targetRpeMin ?? ''}-${block.targetRpeMax ?? ''}'
+                : null;
+        final rirRange =
+            (block.targetRirMin != null || block.targetRirMax != null)
+                ? 'RIR ${block.targetRirMin ?? ''}-${block.targetRirMax ?? ''}'
+                : null;
+        final partialsRange = (block.partialsTargetMin != null ||
+                block.partialsTargetMax != null)
             ? 'Partials ${block.partialsTargetMin ?? ''}-${block.partialsTargetMax ?? ''}'
             : null;
-        final extras = [rpeRange, rirRange, partialsRange].whereType<String>().join(' • ');
-        final label = '${block.role} • ${block.setCount} sets • $repsRange • $restRange';
+        final extras =
+            [rpeRange, rirRange, partialsRange].whereType<String>().join(' • ');
+        final label =
+            '${block.role} • ${block.setCount} sets • $repsRange • $restRange';
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(label),
-              if (extras.isNotEmpty) Text(extras, style: const TextStyle(color: Colors.white70)),
+              if (extras.isNotEmpty)
+                Text(extras, style: const TextStyle(color: Colors.white70)),
             ],
           ),
         );
@@ -300,7 +322,8 @@ class _ExerciseModalState extends State<ExerciseModal> {
   }
 
   Widget _buildChart(List<Map<String, Object?>> history) {
-    final weighted = history.where((row) => row['weight_value'] != null).toList();
+    final weighted =
+        history.where((row) => row['weight_value'] != null).toList();
     if (weighted.isEmpty) {
       return const Text('No history yet.');
     }
@@ -351,15 +374,20 @@ class _ExerciseModalState extends State<ExerciseModal> {
                 reservedSize: 28,
                 getTitlesWidget: (value, meta) {
                   final idx = value.toInt();
-                  if (idx == 0 || idx == labels.length ~/ 2 || idx == labels.length - 1) {
-                    return Text(labels[idx], style: const TextStyle(fontSize: 10));
+                  if (idx == 0 ||
+                      idx == labels.length ~/ 2 ||
+                      idx == labels.length - 1) {
+                    return Text(labels[idx],
+                        style: const TextStyle(fontSize: 10));
                   }
                   return const SizedBox.shrink();
                 },
               ),
             ),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           ),
           borderData: FlBorderData(show: false),
           lineBarsData: [
@@ -397,8 +425,10 @@ class _ExerciseModalState extends State<ExerciseModal> {
             builder: (context, snapshot) {
               final data = snapshot.data;
               final sets = data?.sets ?? [];
-              final planResult = SetPlanService().nextExpected(blocks: widget.info.planBlocks, existingSets: sets);
-              final nextLabel = planResult == null ? 'TOP' : planResult.nextRole;
+              final planResult = SetPlanService().nextExpected(
+                  blocks: widget.info.planBlocks, existingSets: sets);
+              final nextLabel =
+                  planResult == null ? 'TOP' : planResult.nextRole;
 
               return SingleChildScrollView(
                 child: GlassCard(
@@ -411,7 +441,8 @@ class _ExerciseModalState extends State<ExerciseModal> {
                           Expanded(
                             child: Text(
                               widget.info.exerciseName,
-                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                  fontSize: 20, fontWeight: FontWeight.w600),
                             ),
                           ),
                           IconButton(
@@ -423,31 +454,40 @@ class _ExerciseModalState extends State<ExerciseModal> {
                       const SizedBox(height: 8),
                       _buildMuscleChips(),
                       const SizedBox(height: 8),
-                      Text('Next: $nextLabel${planResult?.isAmrap == true ? ' (AMRAP)' : ''}'),
+                      Text(
+                          'Next: $nextLabel${planResult?.isAmrap == true ? ' (AMRAP)' : ''}'),
                       const SizedBox(height: 12),
-                      const Text('Prescription', style: TextStyle(fontWeight: FontWeight.w600)),
+                      const Text('Prescription',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
                       _buildPrescription(),
                       const SizedBox(height: 12),
-                      const Text('Recent History', style: TextStyle(fontWeight: FontWeight.w600)),
-                      if (data != null) _buildChart(data.history) else const SizedBox(height: 160),
+                      const Text('Recent History',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      if (data != null)
+                        _buildChart(data.history)
+                      else
+                        const SizedBox(height: 160),
                       const SizedBox(height: 8),
                       Row(
                         children: [
                           ChoiceChip(
                             label: const Text('Weight'),
                             selected: _chartMetric == 'Weight',
-                            onSelected: (_) => setState(() => _chartMetric = 'Weight'),
+                            onSelected: (_) =>
+                                setState(() => _chartMetric = 'Weight'),
                           ),
                           const SizedBox(width: 8),
                           ChoiceChip(
                             label: const Text('Weight × Reps'),
                             selected: _chartMetric == 'Volume',
-                            onSelected: (_) => setState(() => _chartMetric = 'Volume'),
+                            onSelected: (_) =>
+                                setState(() => _chartMetric = 'Volume'),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      const Text('Sets', style: TextStyle(fontWeight: FontWeight.w600)),
+                      const Text('Sets',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
                       if (sets.isEmpty)
                         const Text('No sets yet.')
                       else
@@ -455,7 +495,8 @@ class _ExerciseModalState extends State<ExerciseModal> {
                           children: sets.map((set) {
                             final role = set['set_role'] as String;
                             final amrap = (set['is_amrap'] as int? ?? 0) == 1;
-                            final partials = (set['partial_reps'] as int? ?? 0) > 0;
+                            final partials =
+                                (set['partial_reps'] as int? ?? 0) > 0;
                             final rpe = set['rpe'];
                             final rir = set['rir'];
                             return GlassCard(
@@ -468,9 +509,12 @@ class _ExerciseModalState extends State<ExerciseModal> {
                                   children: [
                                     Chip(label: Text(role)),
                                     if (amrap) const Chip(label: Text('AMRAP')),
-                                    if (partials) const Chip(label: Text('Partials')),
-                                    if (rpe != null) Chip(label: Text('RPE $rpe')),
-                                    if (rir != null) Chip(label: Text('RIR $rir')),
+                                    if (partials)
+                                      const Chip(label: Text('Partials')),
+                                    if (rpe != null)
+                                      Chip(label: Text('RPE $rpe')),
+                                    if (rir != null)
+                                      Chip(label: Text('RIR $rir')),
                                   ],
                                 ),
                                 subtitle: Text(
@@ -639,10 +683,18 @@ class _NumericKeypad extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final keys = [
-      '1', '2', '3',
-      '4', '5', '6',
-      '7', '8', '9',
-      '.', '0', 'back',
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+      '7',
+      '8',
+      '9',
+      '.',
+      '0',
+      'back',
     ];
     return GridView.builder(
       shrinkWrap: true,
@@ -686,12 +738,18 @@ class _SetEditSheetState extends State<_SetEditSheet> {
   @override
   void initState() {
     super.initState();
-    _weightController = TextEditingController(text: widget.setRow['weight_value']?.toString() ?? '');
-    _repsController = TextEditingController(text: widget.setRow['reps']?.toString() ?? '');
-    _partialsController = TextEditingController(text: widget.setRow['partial_reps']?.toString() ?? '0');
-    _rpeController = TextEditingController(text: widget.setRow['rpe']?.toString() ?? '');
-    _rirController = TextEditingController(text: widget.setRow['rir']?.toString() ?? '');
-    _restController = TextEditingController(text: widget.setRow['rest_sec_actual']?.toString() ?? '');
+    _weightController = TextEditingController(
+        text: widget.setRow['weight_value']?.toString() ?? '');
+    _repsController =
+        TextEditingController(text: widget.setRow['reps']?.toString() ?? '');
+    _partialsController = TextEditingController(
+        text: widget.setRow['partial_reps']?.toString() ?? '0');
+    _rpeController =
+        TextEditingController(text: widget.setRow['rpe']?.toString() ?? '');
+    _rirController =
+        TextEditingController(text: widget.setRow['rir']?.toString() ?? '');
+    _restController = TextEditingController(
+        text: widget.setRow['rest_sec_actual']?.toString() ?? '');
     _activeController = _weightController;
   }
 
@@ -721,7 +779,9 @@ class _SetEditSheetState extends State<_SetEditSheet> {
       return;
     }
     if (key == '.') {
-      final allowsDecimal = controller == _weightController || controller == _rpeController || controller == _rirController;
+      final allowsDecimal = controller == _weightController ||
+          controller == _rpeController ||
+          controller == _rirController;
       if (!allowsDecimal) return;
       if (text.contains('.')) return;
       controller.text = text.isEmpty ? '0.' : '$text.';
@@ -753,7 +813,8 @@ class _SetEditSheetState extends State<_SetEditSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Edit Set', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          const Text('Edit Set',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -817,7 +878,9 @@ class _SetEditSheetState extends State<_SetEditSheet> {
           const SizedBox(height: 8),
           Row(
             children: [
-              TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+              TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel')),
               const Spacer(),
               ElevatedButton(onPressed: _save, child: const Text('Save')),
             ],
@@ -830,7 +893,13 @@ class _SetEditSheetState extends State<_SetEditSheet> {
 }
 
 class _SetEditResult {
-  _SetEditResult({this.weight, this.reps, this.partials, this.rpe, this.rir, this.restSeconds});
+  _SetEditResult(
+      {this.weight,
+      this.reps,
+      this.partials,
+      this.rpe,
+      this.rir,
+      this.restSeconds});
 
   final double? weight;
   final int? reps;

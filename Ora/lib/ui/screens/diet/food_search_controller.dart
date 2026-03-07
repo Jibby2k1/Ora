@@ -10,7 +10,7 @@ class FoodSearchController extends ChangeNotifier {
   FoodSearchController({
     required FoodRepository repository,
     this.debounceDuration = const Duration(milliseconds: 350),
-    this.requestTimeout = const Duration(seconds: 2),
+    this.requestTimeout = const Duration(seconds: 4),
     this.pageSize = 20,
   }) : _repository = repository;
 
@@ -203,9 +203,12 @@ class FoodSearchController extends ChangeNotifier {
       _error = _results.isEmpty
           ? 'Search is taking too long. Try a shorter query.'
           : null;
-    } catch (_) {
+    } catch (error) {
       if (requestId != _activeSearchId) return;
-      _error = 'Could not load foods. Check your internet connection.';
+      final message = error.toString().toLowerCase().contains('food_cache')
+          ? 'Food cache was repaired. Please retry your search.'
+          : 'Could not load foods right now. Please try again.';
+      _error = message;
     } finally {
       if (requestId == _activeSearchId) {
         _loading = false;

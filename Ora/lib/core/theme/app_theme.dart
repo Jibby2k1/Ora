@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static ThemeData dark() {
+  static ThemeData dark({bool highContrastSnackbars = true}) {
     const base = Color(0xFF0D0F12);
     const surface = Color(0xFF12151B);
     const surfaceAlt = Color(0xFF1A202B);
@@ -52,7 +52,18 @@ class AppTheme {
         elevation: 0,
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: surfaceAlt.withOpacity(0.95),
+        backgroundColor: highContrastSnackbars
+            ? const Color(0xFFF3F7FF)
+            : surfaceAlt.withOpacity(0.95),
+        contentTextStyle: TextStyle(
+          color: highContrastSnackbars
+              ? const Color(0xFF081426)
+              : const Color(0xFFF7FAFF),
+          fontWeight: FontWeight.w600,
+        ),
+        actionTextColor: highContrastSnackbars
+            ? const Color(0xFF0A58FF)
+            : const Color(0xFFBBD4FF),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
