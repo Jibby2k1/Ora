@@ -96,7 +96,15 @@ class DietDiaryEntryItem {
   final String mealSlot;
   final String servingDescription;
 
-  double get calories => entry.calories ?? 0;
+  double get calories {
+    final explicit = entry.calories;
+    if (explicit != null && explicit > 0) return explicit;
+    final protein = entry.proteinG ?? 0;
+    final carbs = entry.carbsG ?? 0;
+    final fat = entry.fatG ?? 0;
+    final derived = (protein * 4) + (carbs * 4) + (fat * 9);
+    return derived > 0 ? derived : 0;
+  }
 }
 
 class DietDiaryMealGroup {

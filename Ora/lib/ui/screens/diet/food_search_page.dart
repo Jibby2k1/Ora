@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
 import '../../../data/food/food_repository.dart';
+import '../../../data/db/db.dart';
 import '../../../data/repositories/diet_repo.dart';
-import '../../../domain/models/diet_entry.dart';
+import '../../../data/repositories/settings_repo.dart';
 import '../../../domain/models/food_models.dart';
 import '../../widgets/diet/food_source_badge.dart';
 import '../../widgets/glass/glass_background.dart';
@@ -19,6 +21,8 @@ class FoodSearchPage extends StatefulWidget {
     required this.foodRepository,
     required this.dietRepo,
     this.initialMealSlot,
+    this.selectedDay,
+    this.selectionMode = false,
   });
 
   static Future<bool?> show(
@@ -26,6 +30,7 @@ class FoodSearchPage extends StatefulWidget {
     required FoodRepository foodRepository,
     required DietRepo dietRepo,
     String? initialMealSlot,
+    DateTime? selectedDay,
   }) {
     return Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -33,6 +38,23 @@ class FoodSearchPage extends StatefulWidget {
           foodRepository: foodRepository,
           dietRepo: dietRepo,
           initialMealSlot: initialMealSlot,
+          selectedDay: selectedDay,
+        ),
+      ),
+    );
+  }
+
+  static Future<FoodItem?> showForSelection(
+    BuildContext context, {
+    required FoodRepository foodRepository,
+    required DietRepo dietRepo,
+  }) {
+    return Navigator.of(context).push<FoodItem>(
+      MaterialPageRoute(
+        builder: (_) => FoodSearchPage(
+          foodRepository: foodRepository,
+          dietRepo: dietRepo,
+          selectionMode: true,
         ),
       ),
     );
@@ -41,18 +63,24 @@ class FoodSearchPage extends StatefulWidget {
   final FoodRepository foodRepository;
   final DietRepo dietRepo;
   final String? initialMealSlot;
+  final DateTime? selectedDay;
+  final bool selectionMode;
 
   @override
   State<FoodSearchPage> createState() => _FoodSearchPageState();
 }
 
 class _FoodSearchPageState extends State<FoodSearchPage> {
+  static const String _recentSearchFoodsKey = 'diet_recent_search_foods_v1';
+  static const int _recentSearchFoodLimit = 15;
+
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _resultsScrollController = ScrollController();
+  final SettingsRepo _settingsRepo = SettingsRepo(AppDatabase.instance);
 
   late final FoodSearchController _searchState;
 
-  List<_RecentFoodItem> _recentFoods = const [];
+  List<_RecentSearchFoodItem> _recentSearchFoods = const [];
 
   @override
   void initState() {
@@ -64,7 +92,7 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
 
     _searchController.addListener(_onSearchTextChanged);
     _resultsScrollController.addListener(_onResultsScroll);
-    unawaited(_loadRecentFoods());
+    unawaited(_loadRecentSearchFoods());
   }
 
   @override
@@ -104,37 +132,72 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
     }
   }
 
-  Future<void> _loadRecentFoods() async {
-    final entries = await widget.dietRepo.getRecentEntries(limit: 80);
+  Future<void> _loadRecentSearchFoods() async {
+    final raw = await _settingsRepo.getValue(_recentSearchFoodsKey);
     if (!mounted) return;
-
-    final seen = <String>{};
-    final recents = <_RecentFoodItem>[];
-    for (final entry in entries) {
-      final key = entry.mealName.trim().toLowerCase();
-      if (key.isEmpty || !seen.add(key)) continue;
-      recents.add(
-        _RecentFoodItem(
-          name: entry.mealName,
-          calories: entry.calories,
-          serving: _extractServingDescription(entry),
-        ),
-      );
-      if (recents.length >= 20) break;
+    if (raw == null || raw.trim().isEmpty) {
+      setState(() => _recentSearchFoods = const []);
+      return;
     }
 
-    setState(() {
-      _recentFoods = recents;
-    });
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        setState(() => _recentSearchFoods = const []);
+        return;
+      }
+
+      final parsed = <_RecentSearchFoodItem>[];
+      for (final item in decoded) {
+        if (item is! Map) continue;
+        final map = Map<String, dynamic>.from(item);
+        final foodJson = map['food'];
+        if (foodJson is! Map) continue;
+        final food = FoodItem.fromJson(Map<String, dynamic>.from(foodJson));
+        final viewedAt = DateTime.tryParse(map['viewedAt']?.toString() ?? '') ??
+            DateTime.now();
+        parsed.add(
+          _RecentSearchFoodItem(
+            food: food,
+            viewedAt: viewedAt,
+          ),
+        );
+      }
+
+      parsed.sort((a, b) => b.viewedAt.compareTo(a.viewedAt));
+      setState(() {
+        _recentSearchFoods = parsed.take(_recentSearchFoodLimit).toList();
+      });
+    } catch (_) {
+      setState(() => _recentSearchFoods = const []);
+    }
   }
 
-  String _extractServingDescription(DietEntry entry) {
-    final notes = entry.notes;
-    if (notes == null || notes.trim().isEmpty) return '1 serving';
-    final match =
-        RegExp(r'^Serving:\s*(.+)$', multiLine: true).firstMatch(notes);
-    if (match != null) return match.group(1)!.trim();
-    return '1 serving';
+  Future<void> _saveRecentSearchFood(FoodItem food) async {
+    if (!mounted) return;
+    final now = DateTime.now();
+    final next = <_RecentSearchFoodItem>[
+      _RecentSearchFoodItem(food: food, viewedAt: now),
+      for (final item in _recentSearchFoods)
+        if (!_isSameFood(item.food, food)) item,
+    ].take(_recentSearchFoodLimit).toList(growable: false);
+
+    setState(() {
+      _recentSearchFoods = next;
+    });
+
+    final payload = [
+      for (final item in next)
+        {
+          'food': item.food.toJson(),
+          'viewedAt': item.viewedAt.toIso8601String(),
+        },
+    ];
+    await _settingsRepo.setValue(_recentSearchFoodsKey, jsonEncode(payload));
+  }
+
+  bool _isSameFood(FoodItem a, FoodItem b) {
+    return a.source == b.source && a.id == b.id;
   }
 
   Future<void> _openResult(FoodSearchResult result) async {
@@ -150,16 +213,25 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
       return;
     }
 
+    if (widget.selectionMode) {
+      await _saveRecentSearchFood(detail);
+      if (!mounted) return;
+      Navigator.of(context).pop(detail);
+      return;
+    }
+
+    await _saveRecentSearchFood(detail);
+    if (!mounted) return;
+
     final added = await FoodDetailPage.show(
       context,
       food: detail,
       dietRepo: widget.dietRepo,
       initialMealSlot: widget.initialMealSlot,
+      selectedDay: widget.selectedDay,
     );
     if (!mounted) return;
     if (added == true) {
-      await _loadRecentFoods();
-      if (!mounted) return;
       Navigator.of(context).pop(true);
     }
   }
@@ -175,32 +247,60 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
       return;
     }
 
+    if (widget.selectionMode) {
+      if (!mounted) return;
+      Navigator.of(context).pop(food);
+      return;
+    }
+
     final added = await FoodDetailPage.show(
       context,
       food: food,
       dietRepo: widget.dietRepo,
       initialMealSlot: widget.initialMealSlot,
+      selectedDay: widget.selectedDay,
     );
     if (!mounted) return;
     if (added == true) {
-      await _loadRecentFoods();
-      if (!mounted) return;
       Navigator.of(context).pop(true);
     }
   }
 
   Future<void> _openFoodFromLookup(FoodItem food) async {
     if (!mounted) return;
+    await _saveRecentSearchFood(food);
+    if (!mounted) return;
+    if (widget.selectionMode) {
+      Navigator.of(context).pop(food);
+      return;
+    }
     final added = await FoodDetailPage.show(
       context,
       food: food,
       dietRepo: widget.dietRepo,
       initialMealSlot: widget.initialMealSlot,
+      selectedDay: widget.selectedDay,
     );
     if (!mounted) return;
     if (added == true) {
-      await _loadRecentFoods();
-      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    }
+  }
+
+  Future<void> _openRecentFoodDetail(FoodItem food) async {
+    if (!mounted) return;
+    await _saveRecentSearchFood(food);
+    if (!mounted) return;
+
+    final added = await FoodDetailPage.show(
+      context,
+      food: food,
+      dietRepo: widget.dietRepo,
+      initialMealSlot: widget.initialMealSlot,
+      selectedDay: widget.selectedDay,
+    );
+    if (!mounted) return;
+    if (added == true && !widget.selectionMode) {
       Navigator.of(context).pop(true);
     }
   }
@@ -310,8 +410,12 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
             ),
             segments: const [
               ButtonSegment<FoodSearchCategory>(
+                value: FoodSearchCategory.all,
+                label: Text('All'),
+              ),
+              ButtonSegment<FoodSearchCategory>(
                 value: FoodSearchCategory.commonFoods,
-                label: Text('Common'),
+                label: Text('Generic'),
               ),
               ButtonSegment<FoodSearchCategory>(
                 value: FoodSearchCategory.branded,
@@ -401,7 +505,7 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    FoodSourceBadge(source: result.source),
+                    FoodSourceBadge(resultType: result.resultType),
                     const SizedBox(height: 7),
                     Text(
                       kcal == null ? '--' : kcal.toStringAsFixed(0),
@@ -441,35 +545,29 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
       children: [
         Text(
-          'Recent foods',
+          'Recent Foods',
           style:
               theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 6),
-        if (_recentFoods.isEmpty)
+        if (_recentSearchFoods.isEmpty)
           GlassCard(
             padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
             radius: 14,
             child: Text(
-              'No recent foods yet. Add your first item to build this list.',
+              'Your recently opened food details will appear here.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
               ),
             ),
           )
         else
-          ..._recentFoods.map(
+          ..._recentSearchFoods.map(
             (item) => Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: InkWell(
                 borderRadius: BorderRadius.circular(14),
-                onTap: () {
-                  _searchController.text = item.name;
-                  _searchController.selection = TextSelection.collapsed(
-                    offset: item.name.length,
-                  );
-                  _searchState.onQueryChanged(item.name);
-                },
+                onTap: () => _openRecentFoodDetail(item.food),
                 child: GlassCard(
                   padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                   radius: 14,
@@ -482,7 +580,7 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              item.name,
+                              item.food.name,
                               style: theme.textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w700,
                               ),
@@ -490,7 +588,9 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              item.serving,
+                              item.food.brand?.trim().isNotEmpty == true
+                                  ? item.food.brand!.trim()
+                                  : item.food.source.label,
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurface
                                     .withValues(alpha: 0.68),
@@ -501,12 +601,8 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
                           ],
                         ),
                       ),
-                      Text(
-                        '${(item.calories ?? 0).round()} kcal',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.72),
-                        ),
+                      FoodSourceBadge(
+                        resultType: _resultTypeForFood(item.food),
                       ),
                     ],
                   ),
@@ -569,6 +665,16 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
         ),
       ],
     );
+  }
+
+  FoodResultType _resultTypeForFood(FoodItem food) {
+    if (food.source == FoodSource.custom) {
+      return FoodResultType.custom;
+    }
+    final dataSource = food.sourceDescription?.toLowerCase() ?? '';
+    final isBranded = dataSource.contains('branded') ||
+        (food.brand?.trim().isNotEmpty == true && food.barcode != null);
+    return isBranded ? FoodResultType.branded : FoodResultType.generic;
   }
 
   Widget _buildLoadingState() {
@@ -692,7 +798,7 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Food'),
+        title: Text(widget.selectionMode ? 'Select Food' : 'Add Food'),
         actions: [
           IconButton(
             onPressed: _scanBarcode,
@@ -729,16 +835,14 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
   }
 }
 
-class _RecentFoodItem {
-  const _RecentFoodItem({
-    required this.name,
-    required this.calories,
-    required this.serving,
+class _RecentSearchFoodItem {
+  const _RecentSearchFoodItem({
+    required this.food,
+    required this.viewedAt,
   });
 
-  final String name;
-  final double? calories;
-  final String serving;
+  final FoodItem food;
+  final DateTime viewedAt;
 }
 
 class _SkeletonLine extends StatelessWidget {

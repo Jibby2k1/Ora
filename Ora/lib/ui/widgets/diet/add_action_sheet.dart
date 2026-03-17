@@ -75,8 +75,8 @@ class AddActionSheet extends StatelessWidget {
             ),
             _ActionTile(
               icon: Icons.menu_book,
-              title: 'Add Recipe',
-              subtitle: 'Choose saved recipes',
+              title: 'Add Recipe / Meal',
+              subtitle: 'Choose or create a recipe',
               onTap: () => Navigator.of(context).pop(DiaryAddAction.addRecipe),
             ),
           ],

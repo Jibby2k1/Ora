@@ -589,7 +589,6 @@ class _ProgramsScreenState extends State<ProgramsScreen>
       MaterialPageRoute(
         builder: (_) => ProgramEditorScreen(
           programId: programId,
-          isNewProgram: true,
         ),
       ),
     );

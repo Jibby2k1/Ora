@@ -66,7 +66,7 @@ class DietDiaryService {
       var totals = const DietMacroTotals.zero();
       for (final item in slotEntries) {
         totals = totals.add(
-          calories: item.entry.calories ?? 0,
+          calories: item.calories,
           proteinG: item.entry.proteinG ?? 0,
           carbsG: item.entry.carbsG ?? 0,
           fatG: item.entry.fatG ?? 0,
@@ -113,6 +113,7 @@ class DietDiaryService {
     return _dietRepo.addEntry(
       mealName: entry.mealName,
       loggedAt: entry.loggedAt,
+      mealType: entry.mealType,
       calories: entry.calories,
       proteinG: entry.proteinG,
       carbsG: entry.carbsG,
@@ -141,6 +142,7 @@ class DietDiaryService {
     return _dietRepo.addEntry(
       mealName: foodName,
       loggedAt: _entryTimestampForDay(day),
+      mealType: _mealTypeFromSlot(mealSlot),
       calories: calories,
       proteinG: proteinG,
       carbsG: carbsG,
@@ -188,6 +190,7 @@ class DietDiaryService {
     return _dietRepo.addEntry(
       mealName: entry.mealName,
       loggedAt: _entryTimestampForDay(day),
+      mealType: _mealTypeFromSlot(mealSlot),
       calories: entry.calories,
       proteinG: entry.proteinG,
       carbsG: entry.carbsG,
@@ -197,6 +200,18 @@ class DietDiaryService {
       micros: entry.micros,
       notes: notes,
       imagePath: entry.imagePath,
+    );
+  }
+
+  Future<void> moveEntryToMeal({
+    required DietEntry entry,
+    required String mealSlot,
+  }) {
+    final notes = _upsertMealLine(entry.notes, mealSlot);
+    return _dietRepo.updateEntry(
+      id: entry.id,
+      mealType: _mealTypeFromSlot(mealSlot),
+      notes: notes,
     );
   }
 
@@ -228,7 +243,7 @@ class DietDiaryService {
     final servingMatch =
         RegExp(r'^Serving:\s*(.+)$', multiLine: true).firstMatch(notes);
     if (servingMatch != null) {
-      return servingMatch.group(1)!.trim();
+      return _normalizeServingDescription(servingMatch.group(1)!.trim());
     }
 
     final lines = notes
@@ -240,9 +255,18 @@ class DietDiaryService {
 
     for (final line in lines) {
       if (line.startsWith('Meal:') || line.startsWith('Source:')) continue;
-      return line;
+      return _normalizeServingDescription(line);
     }
     return '1 serving';
+  }
+
+  String _normalizeServingDescription(String raw) {
+    final cleaned = raw.trim();
+    if (cleaned.isEmpty) return '1 serving';
+    return cleaned.replaceFirstMapped(
+      RegExp(r'^(\d+(?:\.\d+)?)\s*x\s+', caseSensitive: false),
+      (match) => '${match.group(1)} ',
+    );
   }
 
   List<DietHighlightedNutrient> _buildHighlightedNutrients({
@@ -394,6 +418,21 @@ class DietDiaryService {
     }
 
     return lines.join('\n');
+  }
+
+  DietMealType _mealTypeFromSlot(String mealSlot) {
+    switch (mealSlot.trim().toLowerCase()) {
+      case 'breakfast':
+        return DietMealType.breakfast;
+      case 'lunch':
+        return DietMealType.lunch;
+      case 'dinner':
+        return DietMealType.dinner;
+      case 'snacks':
+      case 'snack':
+      default:
+        return DietMealType.snack;
+    }
   }
 
   DateTime _entryTimestampForDay(DateTime day) {

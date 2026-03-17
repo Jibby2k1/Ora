@@ -9,29 +9,70 @@ class FoodSearchRanker {
 
   final Set<String> stopWords;
 
+  static const Set<String> _genericFoodTerms = {
+    'chicken',
+    'breast',
+    'egg',
+    'banana',
+    'rice',
+    'beef',
+    'turkey',
+    'salmon',
+    'yogurt',
+    'milk',
+    'oatmeal',
+    'potato',
+  };
+
+  static const Set<String> _brandHints = {
+    'tyson',
+    'fairlife',
+    'quest',
+    'kirkland',
+    'chobani',
+    'fage',
+    'dannon',
+    'oscar',
+    'mayer',
+    'trader',
+    'joes',
+    'costco',
+    'walmart',
+    'great',
+    'value',
+  };
+
   List<FoodSearchResult> rankResults({
     required List<FoodSearchResult> input,
     required String query,
     required FoodSearchCategory category,
     required Set<String> recentNames,
-    bool includeAllTokensBoost = true,
   }) {
-    final tokens = tokenizeForScoring(query);
-    final deduped = <String, _ScoredResult>{};
+    final normalizedQuery = normalizeQuery(query);
+    if (normalizedQuery.isEmpty) {
+      return input;
+    }
+    final queryTokens = tokenize(normalizedQuery);
+    final genericIntent = _isGenericFoodIntent(
+      normalizedQuery: normalizedQuery,
+      queryTokens: queryTokens,
+    );
 
+    final deduped = <String, _ScoredResult>{};
     for (final item in input) {
-      final score = scoreResult(
-        item,
-        query: query,
-        queryTokens: tokens,
+      final score = computeScore(
+        queryNormalized: normalizedQuery,
+        queryTokens: queryTokens,
+        result: item,
         category: category,
         recentNames: recentNames,
-        includeAllTokensBoost: includeAllTokensBoost,
+        genericIntent: genericIntent,
       );
-      final key = '${_normalizeText(item.name)}|${_normalizeText(item.brand ?? "")}';
-      final previous = deduped[key];
-      if (previous == null || score > previous.score) {
-        deduped[key] = _ScoredResult(item: item, score: score);
+      final dedupeKey =
+          '${normalizeQuery(item.name)}|${normalizeQuery(item.brand ?? '')}';
+      final existing = deduped[dedupeKey];
+      if (existing == null || score > existing.score) {
+        deduped[dedupeKey] = _ScoredResult(item: item, score: score);
       }
     }
 
@@ -39,121 +80,323 @@ class FoodSearchRanker {
       ..sort((left, right) {
         final byScore = right.score.compareTo(left.score);
         if (byScore != 0) return byScore;
+
+        // Stable tie-breaker: generic -> custom -> branded
+        final leftPriority = _resultTypePriority(left.item.resultType);
+        final rightPriority = _resultTypePriority(right.item.resultType);
+        final byType = leftPriority.compareTo(rightPriority);
+        if (byType != 0) return byType;
+
         return left.item.name.compareTo(right.item.name);
       });
+
     return ranked.map((entry) => entry.item).toList(growable: false);
   }
 
-  double scoreResult(
-    FoodSearchResult result, {
-    required String query,
+  String normalizeQuery(String value) {
+    return value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\u0000-\u001f]'), ' ')
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  List<String> tokenize(String normalizedQuery) {
+    return normalizedQuery
+        .split(' ')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty && !stopWords.contains(value))
+        .toList(growable: false);
+  }
+
+  String buildRequiredTokenQuery(String query) {
+    final normalized = normalizeQuery(query);
+    if (normalized.isEmpty) return '';
+    final tokens = tokenize(normalized);
+    if (tokens.isEmpty) return normalized;
+    return tokens.map((token) => '+$token').join(' ');
+  }
+
+  double computeScore({
+    required String queryNormalized,
     required List<String> queryTokens,
+    required FoodSearchResult result,
     required FoodSearchCategory category,
     required Set<String> recentNames,
-    bool includeAllTokensBoost = true,
+    required bool genericIntent,
   }) {
+    final candidateName = normalizeQuery(result.name);
+    if (candidateName.isEmpty) {
+      return -10000;
+    }
+
+    final candidateTokens = tokenize(candidateName);
+    final phraseMatch = candidateName.contains(queryNormalized);
+    final exactMatch = candidateName == queryNormalized;
+    final prefixMatch = candidateName.startsWith(queryNormalized);
+    final matchedTokens = _countMatchedTokens(
+      queryTokens: queryTokens,
+      candidateTokens: candidateTokens,
+      candidateName: candidateName,
+    );
+    final allTokensPresent =
+        queryTokens.isNotEmpty && matchedTokens == queryTokens.length;
+    final missingTokens = max(0, queryTokens.length - matchedTokens);
+    final tokenCoverage =
+        queryTokens.isEmpty ? 0.0 : matchedTokens / max(1, queryTokens.length);
+
+    final inOrder = _tokensInOrder(
+      queryTokens: queryTokens,
+      candidateName: candidateName,
+    );
+    final adjacent = _tokensAdjacent(
+      queryTokens: queryTokens,
+      candidateName: candidateName,
+    );
+
     var score = 0.0;
-    final name = _normalizeText(result.name);
-    final dataType = _normalizeText(result.dataType ?? '');
-    final queryNormalized = _normalizeText(query);
 
-    if (name == queryNormalized) {
-      score += 120;
-    } else if (name.startsWith(queryNormalized)) {
-      score += 70;
+    if (phraseMatch) score += 120;
+    if (exactMatch) score += 40;
+    if (prefixMatch) score += 80;
+
+    if (allTokensPresent) {
+      score += 60;
+    } else {
+      // Hard gate: missing tokens are strongly penalized.
+      score -= missingTokens * 85;
+      if (matchedTokens == 0 && queryTokens.isNotEmpty) {
+        score -= 180;
+      }
     }
 
-    final candidateTokens = tokenizeForScoring(name);
-    final coverage = _coverageScore(queryTokens, candidateTokens, name);
-    score += coverage * 80;
+    score += tokenCoverage * 80;
 
-    if (includeAllTokensBoost && _containsAllTokens(queryTokens, candidateTokens, name)) {
-      score += 25;
+    if (inOrder) score += 30;
+    if (adjacent) score += 20;
+
+    final shouldRunFuzzy =
+        phraseMatch || matchedTokens > 0 || queryTokens.length <= 1;
+    if (shouldRunFuzzy) {
+      final fuzzySimilarity = substringEditDistanceScore(
+        queryNormalized: queryNormalized,
+        candidateNormalized: candidateName,
+      );
+      score += fuzzySimilarity * 60;
+    } else {
+      score -= 40;
     }
 
-    final similarity = _querySimilarity(queryNormalized, name);
-    score += similarity * 60;
+    if (recentNames.contains(candidateName)) {
+      score += 20;
+    }
+    if (result.hasRichNutrientPanel) {
+      score += 8;
+    }
+    final normalizedDataType = (result.dataType ?? '').toLowerCase().trim();
+    if (result.source == FoodSource.usdaFdc) {
+      if (normalizedDataType.contains('foundation')) {
+        score += 60;
+      } else if (normalizedDataType.contains('sr legacy')) {
+        score += 45;
+      } else if (normalizedDataType.contains('survey') ||
+          normalizedDataType.contains('fndds')) {
+        score += 24;
+      } else if (normalizedDataType.contains('branded')) {
+        score += 10;
+      } else {
+        score += 18;
+      }
 
-    if (recentNames.contains(name)) {
+      if (category == FoodSearchCategory.commonFoods &&
+          !normalizedDataType.contains('branded')) {
+        score += 15;
+      }
+      if (category == FoodSearchCategory.all &&
+          genericIntent &&
+          result.resultType == FoodResultType.generic) {
+        score += 20;
+      }
+    }
+    if (queryTokens.contains('raw') && candidateName.contains('raw')) {
+      score += 28;
+    }
+    if (queryTokens.contains('cooked') && candidateName.contains('cooked')) {
       score += 20;
     }
 
-    if (result.source == FoodSource.custom) {
-      score += 40;
+    final explicitBrandHit = _isExplicitBrandHit(
+      queryNormalized: queryNormalized,
+      result: result,
+    );
+    final brandedIntent = _isBrandedIntent(
+      queryNormalized: queryNormalized,
+      queryTokens: queryTokens,
+    );
+
+    switch (result.resultType) {
+      case FoodResultType.generic:
+        if (genericIntent || category == FoodSearchCategory.commonFoods) {
+          score += 35;
+        } else {
+          score += 8;
+        }
+        break;
+      case FoodResultType.custom:
+        score += 10;
+        if (category == FoodSearchCategory.custom) {
+          score += 20;
+        }
+        break;
+      case FoodResultType.branded:
+        if ((genericIntent || category == FoodSearchCategory.commonFoods) &&
+            !explicitBrandHit &&
+            !brandedIntent) {
+          score -= 30;
+        } else if (explicitBrandHit || brandedIntent) {
+          score += 16;
+        }
+        if (category == FoodSearchCategory.branded) {
+          score += 15;
+        }
+        break;
     }
 
-    score += _sourceBoost(result, category, dataType: dataType);
-
-    if (result.hasRichNutrientPanel) {
-      score += 8;
+    if (!allTokensPresent &&
+        queryTokens.length >= 2 &&
+        result.resultType == FoodResultType.branded &&
+        genericIntent) {
+      score -= 25;
     }
 
     return score;
   }
 
-  String buildRequiredTokenQuery(String query) {
-    final pieces = RegExp(r'"([^"]+)"|(\S+)').allMatches(query);
-    final transformed = <String>[];
-    for (final match in pieces) {
-      final quoted = match.group(1);
-      final raw = (quoted ?? match.group(2) ?? '').trim();
-      if (raw.isEmpty) continue;
-      final normalized = quoted == null
-          ? _normalizeText(raw)
-          : raw.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
-      if (quoted == null && stopWords.contains(normalized)) continue;
-      transformed.add(quoted == null ? '+$normalized' : '"$normalized"');
+  double substringEditDistanceScore({
+    required String queryNormalized,
+    required String candidateNormalized,
+  }) {
+    if (queryNormalized.isEmpty || candidateNormalized.isEmpty) {
+      return 0;
     }
-    return transformed.join(' ');
-  }
+    if (candidateNormalized.contains(queryNormalized)) {
+      return 1;
+    }
 
-  List<String> tokenizeForScoring(String query) {
-    final matches = RegExp(r'"([^"]+)"|(\S+)').allMatches(query);
-    final tokens = <String>[];
-    for (final match in matches) {
-      final quoted = match.group(1);
-      final raw = (quoted ?? match.group(2) ?? '').trim();
-      if (raw.isEmpty) continue;
-      final token = quoted == null
-          ? _normalizeText(raw)
-          : raw.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
-      if (quoted == null && stopWords.contains(token)) continue;
-      if (token.isNotEmpty) {
-        tokens.add(token);
+    final queryLength = queryNormalized.length;
+    final candidateLength = candidateNormalized.length;
+    var bestDistance = queryLength + candidateLength;
+
+    if (candidateLength <= queryLength + 2) {
+      bestDistance = _damerauLevenshtein(
+        queryNormalized,
+        candidateNormalized,
+        maxDistance: bestDistance,
+      );
+    } else {
+      final baseWindow = queryLength + 2;
+      final minWindow = max(4, queryLength - 2);
+      final maxWindow = min(candidateLength, queryLength + 6);
+      final maxStart = min(candidateLength - minWindow, 36);
+
+      for (var start = 0; start <= maxStart; start++) {
+        final windows = <int>{
+          min(maxWindow, baseWindow),
+          min(maxWindow, queryLength),
+          min(maxWindow, minWindow),
+        };
+        for (final window in windows) {
+          final end = start + window;
+          if (end > candidateLength) continue;
+          final sample = candidateNormalized.substring(start, end);
+          final distance = _damerauLevenshtein(
+            queryNormalized,
+            sample,
+            maxDistance: bestDistance,
+          );
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            if (bestDistance == 0) break;
+          }
+        }
+        if (bestDistance == 0) break;
       }
     }
-    return tokens;
+
+    final similarity = 1 - (bestDistance / max(queryLength, 1));
+    if (similarity.isNaN) return 0;
+    return similarity.clamp(0.0, 1.0);
   }
 
-  bool _containsAllTokens(
-    List<String> queryTokens,
-    List<String> candidateTokens,
-    String candidateName,
-  ) {
-    if (queryTokens.isEmpty) return false;
-    return queryTokens.every((token) => _candidateTokenMatch(token, candidateTokens, candidateName));
+  bool _isGenericFoodIntent({
+    required String normalizedQuery,
+    required List<String> queryTokens,
+  }) {
+    if (queryTokens.isEmpty || queryTokens.length > 3) {
+      return false;
+    }
+    if (_isBrandedIntent(
+      queryNormalized: normalizedQuery,
+      queryTokens: queryTokens,
+    )) {
+      return false;
+    }
+    final genericHits = queryTokens.where(_genericFoodTerms.contains).length;
+    if (genericHits >= 1) return true;
+    return queryTokens.every((token) => token.length <= 10);
   }
 
-  double _coverageScore(
-    List<String> queryTokens,
-    List<String> candidateTokens,
-    String candidateName,
-  ) {
+  bool _isBrandedIntent({
+    required String queryNormalized,
+    required List<String> queryTokens,
+  }) {
+    if (queryTokens.any((token) => _brandHints.contains(token))) {
+      return true;
+    }
+    // Tokens with mixed letters + digits often represent branded products.
+    if (RegExp(r'[a-z]+\d|\d+[a-z]').hasMatch(queryNormalized)) {
+      return true;
+    }
+    return false;
+  }
+
+  bool _isExplicitBrandHit({
+    required String queryNormalized,
+    required FoodSearchResult result,
+  }) {
+    final normalizedBrand = normalizeQuery(result.brand ?? '');
+    if (normalizedBrand.isEmpty) return false;
+    final brandTokens = tokenize(normalizedBrand);
+    if (brandTokens.isEmpty) return false;
+    return brandTokens.any((token) => queryNormalized.contains(token));
+  }
+
+  int _countMatchedTokens({
+    required List<String> queryTokens,
+    required List<String> candidateTokens,
+    required String candidateName,
+  }) {
     if (queryTokens.isEmpty) return 0;
-    var matchedTokens = 0;
+    var matched = 0;
     for (final token in queryTokens) {
-      if (_candidateTokenMatch(token, candidateTokens, candidateName)) {
-        matchedTokens++;
+      if (_candidateHasToken(
+        token: token,
+        candidateTokens: candidateTokens,
+        candidateName: candidateName,
+      )) {
+        matched += 1;
       }
     }
-    return matchedTokens / max(1, queryTokens.length);
+    return matched;
   }
 
-  bool _candidateTokenMatch(
-    String token,
-    List<String> candidateTokens,
-    String candidateName,
-  ) {
+  bool _candidateHasToken({
+    required String token,
+    required List<String> candidateTokens,
+    required String candidateName,
+  }) {
     if (token.contains(' ')) {
       return candidateName.contains(token);
     }
@@ -165,47 +408,42 @@ class FoodSearchRanker {
     return false;
   }
 
-  double _querySimilarity(String query, String candidate) {
-    final normalizedQuery = _normalizeText(query);
-    final normalizedCandidate = _normalizeText(candidate);
-    if (normalizedQuery.isEmpty || normalizedCandidate.isEmpty) return 0;
-
-    final qLen = normalizedQuery.length;
-    final cLen = normalizedCandidate.length;
-
-    int bestDistance;
-    if (cLen <= qLen + 2) {
-      bestDistance = _damerauLevenshtein(
-        normalizedQuery,
-        normalizedCandidate,
-        maxDistance: qLen + 10,
-      );
-    } else {
-      final win = max(4, min(qLen + 2, qLen + 6));
-      final upper = max(0, cLen - win);
-      final steps = min(30, upper);
-      var minimal = qLen + cLen;
-      for (var i = 0; i <= steps; i++) {
-        final window = normalizedCandidate.substring(i, i + win);
-        final distance = _damerauLevenshtein(
-          normalizedQuery,
-          window,
-          maxDistance: minimal,
-        );
-        if (distance < minimal) {
-          minimal = distance;
-          if (minimal == 0) {
-            break;
-          }
-        }
-      }
-      bestDistance = minimal;
+  bool _tokensInOrder({
+    required List<String> queryTokens,
+    required String candidateName,
+  }) {
+    if (queryTokens.length < 2) return false;
+    var lastIndex = -1;
+    for (final token in queryTokens) {
+      final index = candidateName.indexOf(token, lastIndex + 1);
+      if (index < 0) return false;
+      lastIndex = index;
     }
+    return true;
+  }
 
-    final denominator = max(qLen, 1);
-    final similarity = 1 - (bestDistance / denominator);
-    if (similarity.isNaN) return 0;
-    return similarity.clamp(0.0, 1.0);
+  bool _tokensAdjacent({
+    required List<String> queryTokens,
+    required String candidateName,
+  }) {
+    if (queryTokens.length < 2) return false;
+    final normalized = candidateName.replaceAll(RegExp(r'\s+'), ' ');
+    final phrase = queryTokens.join(' ');
+    if (normalized.contains(phrase)) return true;
+
+    for (var i = 0; i < queryTokens.length - 1; i++) {
+      final left = queryTokens[i];
+      final right = queryTokens[i + 1];
+      final leftIndex = normalized.indexOf(left);
+      if (leftIndex < 0) return false;
+      final nextSearchStart = leftIndex + left.length;
+      if (nextSearchStart > normalized.length) return false;
+      final rightIndex = normalized.indexOf(right, nextSearchStart);
+      if (rightIndex < 0) return false;
+      final gap = rightIndex - (leftIndex + left.length);
+      if (gap > 5) return false;
+    }
+    return true;
   }
 
   int _damerauLevenshtein(
@@ -265,35 +503,12 @@ class FoodSearchRanker {
     return matrix[lenA][lenB];
   }
 
-  double _sourceBoost(
-    FoodSearchResult result,
-    FoodSearchCategory category, {
-    required String dataType,
-  }) {
-    if (result.source == FoodSource.custom) return 40;
-    if (result.source == FoodSource.usdaFdc) {
-      if (category == FoodSearchCategory.commonFoods ||
-          category == FoodSearchCategory.branded) {
-        if (dataType == 'foundation') return 25;
-        if (dataType == 'sr legacy' || dataType == 'srlegacy' || dataType == 'sr') {
-          return 20;
-        }
-        if (dataType == 'survey' || dataType.contains('fndds')) return 10;
-        if (result.isBranded || dataType == 'branded') return 8;
-      }
-    }
-    if (result.source == FoodSource.nutritionix) return 6;
-    if (result.source == FoodSource.openFoodFacts) return 0;
-    return 0;
-  }
-
-  String _normalizeText(String value) {
-    return value
-        .trim()
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+  int _resultTypePriority(FoodResultType type) {
+    return switch (type) {
+      FoodResultType.generic => 0,
+      FoodResultType.custom => 1,
+      FoodResultType.branded => 2,
+    };
   }
 }
 

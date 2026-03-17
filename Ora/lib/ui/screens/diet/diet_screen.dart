@@ -12,9 +12,11 @@ import '../../widgets/diet/meal_group_section.dart';
 import '../../widgets/diet/summary_carousel.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
+import 'diet_goals_settings_page.dart';
 import 'food_barcode_scan_page.dart';
 import 'food_detail_page.dart';
 import 'food_search_page.dart';
+import 'recipes_page.dart';
 
 class DietScreen extends StatefulWidget {
   const DietScreen({super.key});
@@ -74,6 +76,21 @@ class _DietScreenState extends State<DietScreen> {
 
   Future<void> _refresh() => _loadDay(_selectedDay);
 
+  Future<void> _openDietSettings() async {
+    final changed = await DietGoalsSettingsPage.show(context);
+    if (!mounted || changed != true) return;
+    await _loadDay(_selectedDay);
+  }
+
+  Future<void> _openRecipesManager() async {
+    final changed = await RecipesPage.showManage(
+      context,
+      selectedDay: _selectedDay,
+    );
+    if (!mounted || changed != true) return;
+    await _loadDay(_selectedDay);
+  }
+
   Future<void> _goToPreviousDay() async {
     await _loadDay(_selectedDay.subtract(const Duration(days: 1)));
   }
@@ -129,16 +146,15 @@ class _DietScreenState extends State<DietScreen> {
         await _showQuickAddDialog(mealSlot: slot);
         return;
       case DiaryAddAction.addRecipe:
-        if (!mounted) return;
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            const SnackBar(
-              content: Text('Add Recipe is coming soon.'),
-              behavior: SnackBarBehavior.floating,
-              duration: Duration(seconds: 3),
-            ),
-          );
+        final added = await RecipesPage.showForDiary(
+          context,
+          foodRepository: _foodRepository,
+          dietRepo: _dietRepo,
+          selectedDay: _selectedDay,
+          initialMealSlot: slot,
+        );
+        if (!mounted || added != true) return;
+        await _loadDay(_selectedDay);
         return;
     }
   }
@@ -149,6 +165,7 @@ class _DietScreenState extends State<DietScreen> {
       foodRepository: _foodRepository,
       dietRepo: _dietRepo,
       initialMealSlot: mealSlot,
+      selectedDay: _selectedDay,
     );
     if (!mounted || added != true) return;
     await _loadDay(_selectedDay);
@@ -194,6 +211,7 @@ class _DietScreenState extends State<DietScreen> {
       food: food,
       dietRepo: _dietRepo,
       initialMealSlot: mealSlot,
+      selectedDay: _selectedDay,
     );
     if (!mounted || added != true) return;
     await _loadDay(_selectedDay);
@@ -419,8 +437,7 @@ class _DietScreenState extends State<DietScreen> {
 
     if (!mounted || action == null) return;
     if (action == 'edit') {
-      await _showQuickAddDialog(
-          mealSlot: item.mealSlot, editingEntry: item.entry);
+      await _openFoodEditorForEntry(item);
       return;
     }
 
@@ -441,6 +458,21 @@ class _DietScreenState extends State<DietScreen> {
           duration: Duration(seconds: 3),
         ),
       );
+  }
+
+  Future<void> _handleEntryTapEdit(DietDiaryEntryItem item) async {
+    await _openFoodEditorForEntry(item);
+  }
+
+  Future<void> _openFoodEditorForEntry(DietDiaryEntryItem item) async {
+    final updated = await FoodDetailPage.editEntry(
+      context,
+      entry: item.entry,
+      dietRepo: _dietRepo,
+      selectedDay: _selectedDay,
+    );
+    if (!mounted || updated != true) return;
+    await _loadDay(_selectedDay);
   }
 
   Future<void> _handleEntryDelete(DietDiaryEntryItem item) async {
@@ -472,6 +504,29 @@ class _DietScreenState extends State<DietScreen> {
     snackBarController.close();
   }
 
+  Future<void> _handleEntryDrop(
+    DietDiaryEntryItem item,
+    String targetMealSlot,
+  ) async {
+    if (item.mealSlot == targetMealSlot) return;
+    await _diaryService.moveEntryToMeal(
+      entry: item.entry,
+      mealSlot: targetMealSlot,
+    );
+    if (!mounted) return;
+    await _loadDay(_selectedDay);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Moved to $targetMealSlot'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+  }
+
   String _asText(double? value) {
     if (value == null) return '';
     if (value == value.roundToDouble()) return value.toStringAsFixed(0);
@@ -499,14 +554,18 @@ class _DietScreenState extends State<DietScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Diet'),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.92),
-        foregroundColor: theme.colorScheme.onPrimary,
-        elevation: 2,
-        onPressed: () => _openAddActions(),
-        child: const Icon(Icons.add),
+        actions: [
+          IconButton(
+            tooltip: 'Saved recipes',
+            onPressed: _openRecipesManager,
+            icon: const Icon(Icons.menu_book_rounded),
+          ),
+          IconButton(
+            tooltip: 'Diet settings',
+            onPressed: _openDietSettings,
+            icon: const Icon(Icons.tune_rounded),
+          ),
+        ],
       ),
       body: Stack(
         children: [
@@ -592,6 +651,7 @@ class _DietScreenState extends State<DietScreen> {
                         group: group,
                         collapsed: _collapsedByMeal[group.mealSlot] ?? false,
                         onAdd: () => _openAddActions(mealSlot: group.mealSlot),
+                        onEdit: _handleEntryTapEdit,
                         onToggleCollapsed: () {
                           setState(() {
                             _collapsedByMeal[group.mealSlot] =
@@ -600,6 +660,8 @@ class _DietScreenState extends State<DietScreen> {
                         },
                         onEditOrCopy: _handleEntryEditOrCopy,
                         onDelete: _handleEntryDelete,
+                        onDropEntry: (item) =>
+                            _handleEntryDrop(item, group.mealSlot),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -612,6 +674,20 @@ class _DietScreenState extends State<DietScreen> {
                 ],
               ),
             ),
+          SafeArea(
+            minimum: const EdgeInsets.only(right: 16, bottom: 16),
+            child: Align(
+              alignment: Alignment.bottomRight,
+              child: FloatingActionButton(
+                backgroundColor:
+                    theme.colorScheme.primary.withValues(alpha: 0.92),
+                foregroundColor: theme.colorScheme.onPrimary,
+                elevation: 2,
+                onPressed: () => _openAddActions(),
+                child: const Icon(Icons.add),
+              ),
+            ),
+          ),
         ],
       ),
     );

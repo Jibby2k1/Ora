@@ -5,19 +5,28 @@ import '../../../domain/models/food_models.dart';
 class FoodSourceBadge extends StatelessWidget {
   const FoodSourceBadge({
     super.key,
-    required this.source,
-  });
+    this.source,
+    this.resultType,
+    this.labelOverride,
+  }) : assert(
+          source != null || resultType != null || labelOverride != null,
+          'source, resultType, or labelOverride must be provided.',
+        );
 
-  final FoodSource source;
+  final FoodSource? source;
+  final FoodResultType? resultType;
+  final String? labelOverride;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = switch (source) {
-      FoodSource.usdaFdc => theme.colorScheme.primary,
-      FoodSource.openFoodFacts => theme.colorScheme.secondary,
-      FoodSource.nutritionix => theme.colorScheme.tertiary,
-      FoodSource.custom => theme.colorScheme.onSurface,
+    final badgeLabel =
+        labelOverride ?? resultType?.label ?? source?.label ?? 'SOURCE';
+
+    final color = switch (resultType ?? _fallbackTypeFromSource(source)) {
+      FoodResultType.generic => theme.colorScheme.primary,
+      FoodResultType.branded => theme.colorScheme.secondary,
+      FoodResultType.custom => theme.colorScheme.onSurface,
     };
 
     return Container(
@@ -28,7 +37,7 @@ class FoodSourceBadge extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Text(
-        source.label,
+        badgeLabel.toUpperCase(),
         style: theme.textTheme.labelSmall?.copyWith(
           color: color,
           fontWeight: FontWeight.w700,
@@ -36,5 +45,16 @@ class FoodSourceBadge extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  FoodResultType _fallbackTypeFromSource(FoodSource? source) {
+    return switch (source) {
+      FoodSource.custom => FoodResultType.custom,
+      FoodSource.usdaFdc => FoodResultType.generic,
+      FoodSource.openFoodFacts ||
+      FoodSource.nutritionix =>
+        FoodResultType.branded,
+      null => FoodResultType.generic,
+    };
   }
 }
