@@ -66,7 +66,7 @@ class DietDiaryService {
       var totals = const DietMacroTotals.zero();
       for (final item in slotEntries) {
         totals = totals.add(
-          calories: item.entry.calories ?? 0,
+          calories: item.calories,
           proteinG: item.entry.proteinG ?? 0,
           carbsG: item.entry.carbsG ?? 0,
           fatG: item.entry.fatG ?? 0,
@@ -138,12 +138,11 @@ class DietDiaryService {
     required double sodiumMg,
     String? notes,
   }) {
-    final loggedAt = _entryTimestampForDay(day);
     final mealLineNotes = _upsertMealLine(notes, mealSlot);
     return _dietRepo.addEntry(
       mealName: foodName,
-      loggedAt: loggedAt,
-      mealType: _mealTypeForSlot(mealSlot, fallbackTime: loggedAt),
+      loggedAt: _entryTimestampForDay(day),
+      mealType: _mealTypeFromSlot(mealSlot),
       calories: calories,
       proteinG: proteinG,
       carbsG: carbsG,
@@ -187,12 +186,11 @@ class DietDiaryService {
     required DateTime day,
     required String mealSlot,
   }) {
-    final loggedAt = _entryTimestampForDay(day);
     final notes = _upsertMealLine(entry.notes, mealSlot);
     return _dietRepo.addEntry(
       mealName: entry.mealName,
-      loggedAt: loggedAt,
-      mealType: _mealTypeForSlot(mealSlot, fallbackTime: loggedAt),
+      loggedAt: _entryTimestampForDay(day),
+      mealType: _mealTypeFromSlot(mealSlot),
       calories: entry.calories,
       proteinG: entry.proteinG,
       carbsG: entry.carbsG,
@@ -205,13 +203,24 @@ class DietDiaryService {
     );
   }
 
+  Future<void> moveEntryToMeal({
+    required DietEntry entry,
+    required String mealSlot,
+  }) {
+    final notes = _upsertMealLine(entry.notes, mealSlot);
+    return _dietRepo.updateEntry(
+      id: entry.id,
+      mealType: _mealTypeFromSlot(mealSlot),
+      notes: notes,
+    );
+  }
+
   String resolveMealSlot(DietEntry entry) {
     final notes = entry.notes;
     if (notes != null) {
       final match = RegExp(
         r'^Meal:\s*(Breakfast|Lunch|Dinner|Snacks)\b',
-        caseSensitive: false,
-        multiLine: true,
+        caseSensitive: false, multiLine: true,
       ).firstMatch(notes);
       if (match != null) {
         final raw = match.group(1)!;
@@ -233,7 +242,7 @@ class DietDiaryService {
     final servingMatch =
         RegExp(r'^Serving:\s*(.+)$', multiLine: true).firstMatch(notes);
     if (servingMatch != null) {
-      return servingMatch.group(1)!.trim();
+      return _normalizeServingDescription(servingMatch.group(1)!.trim());
     }
 
     final lines = notes
@@ -245,26 +254,18 @@ class DietDiaryService {
 
     for (final line in lines) {
       if (line.startsWith('Meal:') || line.startsWith('Source:')) continue;
-      return line;
+      return _normalizeServingDescription(line);
     }
     return '1 serving';
   }
 
-  DietMealType _mealTypeForSlot(String mealSlot,
-      {required DateTime fallbackTime}) {
-    switch (mealSlot.trim().toLowerCase()) {
-      case 'breakfast':
-        return DietMealType.breakfast;
-      case 'lunch':
-        return DietMealType.lunch;
-      case 'dinner':
-        return DietMealType.dinner;
-      case 'snacks':
-      case 'snack':
-        return DietMealType.snack;
-      default:
-        return DietMealTypeX.inferFromLoggedAt(fallbackTime);
-    }
+  String _normalizeServingDescription(String raw) {
+    final cleaned = raw.trim();
+    if (cleaned.isEmpty) return '1 serving';
+    return cleaned.replaceFirstMapped(
+      RegExp(r'^(\d+(?:\.\d+)?)\s*x\s+', caseSensitive: false),
+      (match) => '${match.group(1)} ',
+    );
   }
 
   List<DietHighlightedNutrient> _buildHighlightedNutrients({
@@ -416,6 +417,21 @@ class DietDiaryService {
     }
 
     return lines.join('\n');
+  }
+
+  DietMealType _mealTypeFromSlot(String mealSlot) {
+    switch (mealSlot.trim().toLowerCase()) {
+      case 'breakfast':
+        return DietMealType.breakfast;
+      case 'lunch':
+        return DietMealType.lunch;
+      case 'dinner':
+        return DietMealType.dinner;
+      case 'snacks':
+      case 'snack':
+      default:
+        return DietMealType.snack;
+    }
   }
 
   DateTime _entryTimestampForDay(DateTime day) {

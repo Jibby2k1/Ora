@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:sqflite/sqflite.dart';
+
 import '../../domain/models/diet_entry.dart';
 import '../db/db.dart';
 
@@ -7,6 +9,7 @@ class DietRepo {
   DietRepo(this._db);
 
   final AppDatabase _db;
+  Set<String>? _dietEntryColumnsCache;
 
   Future<int> addEntry({
     required String mealName,
@@ -30,11 +33,17 @@ class DietRepo {
     String? portionUnit,
   }) async {
     final db = await _db.database;
-    return db.insert('diet_entry', {
+    final resolvedCalories = _resolveCalories(
+      calories: calories,
+      proteinG: proteinG,
+      carbsG: carbsG,
+      fatG: fatG,
+    );
+    final payload = {
       'meal_name': mealName,
       'logged_at': loggedAt.toIso8601String(),
       'meal_type': mealType.storageValue,
-      'calories': calories,
+      'calories': resolvedCalories,
       'protein_g': proteinG,
       'carbs_g': carbsG,
       'fat_g': fatG,
@@ -50,7 +59,9 @@ class DietRepo {
       'portion_grams': portionGrams,
       'portion_amount': portionAmount,
       'portion_unit': portionUnit,
-    });
+    };
+    final filteredPayload = await _filterDietEntryColumns(db, payload);
+    return db.insert('diet_entry', filteredPayload);
   }
 
   Future<List<DietEntry>> getEntriesForDay(DateTime day) async {
@@ -84,7 +95,13 @@ class DietRepo {
     final end = start.add(const Duration(days: 1));
     final rows = await db.rawQuery('''
 SELECT
-  SUM(calories) as calories,
+  SUM(CASE
+    WHEN calories IS NULL OR calories <= 0 THEN
+      (COALESCE(protein_g, 0) * 4) +
+      (COALESCE(carbs_g, 0) * 4) +
+      (COALESCE(fat_g, 0) * 9)
+    ELSE calories
+  END) as calories,
   SUM(protein_g) as protein_g,
   SUM(carbs_g) as carbs_g,
   SUM(fat_g) as fat_g,
@@ -109,7 +126,13 @@ WHERE logged_at >= ? AND logged_at < ?
     final db = await _db.database;
     final rows = await db.rawQuery('''
 SELECT
-  SUM(calories) as calories,
+  SUM(CASE
+    WHEN calories IS NULL OR calories <= 0 THEN
+      (COALESCE(protein_g, 0) * 4) +
+      (COALESCE(carbs_g, 0) * 4) +
+      (COALESCE(fat_g, 0) * 9)
+    ELSE calories
+  END) as calories,
   SUM(protein_g) as protein_g,
   SUM(carbs_g) as carbs_g,
   SUM(fat_g) as fat_g,
@@ -158,7 +181,13 @@ WHERE logged_at >= ? AND logged_at < ?
     final rows = await db.rawQuery('''
 SELECT
   substr(logged_at, 1, 10) as day,
-  SUM(calories) as calories,
+  SUM(CASE
+    WHEN calories IS NULL OR calories <= 0 THEN
+      (COALESCE(protein_g, 0) * 4) +
+      (COALESCE(carbs_g, 0) * 4) +
+      (COALESCE(fat_g, 0) * 9)
+    ELSE calories
+  END) as calories,
   SUM(protein_g) as protein_g,
   SUM(carbs_g) as carbs_g,
   SUM(fat_g) as fat_g,
@@ -231,29 +260,31 @@ ORDER BY day DESC
     String? portionUnit,
   }) async {
     final db = await _db.database;
+    final updates = await _filterDietEntryColumns(db, {
+      if (mealName != null) 'meal_name': mealName,
+      if (loggedAt != null) 'logged_at': loggedAt.toIso8601String(),
+      if (mealType != null) 'meal_type': mealType.storageValue,
+      if (calories != null) 'calories': calories,
+      if (proteinG != null) 'protein_g': proteinG,
+      if (carbsG != null) 'carbs_g': carbsG,
+      if (fatG != null) 'fat_g': fatG,
+      if (fiberG != null) 'fiber_g': fiberG,
+      if (sodiumMg != null) 'sodium_mg': sodiumMg,
+      if (micros != null) 'micros_json': jsonEncode(micros),
+      if (notes != null) 'notes': notes,
+      if (imagePath != null) 'image_path': imagePath,
+      if (barcode != null) 'barcode': barcode,
+      if (foodSource != null) 'food_source': foodSource,
+      if (foodSourceId != null) 'food_source_id': foodSourceId,
+      if (portionLabel != null) 'portion_label': portionLabel,
+      if (portionGrams != null) 'portion_grams': portionGrams,
+      if (portionAmount != null) 'portion_amount': portionAmount,
+      if (portionUnit != null) 'portion_unit': portionUnit,
+    });
+    if (updates.isEmpty) return;
     await db.update(
       'diet_entry',
-      {
-        if (mealName != null) 'meal_name': mealName,
-        if (loggedAt != null) 'logged_at': loggedAt.toIso8601String(),
-        if (mealType != null) 'meal_type': mealType.storageValue,
-        if (calories != null) 'calories': calories,
-        if (proteinG != null) 'protein_g': proteinG,
-        if (carbsG != null) 'carbs_g': carbsG,
-        if (fatG != null) 'fat_g': fatG,
-        if (fiberG != null) 'fiber_g': fiberG,
-        if (sodiumMg != null) 'sodium_mg': sodiumMg,
-        if (micros != null) 'micros_json': jsonEncode(micros),
-        if (notes != null) 'notes': notes,
-        if (imagePath != null) 'image_path': imagePath,
-        if (barcode != null) 'barcode': barcode,
-        if (foodSource != null) 'food_source': foodSource,
-        if (foodSourceId != null) 'food_source_id': foodSourceId,
-        if (portionLabel != null) 'portion_label': portionLabel,
-        if (portionGrams != null) 'portion_grams': portionGrams,
-        if (portionAmount != null) 'portion_amount': portionAmount,
-        if (portionUnit != null) 'portion_unit': portionUnit,
-      },
+      updates,
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -318,6 +349,55 @@ ORDER BY day DESC
       return null;
     }
     return null;
+  }
+
+  double? _resolveCalories({
+    required double? calories,
+    required double? proteinG,
+    required double? carbsG,
+    required double? fatG,
+  }) {
+    final parsedCalories = calories;
+    if (parsedCalories != null && parsedCalories > 0) {
+      return parsedCalories;
+    }
+    final protein = proteinG ?? 0;
+    final carbs = carbsG ?? 0;
+    final fat = fatG ?? 0;
+    final fromMacros = (protein * 4) + (carbs * 4) + (fat * 9);
+    if (fromMacros <= 0) {
+      return parsedCalories;
+    }
+    return fromMacros;
+  }
+
+  Future<Map<String, Object?>> _filterDietEntryColumns(
+    Database db,
+    Map<String, Object?> payload,
+  ) async {
+    final columns = await _dietEntryColumns(db);
+    if (columns.isEmpty) {
+      return payload;
+    }
+    final filtered = <String, Object?>{};
+    payload.forEach((key, value) {
+      if (columns.contains(key)) {
+        filtered[key] = value;
+      }
+    });
+    return filtered.isEmpty ? payload : filtered;
+  }
+
+  Future<Set<String>> _dietEntryColumns(Database db) async {
+    final cached = _dietEntryColumnsCache;
+    if (cached != null && cached.isNotEmpty) {
+      return cached;
+    }
+    final rows = await db.rawQuery("PRAGMA table_info('diet_entry');");
+    final columns =
+        rows.map((row) => row['name']?.toString()).whereType<String>().toSet();
+    _dietEntryColumnsCache = columns;
+    return columns;
   }
 }
 

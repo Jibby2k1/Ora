@@ -1,8 +1,18 @@
 class FoodApiConfig {
   const FoodApiConfig._();
 
-  static const String usdaFdcApiKey = String.fromEnvironment(
+  // Bundled app key used when no --dart-define USDA key is provided.
+  // Note: client-side keys can be extracted from app binaries.
+  static const String _bundledUsdaFdcApiKey =
+      'K2ahcaJSA08M2Xs9wOpLh8yaSvSoowqNKtFql6OY';
+
+  static const String _usdaFdcApiKey = String.fromEnvironment(
     'USDA_FDC_API_KEY',
+    defaultValue: '',
+  );
+
+  static const String _legacyUsdaApiKey = String.fromEnvironment(
+    'USDA_API_KEY',
     defaultValue: '',
   );
 
@@ -16,7 +26,19 @@ class FoodApiConfig {
     defaultValue: '',
   );
 
-  static bool get hasUsdaKey => usdaFdcApiKey.trim().isNotEmpty;
+  static String get usdaFdcApiKey {
+    if (_usdaFdcApiKey.trim().isNotEmpty) {
+      return _usdaFdcApiKey.trim();
+    }
+    if (_legacyUsdaApiKey.trim().isNotEmpty) {
+      return _legacyUsdaApiKey.trim();
+    }
+    return _bundledUsdaFdcApiKey;
+  }
+
+  static bool get hasUsdaKey => usdaFdcApiKey.isNotEmpty;
+
+  static bool get isUsingDemoUsdaKey => usdaFdcApiKey == 'DEMO_KEY';
 
   static bool get hasNutritionixCredentials =>
       nutritionixAppId.trim().isNotEmpty &&

@@ -4,13 +4,15 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import '../../../data/food/food_repository.dart';
+import '../../../data/food/search_ranker.dart';
+import '../../../diagnostics/diagnostics_log.dart';
 import '../../../domain/models/food_models.dart';
 
 class FoodSearchController extends ChangeNotifier {
   FoodSearchController({
     required FoodRepository repository,
     this.debounceDuration = const Duration(milliseconds: 350),
-    this.requestTimeout = const Duration(seconds: 4),
+    this.requestTimeout = const Duration(seconds: 12),
     this.pageSize = 20,
   }) : _repository = repository;
 
@@ -20,12 +22,14 @@ class FoodSearchController extends ChangeNotifier {
   final int pageSize;
 
   static const int _cacheLimit = 100;
+  static const int _cacheVersion = 2;
 
   final LinkedHashMap<String, _SearchCacheEntry> _searchCache =
       LinkedHashMap<String, _SearchCacheEntry>();
   Timer? _debounceTimer;
+  final FoodSearchRanker _ranker = const FoodSearchRanker();
 
-  FoodSearchCategory _category = FoodSearchCategory.commonFoods;
+  FoodSearchCategory _category = FoodSearchCategory.all;
   String _query = '';
   List<FoodSearchResult> _results = const [];
   bool _loading = false;
@@ -203,12 +207,16 @@ class FoodSearchController extends ChangeNotifier {
       _error = _results.isEmpty
           ? 'Search is taking too long. Try a shorter query.'
           : null;
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (requestId != _activeSearchId) return;
-      final message = error.toString().toLowerCase().contains('food_cache')
-          ? 'Food cache was repaired. Please retry your search.'
-          : 'Could not load foods right now. Please try again.';
-      _error = message;
+      DiagnosticsLog.instance.recordError(
+        error,
+        stackTrace,
+        context: 'FoodSearchController._runSearch',
+      );
+      _error = _results.isEmpty
+          ? 'Could not load foods right now. Please try again.'
+          : null;
     } finally {
       if (requestId == _activeSearchId) {
         _loading = false;
@@ -238,14 +246,7 @@ class FoodSearchController extends ChangeNotifier {
   }
 
   String _normalizeQuery(String value) {
-    final normalized = value
-        .trim()
-        .toLowerCase()
-        .replaceAll(RegExp(r'\u0000-\u001f'), ' ')
-        .replaceAll(RegExp(r'[^a-z0-9\s\"]'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    return normalized;
+    return _ranker.normalizeQuery(value);
   }
 
   String _cacheKey({
@@ -253,7 +254,7 @@ class FoodSearchController extends ChangeNotifier {
     required FoodSearchCategory category,
     required int page,
   }) {
-    return '${category.name}|$query|$page';
+    return 'v$_cacheVersion|${category.name}|$query|$page';
   }
 
   List<FoodSearchResult> _mergeSearchResults(

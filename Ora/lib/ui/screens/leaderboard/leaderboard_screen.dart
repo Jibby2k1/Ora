@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import '../../../data/db/db.dart';
 import '../../../data/repositories/settings_repo.dart';
@@ -70,16 +71,28 @@ class _LeaderboardContentState extends State<LeaderboardContent> {
                   icon: Icons.group,
                   audience: 'friends',
                   onTap: () async {
-                    if (FirebaseAuth.instance.currentUser == null) {
+                    if (Firebase.apps.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Sign in to access leaderboards.')),
+                        const SnackBar(
+                          content:
+                              Text('Leaderboard is unavailable in this build.'),
+                        ),
                       );
                       return;
                     }
-                    final ok = await CloudConsent.ensureLeaderboardConsent(context, _settingsRepo);
+                    if (FirebaseAuth.instance.currentUser == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Sign in to access leaderboards.')),
+                      );
+                      return;
+                    }
+                    final ok = await CloudConsent.ensureLeaderboardConsent(
+                        context, _settingsRepo);
                     if (!ok || !context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Friends leaderboard coming soon.')),
+                      const SnackBar(
+                          content: Text('Friends leaderboard coming soon.')),
                     );
                   },
                 ),
@@ -89,16 +102,28 @@ class _LeaderboardContentState extends State<LeaderboardContent> {
                   icon: Icons.public,
                   audience: 'global',
                   onTap: () async {
-                    if (FirebaseAuth.instance.currentUser == null) {
+                    if (Firebase.apps.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Sign in to access leaderboards.')),
+                        const SnackBar(
+                          content:
+                              Text('Leaderboard is unavailable in this build.'),
+                        ),
                       );
                       return;
                     }
-                    final ok = await CloudConsent.ensureLeaderboardConsent(context, _settingsRepo);
+                    if (FirebaseAuth.instance.currentUser == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Sign in to access leaderboards.')),
+                      );
+                      return;
+                    }
+                    final ok = await CloudConsent.ensureLeaderboardConsent(
+                        context, _settingsRepo);
                     if (!ok || !context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Global leaderboard coming soon.')),
+                      const SnackBar(
+                          content: Text('Global leaderboard coming soon.')),
                     );
                   },
                 ),
@@ -224,9 +249,11 @@ class _TrainingLeaderboardState extends State<_TrainingLeaderboard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(widget.title, style: Theme.of(context).textTheme.titleMedium),
+              Text(widget.title,
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 6),
-              Text(widget.subtitle, style: Theme.of(context).textTheme.bodySmall),
+              Text(widget.subtitle,
+                  style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -240,12 +267,14 @@ class _TrainingLeaderboardState extends State<_TrainingLeaderboard> {
                   _MetricChip(
                     label: 'Volume',
                     selected: _metric == _TrainingMetric.volume,
-                    onTap: () => setState(() => _metric = _TrainingMetric.volume),
+                    onTap: () =>
+                        setState(() => _metric = _TrainingMetric.volume),
                   ),
                   _MetricChip(
                     label: 'Consistency',
                     selected: _metric == _TrainingMetric.consistency,
-                    onTap: () => setState(() => _metric = _TrainingMetric.consistency),
+                    onTap: () =>
+                        setState(() => _metric = _TrainingMetric.consistency),
                   ),
                 ],
               ),
@@ -273,7 +302,13 @@ class _TrainingLeaderboardState extends State<_TrainingLeaderboard> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final group in ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms'])
+                  for (final group in [
+                    'Chest',
+                    'Back',
+                    'Shoulders',
+                    'Legs',
+                    'Arms'
+                  ])
                     FilterChip(
                       label: Text(group),
                       selected: _selectedMuscles.contains(group),
@@ -301,7 +336,8 @@ class _TrainingLeaderboardState extends State<_TrainingLeaderboard> {
                 ListTile(
                   leading: CircleAvatar(child: Text('${row.rank}')),
                   title: Text(row.name),
-                  subtitle: Text('Workout ${row.workout.toInt()} · Diet ${row.diet.toInt()} · App ${row.appearance.toInt()}'),
+                  subtitle: Text(
+                      'Workout ${row.workout.toInt()} · Diet ${row.diet.toInt()} · App ${row.appearance.toInt()}'),
                   trailing: Text(row.score.toStringAsFixed(1)),
                 ),
             ],
@@ -333,9 +369,11 @@ class _MetricChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? scheme.primary.withOpacity(0.2) : scheme.surface,
+          color:
+              selected ? scheme.primary.withValues(alpha: 0.2) : scheme.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: scheme.primary.withOpacity(selected ? 0.45 : 0.15)),
+          border: Border.all(
+              color: scheme.primary.withValues(alpha: selected ? 0.45 : 0.15)),
         ),
         child: Text(label),
       ),

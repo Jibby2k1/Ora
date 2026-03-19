@@ -1,5 +1,5 @@
 const dbName = 'ora.db';
-const dbVersion = 9;
+const dbVersion = 11;
 
 const createTableExercise = '''
 CREATE TABLE exercise(

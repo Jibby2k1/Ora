@@ -27,8 +27,7 @@ class NutritionixProvider implements FoodProvider {
   @override
   FoodSource get source => FoodSource.nutritionix;
 
-  bool get isEnabled =>
-      _appId.trim().isNotEmpty && _apiKey.trim().isNotEmpty;
+  bool get isEnabled => _appId.trim().isNotEmpty && _apiKey.trim().isNotEmpty;
 
   Map<String, String> get _headers => {
         'x-app-id': _appId,
@@ -50,8 +49,11 @@ class NutritionixProvider implements FoodProvider {
       '/v2/search/instant',
       {
         'query': query.trim(),
-        'branded': filters.category == FoodSearchCategory.commonFoods ? 'false' : 'true',
-        'common': filters.category == FoodSearchCategory.branded ? 'false' : 'true',
+        'branded': filters.category == FoodSearchCategory.commonFoods
+            ? 'false'
+            : 'true',
+        'common':
+            filters.category == FoodSearchCategory.branded ? 'false' : 'true',
       },
     );
 
@@ -227,13 +229,10 @@ class NutritionixProvider implements FoodProvider {
   String _titleCase(String value) {
     final normalized = value.trim();
     if (normalized.isEmpty) return value;
-    return normalized
-        .split(RegExp(r'\s+'))
-        .map((segment) {
-          if (segment.isEmpty) return segment;
-          return segment[0].toUpperCase() + segment.substring(1).toLowerCase();
-        })
-        .join(' ');
+    return normalized.split(RegExp(r'\s+')).map((segment) {
+      if (segment.isEmpty) return segment;
+      return segment[0].toUpperCase() + segment.substring(1).toLowerCase();
+    }).join(' ');
   }
 
   String _formatNumber(double value) {

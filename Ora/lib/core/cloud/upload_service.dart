@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -73,6 +74,12 @@ class UploadService extends ChangeNotifier {
     if (!isSupported) {
       item.status = UploadStatus.error;
       item.error = 'Uploads supported only on mobile.';
+      notifyListeners();
+      return;
+    }
+    if (Firebase.apps.isEmpty) {
+      item.status = UploadStatus.error;
+      item.error = 'Cloud uploads are unavailable in this build.';
       notifyListeners();
       return;
     }

@@ -14,9 +14,17 @@ class OpenFoodFactsProvider implements FoodProvider {
   })  : _client = client ?? http.Client(),
         _mapper = mapper ?? const FoodNutrientMapper();
 
-  static const String _host = 'world.openfoodfacts.org';
-  static const Duration _searchTimeout = Duration(milliseconds: 1800);
-  static const Duration _detailTimeout = Duration(seconds: 3);
+  static const List<String> _searchHosts = <String>[
+    'us.openfoodfacts.net',
+    'world.openfoodfacts.net',
+  ];
+  static const List<String> _detailHosts = <String>[
+    'us.openfoodfacts.net',
+    'world.openfoodfacts.org',
+    'world.openfoodfacts.net',
+  ];
+  static const Duration _searchTimeout = Duration(milliseconds: 3000);
+  static const Duration _detailTimeout = Duration(seconds: 4);
 
   final http.Client _client;
   final FoodNutrientMapper _mapper;
@@ -36,29 +44,43 @@ class OpenFoodFactsProvider implements FoodProvider {
   }) async {
     final trimmedQuery = query.trim();
     if (trimmedQuery.isEmpty) return const [];
-    try {
-      return await _searchV2(
-        query: trimmedQuery,
-        page: page,
-        pageSize: pageSize,
-      );
-    } on TimeoutException {
-      return const [];
-    } catch (_) {
-      return const [];
+    for (final host in _searchHosts) {
+      try {
+        final legacyResults = await _searchLegacy(
+          host: host,
+          query: trimmedQuery,
+          page: page,
+          pageSize: pageSize,
+          category: filters.category,
+        );
+        if (legacyResults.isNotEmpty) {
+          return legacyResults;
+        }
+      } on TimeoutException {
+        continue;
+      } catch (_) {
+        continue;
+      }
     }
+    return const [];
   }
 
-  Future<List<FoodSearchResult>> _searchV2({
+  Future<List<FoodSearchResult>> _searchLegacy({
+    required String host,
     required String query,
     required int page,
     required int pageSize,
+    required FoodSearchCategory category,
   }) async {
+    final queryTokens = _tokenizeQuery(query);
     final uri = Uri.https(
-      _host,
-      '/api/2/search',
+      host,
+      '/cgi/search.pl',
       {
         'search_terms': query.trim(),
+        'search_simple': '1',
+        'action': 'process',
+        'json': '1',
         'page': page.toString(),
         'page_size': pageSize.toString(),
         'fields': [
@@ -95,11 +117,15 @@ class OpenFoodFactsProvider implements FoodProvider {
 
     return _mapSearchResults(
       products: products,
+      category: category,
+      queryTokens: queryTokens,
     );
   }
 
   List<FoodSearchResult> _mapSearchResults({
     required List<dynamic> products,
+    required FoodSearchCategory category,
+    required List<String> queryTokens,
   }) {
     final results = <FoodSearchResult>[];
     for (final raw in products) {
@@ -118,6 +144,10 @@ class OpenFoodFactsProvider implements FoodProvider {
           ? Map<String, dynamic>.from(product['nutriments'])
           : <String, dynamic>{};
 
+      if (!_matchesQueryTokens(product: product, queryTokens: queryTokens)) {
+        continue;
+      }
+
       final hasNutrients =
           _hasAnyNutrientData(product: product, nutriments: nutriments);
 
@@ -126,24 +156,58 @@ class OpenFoodFactsProvider implements FoodProvider {
           '';
       if (id.isEmpty) continue;
 
+      final brand = _firstNonEmpty(product['brands']?.toString());
       final serving = _firstNonEmpty(product['serving_size']?.toString());
+      final isBranded = brand != null && brand.isNotEmpty;
+      if (category == FoodSearchCategory.commonFoods && isBranded) {
+        continue;
+      }
+      if (category == FoodSearchCategory.branded && !isBranded) {
+        continue;
+      }
 
       results.add(
         FoodSearchResult(
           id: id,
           source: FoodSource.openFoodFacts,
           name: name,
-          brand: _firstNonEmpty(product['brands']?.toString()),
+          brand: brand,
           barcode: _firstNonEmpty(product['code']?.toString()),
           subtitle: serving,
           dataType: 'open_food_facts',
-          isBranded: true,
+          isBranded: isBranded,
           hasRichNutrientPanel: hasNutrients,
         ),
       );
     }
 
     return results;
+  }
+
+  bool _matchesQueryTokens({
+    required Map<String, dynamic> product,
+    required List<String> queryTokens,
+  }) {
+    if (queryTokens.isEmpty) return true;
+    final searchable = [
+      product['product_name_en']?.toString(),
+      product['product_name']?.toString(),
+      product['generic_name_en']?.toString(),
+      product['generic_name']?.toString(),
+      product['brands']?.toString(),
+    ]
+        .whereType<String>()
+        .join(' ')
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (searchable.isEmpty) return false;
+
+    if (queryTokens.length == 1) {
+      return searchable.contains(queryTokens.first);
+    }
+    return queryTokens.every(searchable.contains);
   }
 
   @override
@@ -156,38 +220,53 @@ class OpenFoodFactsProvider implements FoodProvider {
     final trimmed = barcode.trim();
     if (trimmed.isEmpty) return null;
 
-    final uri = Uri.https(
-      _host,
-      '/api/v2/product/$trimmed',
-      {
-        'fields': [
-          'code',
-          'product_name',
-          'product_name_en',
-          'brands',
-          'ingredients_text',
-          'serving_size',
-          'serving_quantity',
-          'product_quantity',
-          'nutriments',
-        ].join(','),
-      },
-    );
+    Map<String, dynamic>? product;
+    for (final host in _detailHosts) {
+      final uri = Uri.https(
+        host,
+        '/api/v2/product/$trimmed',
+        {
+          'fields': [
+            'code',
+            'product_name',
+            'product_name_en',
+            'brands',
+            'ingredients_text',
+            'serving_size',
+            'serving_quantity',
+            'product_quantity',
+            'nutriments',
+          ].join(','),
+        },
+      );
 
-    final response =
-        await _client.get(uri, headers: _headers).timeout(_detailTimeout);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
+      try {
+        final response =
+            await _client.get(uri, headers: _headers).timeout(_detailTimeout);
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          continue;
+        }
+        final decoded = jsonDecode(response.body);
+        if (decoded is! Map<String, dynamic>) {
+          continue;
+        }
+        final status = decoded['status'];
+        if (status is num && status != 1) {
+          continue;
+        }
+        final productRaw = decoded['product'];
+        if (productRaw is! Map) {
+          continue;
+        }
+        product = Map<String, dynamic>.from(productRaw);
+        break;
+      } catch (_) {
+        continue;
+      }
+    }
+    if (product == null) {
       return null;
     }
-
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map<String, dynamic>) return null;
-    final status = decoded['status'];
-    if (status is num && status != 1) return null;
-
-    final productRaw = decoded['product'];
-    if (productRaw is! Map) return null;
-    final product = Map<String, dynamic>.from(productRaw);
 
     final name = _firstNonEmpty(
       product['product_name_en']?.toString(),
@@ -348,6 +427,15 @@ class OpenFoodFactsProvider implements FoodProvider {
     }
 
     return null;
+  }
+
+  List<String> _tokenizeQuery(String query) {
+    return query
+        .toLowerCase()
+        .split(RegExp(r'[^a-z0-9]+'))
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
   }
 }
 

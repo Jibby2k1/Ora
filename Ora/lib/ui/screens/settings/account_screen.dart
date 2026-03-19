@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -30,6 +31,7 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   bool get _supported => Platform.isAndroid || Platform.isIOS;
+  bool get _firebaseReady => Firebase.apps.isNotEmpty;
 
   Future<void> _signInEmail() async {
     final email = _emailController.text.trim();
@@ -124,6 +126,10 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _runBusy(Future<void> Function() action) async {
+    if (!_firebaseReady) {
+      _show('Firebase is disabled in this build.');
+      return;
+    }
     setState(() => _busy = true);
     try {
       await action();
@@ -133,7 +139,9 @@ class _AccountScreenState extends State<AccountScreen> {
         if ((e.message ?? '').isNotEmpty) 'message=${e.message}',
         if ((e.details ?? '').toString().isNotEmpty) 'details=${e.details}',
       ].join(' | ');
-      _show(details.isEmpty ? 'PlatformException' : 'PlatformException: $details');
+      _show(details.isEmpty
+          ? 'PlatformException'
+          : 'PlatformException: $details');
     } on FirebaseAuthException catch (e) {
       _show(_friendlyError(e));
     } catch (e) {
@@ -189,7 +197,8 @@ class _AccountScreenState extends State<AccountScreen> {
         body: Stack(
           children: const [
             GlassBackground(),
-            Center(child: Text('Account features are available on mobile only.')),
+            Center(
+                child: Text('Account features are available on mobile only.')),
           ],
         ),
       );
@@ -203,121 +212,142 @@ class _AccountScreenState extends State<AccountScreen> {
       body: Stack(
         children: [
           const GlassBackground(),
-          StreamBuilder<User?>(
-            stream: FirebaseAuth.instance.authStateChanges(),
-            builder: (context, snapshot) {
-              final user = snapshot.data;
-              final providers = user?.providerData.map((p) => p.providerId).toList() ?? const [];
-              return ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  if (_lastMessage != null)
+          if (!_firebaseReady)
+            ListView(
+              padding: const EdgeInsets.all(16),
+              children: const [
+                GlassCard(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Account features are unavailable because Firebase is disabled in this build.',
+                  ),
+                ),
+              ],
+            )
+          else
+            StreamBuilder<User?>(
+              stream: FirebaseAuth.instance.authStateChanges(),
+              builder: (context, snapshot) {
+                final user = snapshot.data;
+                final providers =
+                    user?.providerData.map((p) => p.providerId).toList() ??
+                        const [];
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (_lastMessage != null)
+                      GlassCard(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(_lastMessage!),
+                      ),
+                    if (_lastMessage != null) const SizedBox(height: 12),
                     GlassCard(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(_lastMessage!),
-                    ),
-                  if (_lastMessage != null) const SizedBox(height: 12),
-                  GlassCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Status'),
-                        const SizedBox(height: 8),
-                        Text(user == null ? 'Signed out' : 'Signed in as ${user.email ?? user.uid}'),
-                        if (user != null) ...[
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Status'),
                           const SizedBox(height: 8),
-                          Text('UID: ${user.uid}'),
-                          const SizedBox(height: 4),
-                          Text('Providers: ${providers.isEmpty ? 'unknown' : providers.join(', ')}'),
-                          const SizedBox(height: 4),
-                          Text('Email verified: ${user.emailVerified ? 'yes' : 'no'}'),
-                        ],
-                        const SizedBox(height: 12),
-                        if (user != null)
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: ElevatedButton.icon(
-                              onPressed: _busy ? null : _signOut,
-                              icon: const Icon(Icons.logout),
-                              label: const Text('Sign out'),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  GlassCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Email & Password'),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _emailController,
-                          decoration: const InputDecoration(labelText: 'Email'),
-                          keyboardType: TextInputType.emailAddress,
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _passwordController,
-                          decoration: const InputDecoration(labelText: 'Password'),
-                          obscureText: true,
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: _busy ? null : _signInEmail,
-                                child: const Text('Sign in'),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: _busy ? null : _signUpEmail,
-                                child: const Text('Create account'),
-                              ),
-                            ),
+                          Text(user == null
+                              ? 'Signed out'
+                              : 'Signed in as ${user.email ?? user.uid}'),
+                          if (user != null) ...[
+                            const SizedBox(height: 8),
+                            Text('UID: ${user.uid}'),
+                            const SizedBox(height: 4),
+                            Text(
+                                'Providers: ${providers.isEmpty ? 'unknown' : providers.join(', ')}'),
+                            const SizedBox(height: 4),
+                            Text(
+                                'Email verified: ${user.emailVerified ? 'yes' : 'no'}'),
                           ],
-                        ),
-                      ],
+                          const SizedBox(height: 12),
+                          if (user != null)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: ElevatedButton.icon(
+                                onPressed: _busy ? null : _signOut,
+                                icon: const Icon(Icons.logout),
+                                label: const Text('Sign out'),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  GlassCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Sign in with'),
-                        const SizedBox(height: 8),
-                        ElevatedButton.icon(
-                          onPressed: _busy ? null : _signInGoogle,
-                          icon: const Icon(Icons.g_mobiledata),
-                          label: const Text('Google'),
-                        ),
-                        const SizedBox(height: 8),
-                        ElevatedButton.icon(
-                          onPressed: _busy ? null : _signInApple,
-                          icon: const Icon(Icons.apple),
-                          label: const Text('Apple'),
-                        ),
-                        const SizedBox(height: 8),
-                        ElevatedButton.icon(
-                          onPressed: _busy ? null : _signInMicrosoft,
-                          icon: const Icon(Icons.business),
-                          label: const Text('Microsoft'),
-                        ),
-                      ],
+                    const SizedBox(height: 12),
+                    GlassCard(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Email & Password'),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _emailController,
+                            decoration:
+                                const InputDecoration(labelText: 'Email'),
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _passwordController,
+                            decoration:
+                                const InputDecoration(labelText: 'Password'),
+                            obscureText: true,
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: _busy ? null : _signInEmail,
+                                  child: const Text('Sign in'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: _busy ? null : _signUpEmail,
+                                  child: const Text('Create account'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              );
-            },
-          ),
+                    const SizedBox(height: 12),
+                    GlassCard(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Sign in with'),
+                          const SizedBox(height: 8),
+                          ElevatedButton.icon(
+                            onPressed: _busy ? null : _signInGoogle,
+                            icon: const Icon(Icons.g_mobiledata),
+                            label: const Text('Google'),
+                          ),
+                          const SizedBox(height: 8),
+                          ElevatedButton.icon(
+                            onPressed: _busy ? null : _signInApple,
+                            icon: const Icon(Icons.apple),
+                            label: const Text('Apple'),
+                          ),
+                          const SizedBox(height: 8),
+                          ElevatedButton.icon(
+                            onPressed: _busy ? null : _signInMicrosoft,
+                            icon: const Icon(Icons.business),
+                            label: const Text('Microsoft'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
         ],
       ),
     );

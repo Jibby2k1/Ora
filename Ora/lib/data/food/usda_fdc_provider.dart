@@ -16,6 +16,8 @@ class UsdaFdcProvider implements FoodProvider {
         _mapper = mapper ?? const FoodNutrientMapper();
 
   static const String _host = 'api.nal.usda.gov';
+  static const Duration _searchTimeout = Duration(seconds: 4);
+  static const Duration _detailTimeout = Duration(seconds: 4);
 
   final String _apiKey;
   final http.Client _client;
@@ -34,6 +36,7 @@ class UsdaFdcProvider implements FoodProvider {
     FoodSearchFilters filters = const FoodSearchFilters(),
   }) async {
     if (!isEnabled || query.trim().isEmpty) return const [];
+    final queryTokens = _tokenizeQuery(query);
 
     final uri = Uri.https(
       _host,
@@ -45,13 +48,16 @@ class UsdaFdcProvider implements FoodProvider {
       'pageNumber': page,
       'pageSize': pageSize,
       'dataType': _dataTypesForCategory(filters.category),
+      if (queryTokens.length > 1) 'requireAllWords': true,
     };
 
-    final response = await _client.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(body),
-    );
+    final response = await _client
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        )
+        .timeout(_searchTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       return const [];
     }
@@ -70,9 +76,14 @@ class UsdaFdcProvider implements FoodProvider {
       if (fdcId == null || fdcId.isEmpty || name == null || name.isEmpty) {
         continue;
       }
+      if (queryTokens.length > 1 &&
+          !_containsAllTokens(name: name, tokens: queryTokens)) {
+        continue;
+      }
       final dataType = food['dataType']?.toString() ?? '';
       final brand = (food['brandOwner'] ?? food['brandName'])?.toString();
-      final servingSize = _formatServing(food['servingSize'], food['servingSizeUnit']);
+      final servingSize =
+          _formatServing(food['servingSize'], food['servingSizeUnit']);
       final subtitle = [dataType, servingSize]
           .where((value) => value != null && value.trim().isNotEmpty)
           .join(' • ');
@@ -80,16 +91,16 @@ class UsdaFdcProvider implements FoodProvider {
       results.add(
         FoodSearchResult(
           id: fdcId,
-        source: FoodSource.usdaFdc,
-        name: name,
-        brand: brand,
-        subtitle: subtitle.isEmpty ? null : subtitle,
-        barcode: food['gtinUpc']?.toString(),
-        isBranded: dataType.toLowerCase() == 'branded',
-        dataType: dataType,
-        hasRichNutrientPanel: true,
-      ),
-    );
+          source: FoodSource.usdaFdc,
+          name: name,
+          brand: brand,
+          subtitle: subtitle.isEmpty ? null : subtitle,
+          barcode: food['gtinUpc']?.toString(),
+          isBranded: dataType.toLowerCase() == 'branded',
+          dataType: dataType,
+          hasRichNutrientPanel: true,
+        ),
+      );
     }
     return results;
   }
@@ -103,7 +114,7 @@ class UsdaFdcProvider implements FoodProvider {
       {'api_key': _apiKey},
     );
 
-    final response = await _client.get(uri);
+    final response = await _client.get(uri).timeout(_detailTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       return null;
     }
@@ -115,10 +126,12 @@ class UsdaFdcProvider implements FoodProvider {
     final isBranded = dataType.toLowerCase() == 'branded';
 
     final labelNutrients = decoded['labelNutrients'];
-    final hasLabelNutrients = labelNutrients is Map && labelNutrients.isNotEmpty;
+    final hasLabelNutrients =
+        labelNutrients is Map && labelNutrients.isNotEmpty;
 
     final List<ServingOption> servingOptions = [];
-    final defaultServing = _resolveDefaultServing(decoded, isBranded: isBranded);
+    final defaultServing =
+        _resolveDefaultServing(decoded, isBranded: isBranded);
     servingOptions.add(defaultServing);
     servingOptions.addAll(
       _resolveAdditionalServings(decoded, defaultServing: defaultServing),
@@ -131,7 +144,8 @@ class UsdaFdcProvider implements FoodProvider {
       nutrientsPer100g = false;
     } else {
       final nutrientsRaw = decoded['foodNutrients'];
-      final nutrientList = nutrientsRaw is List ? nutrientsRaw : const <dynamic>[];
+      final nutrientList =
+          nutrientsRaw is List ? nutrientsRaw : const <dynamic>[];
       nutrients = _mapper.fromUsdaFoodNutrients(nutrientList);
       nutrientsPer100g = true;
     }
@@ -153,7 +167,8 @@ class UsdaFdcProvider implements FoodProvider {
       nutrients: nutrients,
       nutrientsPer100g: nutrientsPer100g,
       lastUpdated: DateTime.now(),
-      sourceDescription: dataType.isEmpty ? 'USDA FoodData Central' : 'USDA $dataType',
+      sourceDescription:
+          dataType.isEmpty ? 'USDA FoodData Central' : 'USDA $dataType',
     );
   }
 
@@ -166,13 +181,16 @@ class UsdaFdcProvider implements FoodProvider {
       pageSize: 20,
       filters: const FoodSearchFilters(category: FoodSearchCategory.branded),
     );
-    final exact = results.where((item) => item.barcode == barcode.trim()).toList();
+    final exact =
+        results.where((item) => item.barcode == barcode.trim()).toList();
     if (exact.isEmpty) return null;
     return fetchFoodDetailById(exact.first.id);
   }
 
   List<String> _dataTypesForCategory(FoodSearchCategory category) {
     switch (category) {
+      case FoodSearchCategory.all:
+        return const ['Foundation', 'SR Legacy', 'Branded'];
       case FoodSearchCategory.commonFoods:
         return const ['Foundation', 'SR Legacy'];
       case FoodSearchCategory.branded:
@@ -269,7 +287,9 @@ class UsdaFdcProvider implements FoodProvider {
             id: 'portion_$i',
             label: '$label (${gramWeight.toStringAsFixed(0)} g)',
             amount: amount,
-            unit: measureUnit is Map ? measureUnit['name']?.toString() : 'serving',
+            unit: measureUnit is Map
+                ? measureUnit['name']?.toString()
+                : 'serving',
             gramWeight: gramWeight,
           ),
         );
@@ -322,7 +342,8 @@ class UsdaFdcProvider implements FoodProvider {
     final seen = <String>{};
     final result = <ServingOption>[];
     for (final option in input) {
-      final key = '${option.label}|${option.gramWeight ?? -1}|${option.isDefault}';
+      final key =
+          '${option.label}|${option.gramWeight ?? -1}|${option.isDefault}';
       if (seen.add(key)) {
         result.add(option);
       }
@@ -340,6 +361,28 @@ class UsdaFdcProvider implements FoodProvider {
       );
     }
     return result;
+  }
+
+  List<String> _tokenizeQuery(String query) {
+    return query
+        .toLowerCase()
+        .split(RegExp(r'[^a-z0-9]+'))
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  bool _containsAllTokens({
+    required String name,
+    required List<String> tokens,
+  }) {
+    final normalizedName = name.toLowerCase();
+    for (final token in tokens) {
+      if (!normalizedName.contains(token)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   String? _formatServing(Object? size, Object? unit) {

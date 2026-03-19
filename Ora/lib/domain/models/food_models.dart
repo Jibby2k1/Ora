@@ -24,6 +24,7 @@ extension FoodSourceX on FoodSource {
 }
 
 enum FoodSearchCategory {
+  all,
   commonFoods,
   branded,
   custom,
@@ -31,7 +32,8 @@ enum FoodSearchCategory {
 
 extension FoodSearchCategoryX on FoodSearchCategory {
   String get label => switch (this) {
-        FoodSearchCategory.commonFoods => 'Common Foods',
+        FoodSearchCategory.all => 'All',
+        FoodSearchCategory.commonFoods => 'Generic',
         FoodSearchCategory.branded => 'Branded',
         FoodSearchCategory.custom => 'Custom',
       };
@@ -40,7 +42,7 @@ extension FoodSearchCategoryX on FoodSearchCategory {
 @immutable
 class FoodSearchFilters {
   const FoodSearchFilters({
-    this.category = FoodSearchCategory.commonFoods,
+    this.category = FoodSearchCategory.all,
   });
 
   final FoodSearchCategory category;
@@ -69,6 +71,33 @@ class FoodSearchResult {
   final String? dataType;
   final bool isBranded;
   final bool hasRichNutrientPanel;
+
+  FoodResultType get resultType {
+    if (source == FoodSource.custom) {
+      return FoodResultType.custom;
+    }
+    final normalizedDataType = (dataType ?? '').toLowerCase().trim();
+    if (isBranded || normalizedDataType.contains('branded')) {
+      return FoodResultType.branded;
+    }
+    return FoodResultType.generic;
+  }
+
+  String get resultTypeLabel => resultType.label;
+}
+
+enum FoodResultType {
+  generic,
+  branded,
+  custom,
+}
+
+extension FoodResultTypeX on FoodResultType {
+  String get label => switch (this) {
+        FoodResultType.generic => 'Generic',
+        FoodResultType.branded => 'Branded',
+        FoodResultType.custom => 'Custom',
+      };
 }
 
 enum NutrientGroup {
@@ -127,13 +156,15 @@ extension NutrientKeyX on NutrientKey {
         NutrientKey.carbs ||
         NutrientKey.fiber ||
         NutrientKey.sugar ||
-        NutrientKey.addedSugar => NutrientGroup.carbs,
+        NutrientKey.addedSugar =>
+          NutrientGroup.carbs,
         NutrientKey.fatTotal ||
         NutrientKey.satFat ||
         NutrientKey.monoFat ||
         NutrientKey.polyFat ||
         NutrientKey.transFat ||
-        NutrientKey.cholesterol => NutrientGroup.lipids,
+        NutrientKey.cholesterol =>
+          NutrientGroup.lipids,
         NutrientKey.protein => NutrientGroup.protein,
         NutrientKey.sodium ||
         NutrientKey.potassium ||
@@ -144,7 +175,8 @@ extension NutrientKeyX on NutrientKey {
         NutrientKey.zinc ||
         NutrientKey.copper ||
         NutrientKey.manganese ||
-        NutrientKey.selenium => NutrientGroup.minerals,
+        NutrientKey.selenium =>
+          NutrientGroup.minerals,
         NutrientKey.vitaminA ||
         NutrientKey.vitaminC ||
         NutrientKey.vitaminD ||
@@ -157,7 +189,8 @@ extension NutrientKeyX on NutrientKey {
         NutrientKey.vitaminB6 ||
         NutrientKey.folate ||
         NutrientKey.vitaminB12 ||
-        NutrientKey.choline => NutrientGroup.vitamins,
+        NutrientKey.choline =>
+          NutrientGroup.vitamins,
       };
 
   String get label => switch (this) {
@@ -211,7 +244,8 @@ extension NutrientKeyX on NutrientKey {
         NutrientKey.satFat ||
         NutrientKey.monoFat ||
         NutrientKey.polyFat ||
-        NutrientKey.transFat => 'g',
+        NutrientKey.transFat =>
+          'g',
         NutrientKey.cholesterol ||
         NutrientKey.sodium ||
         NutrientKey.potassium ||
@@ -232,10 +266,12 @@ extension NutrientKeyX on NutrientKey {
         NutrientKey.vitaminB6 ||
         NutrientKey.folate ||
         NutrientKey.vitaminB12 ||
-        NutrientKey.choline => 'mg',
+        NutrientKey.choline =>
+          'mg',
         NutrientKey.vitaminA ||
         NutrientKey.vitaminD ||
-        NutrientKey.vitaminK => 'mcg',
+        NutrientKey.vitaminK =>
+          'mcg',
       };
 }
 
@@ -396,7 +432,8 @@ class FoodItem {
       'brand': brand,
       'barcode': barcode,
       'ingredientsText': ingredientsText,
-      'servingOptions': servingOptions.map((option) => option.toJson()).toList(),
+      'servingOptions':
+          servingOptions.map((option) => option.toJson()).toList(),
       'nutrients': nutrients.map(
         (key, value) => MapEntry(key.id, value.toJson()),
       ),
@@ -420,7 +457,8 @@ class FoodItem {
         if (item is Map<String, dynamic>) {
           servingOptions.add(ServingOption.fromJson(item));
         } else if (item is Map) {
-          servingOptions.add(ServingOption.fromJson(Map<String, dynamic>.from(item)));
+          servingOptions
+              .add(ServingOption.fromJson(Map<String, dynamic>.from(item)));
         }
       }
     }
