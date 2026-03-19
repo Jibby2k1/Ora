@@ -1,0 +1,57 @@
+[
+  {
+    "canonical_name": "Squat",
+    "instructions": [
+      "Stand with your feet shoulder-width apart.",
+      "Lower your hips as if sitting in a chair, keeping your chest up and your back straight.",
+      "Go as low as you comfortably can, ideally until your thighs are parallel to the floor.",
+      "Push through your heels to return to the starting position."
+    ],
+    "avoid": [
+      "Letting your knees cave inward.",
+      "Rounding your lower back.",
+      "Lifting your heels off the ground."
+    ],
+    "citations": [
+      "Schoenfeld, B. J. (2010). Squatting kinematics and kinetics and their application to exercise performance. Journal of Strength and Conditioning Research, 24(12), 3497-3506."
+    ],
+    "visual_asset_paths": []
+  },
+  {
+    "canonical_name": "Bench Press",
+    "instructions": [
+      "Lie on a flat bench with your eyes under the bar.",
+      "Grip the bar slightly wider than shoulder-width apart.",
+      "Unrack the bar and lower it to your mid-chest.",
+      "Press the bar back up to the starting position."
+    ],
+    "avoid": [
+      "Bouncing the bar off your chest.",
+      "Flaring your elbows out to 90 degrees.",
+      "Lifting your glutes off the bench."
+    ],
+    "citations": [
+      "Lauver, J. D., Cayot, T. E., & Scheuermann, B. W. (2016). Influence of bench angle on upper extremity muscular activation during bench press exercise. European Journal of Sport Science, 30(3), 226-233."
+    ],
+    "visual_asset_paths": []
+  },
+  {
+    "canonical_name": "Deadlift",
+    "instructions": [
+      "Stand with your mid-foot under the barbell.",
+      "Bend over and grab the bar with a shoulder-width grip.",
+      "Bend your knees until your shins touch the bar.",
+      "Lift your chest up and straighten your lower back.",
+      "Stand up with the weight, keeping the bar close to your body."
+    ],
+    "avoid": [
+      "Rounding your lower back (cat back).",
+      "Jerking the weight off the floor.",
+      "Leaning back excessively at the top."
+    ],
+    "citations": [
+      "Farley, K. (1995). Analysis of the conventional deadlift. Strength & Conditioning Journal, 17(6), 55-57."
+    ],
+    "visual_asset_paths": []
+  }
+]

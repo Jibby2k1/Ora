@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-
+import '../../domain/models/exercise_science_info.dart';
 import '../db/db.dart';
 
 class ExerciseRepo {
@@ -115,5 +115,36 @@ class ExerciseRepo {
     } catch (_) {
       return [];
     }
+  }
+
+  Future<ExerciseScienceInfo?> getExerciseScienceInfo(int exerciseId) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'exercise_science_info',
+      where: 'exercise_id = ?',
+      whereArgs: [exerciseId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+
+    final row = rows.first;
+    return ExerciseScienceInfo(
+      exerciseId: row['exercise_id'] as int,
+      instructions: _decodeStringList(row['instructions_json'] as String?),
+      avoid: _decodeStringList(row['avoid_json'] as String?),
+      citations: _decodeStringList(row['citations_json'] as String?),
+      visualAssetPaths: _decodeStringList(row['visual_asset_paths_json'] as String?),
+    );
+  }
+
+  List<String> _decodeStringList(String? jsonString) {
+    if (jsonString == null || jsonString.isEmpty) return [];
+    try {
+      final decoded = jsonDecode(jsonString);
+      if (decoded is List) {
+        return decoded.map((e) => e.toString()).toList();
+      }
+    } catch (_) {}
+    return [];
   }
 }

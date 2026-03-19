@@ -18,6 +18,7 @@ import 'migrations/m0008_appearance_images.dart';
 import 'migrations/m0009_food_cache.dart';
 import 'migrations/m0010_diet_meal_types.dart';
 import 'migrations/m0011_recipes.dart';
+import 'migrations/m0012_exercise_science_info.dart';
 import 'schema.dart';
 
 class AppDatabase {
@@ -87,6 +88,9 @@ class AppDatabase {
     }
     if (from < 11 && to >= 11) {
       batches.add(migration0011());
+    }
+    if (from < 12 && to >= 12) {
+      batches.add(migration0012());
     }
 
     for (final statements in batches) {
@@ -251,6 +255,47 @@ class AppDatabase {
         whereArgs: [rows.first['id'] as int],
       );
     }
+  }
+
+  Future<void> seedExerciseScienceInfoIfNeeded(String jsonAssetOrPath,
+      {bool fromAsset = true}) async {
+    final db = await database;
+    final count = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM exercise_science_info;')) ??
+        0;
+    if (count > 0) return;
+
+    final source = await _loadSeed(jsonAssetOrPath, fromAsset: fromAsset);
+    final List<dynamic> data = jsonDecode(source) as List<dynamic>;
+
+    final exercises = await db.query('exercise', columns: ['id', 'canonical_name']);
+    final nameToId = {
+      for (final row in exercises)
+        (row['canonical_name'] as String).toLowerCase(): row['id'] as int
+    };
+
+    final batch = db.batch();
+    for (final item in data) {
+      final map = item as Map<String, dynamic>;
+      final canonical = (map['canonical_name'] as String?)?.trim().toLowerCase();
+      if (canonical == null || canonical.isEmpty) continue;
+
+      final exerciseId = nameToId[canonical];
+      if (exerciseId == null) continue;
+
+      batch.insert(
+        'exercise_science_info',
+        {
+          'exercise_id': exerciseId,
+          'instructions_json': jsonEncode(map['instructions'] ?? []),
+          'avoid_json': jsonEncode(map['avoid'] ?? []),
+          'citations_json': jsonEncode(map['citations'] ?? []),
+          'visual_asset_paths_json': jsonEncode(map['visual_asset_paths'] ?? []),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit();
   }
 
   Future<String> _loadSeed(String jsonAssetOrPath,

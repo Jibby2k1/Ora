@@ -32,6 +32,10 @@ class OraApp extends StatefulWidget {
         'lib/data/seed/muscle_map_seed.json',
         fromAsset: true,
       );
+      await db.seedExerciseScienceInfoIfNeeded(
+        'lib/data/seed/exercise_science_seed.json',
+        fromAsset: true,
+      );
       await DemoHistorySeed(db).ensureHistorySeed();
       await SettingsRepo(db).setCloudEnabled(true);
       DiagnosticsLog.instance.record('OraApp initialization complete');

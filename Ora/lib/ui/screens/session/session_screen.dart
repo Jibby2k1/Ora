@@ -31,6 +31,7 @@ import '../history/history_screen.dart';
 import '../history/exercise_catalog_screen.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
+import '../../widgets/exercise_modal/exercise_info_sheet.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen(
@@ -4575,6 +4576,14 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
+  Future<void> _openExerciseInfo(SessionExerciseInfo info) async {
+    await ExerciseInfoSheet.show(
+      context,
+      exerciseId: info.exerciseId,
+      exerciseName: info.exerciseName,
+    );
+  }
+
   Future<void> _openExerciseHistory(SessionExerciseInfo info) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -5031,6 +5040,21 @@ class _SessionScreenState extends State<SessionScreen> {
                     color: theme.colorScheme.primary,
                     fontWeight: FontWeight.w700,
                   ),
+                ),
+              ),
+              Container(
+                width: 38,
+                height: 38,
+                margin: const EdgeInsets.only(left: 8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: IconButton(
+                  onPressed: () => _openExerciseInfo(info),
+                  icon: const Icon(Icons.info_outline_rounded, size: 18),
+                  tooltip: 'Exercise info',
+                  visualDensity: VisualDensity.compact,
                 ),
               ),
               Container(
