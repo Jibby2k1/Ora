@@ -160,19 +160,6 @@ class ProgramRepo {
         where: 'id = ?', whereArgs: [programDayExerciseId]);
   }
 
-  Future<void> updateProgramDayExerciseOrder({
-    required int id,
-    required int orderIndex,
-  }) async {
-    final db = await _db.database;
-    await db.update(
-      'program_day_exercise',
-      {'order_index': orderIndex},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
   Future<int> addSetPlanBlock({
     required int programDayExerciseId,
     required int orderIndex,

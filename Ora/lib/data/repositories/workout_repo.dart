@@ -164,26 +164,6 @@ WHERE workout_session_id = ? AND order_index > ?
     });
   }
 
-  Future<Map<String, Object?>?> getSessionExerciseById(int id) async {
-    final db = await _db.database;
-    final rows = await db.query(
-      'session_exercise',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
-    return rows.isEmpty ? null : rows.first;
-  }
-
-  Future<void> insertSessionExerciseWithId(Map<String, Object?> row) async {
-    final db = await _db.database;
-    await db.insert(
-      'session_exercise',
-      row,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
   Future<int> addSetEntry({
     required int sessionExerciseId,
     required int setIndex,

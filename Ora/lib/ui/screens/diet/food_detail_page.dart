@@ -398,7 +398,7 @@ class _FoodDetailPageState extends State<FoodDetailPage> {
   Map<NutrientKey, NutrientValue> _editingEntryNutrients(DietEntry entry) {
     final nutrients = <NutrientKey, NutrientValue>{};
 
-    final calories = _derivedCalories(
+    final calories = FoodDetailPage._derivedCalories(
       calories: entry.calories,
       proteinG: entry.proteinG,
       carbsG: entry.carbsG,
