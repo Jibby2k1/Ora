@@ -151,6 +151,7 @@ class InsertSetEntry extends Command {
     this.flagWarmup = false,
     this.flagPartials = false,
     this.isAmrap = false,
+    this.setTag = 'normal',
     this.restSecActual,
   });
 
@@ -169,6 +170,7 @@ class InsertSetEntry extends Command {
   final bool flagWarmup;
   final bool flagPartials;
   final bool isAmrap;
+  final String setTag;
   final int? restSecActual;
 
   @override

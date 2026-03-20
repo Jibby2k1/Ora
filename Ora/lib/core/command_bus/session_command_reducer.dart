@@ -43,6 +43,7 @@ class SessionCommandReducer {
         weightValue: command.weight,
         weightUnit: command.weightUnit,
         weightMode: command.weightMode,
+        setTag: role == 'WARMUP' ? 'warmup' : 'normal',
         reps: command.reps,
         partialReps: command.partials ?? 0,
         rpe: command.rpe,
@@ -121,6 +122,7 @@ class SessionCommandReducer {
         flagWarmup: (before['flag_warmup'] as int? ?? 0) == 1,
         flagPartials: (before['flag_partials'] as int? ?? 0) == 1,
         isAmrap: (before['is_amrap'] as int? ?? 0) == 1,
+        setTag: (before['set_tag'] as String?) ?? 'normal',
         restSecActual: before['rest_sec_actual'] as int?,
       );
       return CommandResult(
@@ -146,6 +148,7 @@ class SessionCommandReducer {
         'flag_warmup': command.flagWarmup ? 1 : 0,
         'flag_partials': command.flagPartials ? 1 : 0,
         'is_amrap': command.isAmrap ? 1 : 0,
+        'set_tag': command.setTag,
         'rest_sec_actual': command.restSecActual,
         'created_at': command.createdAt,
       });

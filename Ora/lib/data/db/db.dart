@@ -18,6 +18,7 @@ import 'migrations/m0008_appearance_images.dart';
 import 'migrations/m0009_food_cache.dart';
 import 'migrations/m0010_diet_meal_types.dart';
 import 'migrations/m0011_recipes.dart';
+import 'migrations/m0012_set_tags_supersets.dart';
 import 'schema.dart';
 
 class AppDatabase {
@@ -87,6 +88,9 @@ class AppDatabase {
     }
     if (from < 11 && to >= 11) {
       batches.add(migration0011());
+    }
+    if (from < 12 && to >= 12) {
+      batches.add(migration0012());
     }
 
     for (final statements in batches) {
