@@ -19,27 +19,35 @@ class SessionService {
     final workoutRepo = WorkoutRepo(_db);
     final exerciseRepo = ExerciseRepo(_db);
 
-    final dayExercises = await programRepo.getProgramDayExerciseDetails(programDayId);
-    final sessionId = await workoutRepo.startSession(programId: programId, programDayId: programDayId);
+    final dayExercises =
+        await programRepo.getProgramDayExerciseDetails(programDayId);
+    final sessionId = await workoutRepo.startSession(
+        programId: programId, programDayId: programDayId);
 
     final exerciseInfos = <SessionExerciseInfo>[];
     for (final dayExercise in dayExercises) {
-      final programDayExerciseId = dayExercise['program_day_exercise_id'] as int;
+      final programDayExerciseId =
+          dayExercise['program_day_exercise_id'] as int;
       final exerciseId = dayExercise['exercise_id'] as int;
       final orderIndex = dayExercise['order_index'] as int;
+      final supersetGroupId = dayExercise['superset_group_id'] as int?;
 
       final sessionExerciseId = await workoutRepo.addSessionExercise(
         workoutSessionId: sessionId,
         exerciseId: exerciseId,
         orderIndex: orderIndex,
+        supersetGroupId: supersetGroupId,
       );
 
       final exerciseRow = await exerciseRepo.getById(exerciseId);
-      final exerciseName = exerciseRow?['canonical_name'] as String? ?? 'Exercise';
-      final weightModeDefault = exerciseRow?['weight_mode_default'] as String? ?? 'TOTAL';
+      final exerciseName =
+          exerciseRow?['canonical_name'] as String? ?? 'Exercise';
+      final weightModeDefault =
+          exerciseRow?['weight_mode_default'] as String? ?? 'TOTAL';
 
       final blocks = await programRepo.getSetPlanBlocks(programDayExerciseId);
-      final planBlocks = blocks.map((row) => SetPlanBlock.fromRow(row)).toList();
+      final planBlocks =
+          blocks.map((row) => SetPlanBlock.fromRow(row)).toList();
 
       exerciseInfos.add(SessionExerciseInfo(
         sessionExerciseId: sessionExerciseId,
@@ -47,6 +55,7 @@ class SessionService {
         exerciseName: exerciseName,
         weightModeDefault: weightModeDefault,
         planBlocks: planBlocks,
+        supersetGroupId: supersetGroupId,
       ));
     }
 
@@ -60,7 +69,8 @@ class SessionService {
 
   Future<SessionContext> startFreeSession({int? programId}) async {
     final workoutRepo = WorkoutRepo(_db);
-    final sessionId = await workoutRepo.startSession(programId: programId, programDayId: null);
+    final sessionId = await workoutRepo.startSession(
+        programId: programId, programDayId: null);
     return SessionContext(
       sessionId: sessionId,
       exercises: const [],
@@ -84,16 +94,20 @@ class SessionService {
       final sessionExerciseId = row['session_exercise_id'] as int;
       final exerciseId = row['exercise_id'] as int;
       final exerciseName = row['canonical_name'] as String? ?? 'Exercise';
-      final weightModeDefault = row['weight_mode_default'] as String? ?? 'TOTAL';
+      final weightModeDefault =
+          row['weight_mode_default'] as String? ?? 'TOTAL';
       final orderIndex = row['order_index'] as int;
+      final supersetGroupId = row['superset_group_id'] as int?;
       final planBlocks = <SetPlanBlock>[];
       if (programDayId != null) {
-        final programDayExerciseId = await programRepo.getProgramDayExerciseIdByOrder(
+        final programDayExerciseId =
+            await programRepo.getProgramDayExerciseIdByOrder(
           programDayId: programDayId,
           orderIndex: orderIndex,
         );
         if (programDayExerciseId != null) {
-          final blocks = await programRepo.getSetPlanBlocks(programDayExerciseId);
+          final blocks =
+              await programRepo.getSetPlanBlocks(programDayExerciseId);
           planBlocks.addAll(blocks.map((b) => SetPlanBlock.fromRow(b)));
         }
       }
@@ -103,6 +117,7 @@ class SessionService {
         exerciseName: exerciseName,
         weightModeDefault: weightModeDefault,
         planBlocks: planBlocks,
+        supersetGroupId: supersetGroupId,
       ));
     }
 
@@ -127,16 +142,20 @@ class SessionService {
       final sessionExerciseId = row['session_exercise_id'] as int;
       final exerciseId = row['exercise_id'] as int;
       final exerciseName = row['canonical_name'] as String? ?? 'Exercise';
-      final weightModeDefault = row['weight_mode_default'] as String? ?? 'TOTAL';
+      final weightModeDefault =
+          row['weight_mode_default'] as String? ?? 'TOTAL';
       final orderIndex = row['order_index'] as int;
+      final supersetGroupId = row['superset_group_id'] as int?;
       final planBlocks = <SetPlanBlock>[];
       if (programDayId != null) {
-        final programDayExerciseId = await programRepo.getProgramDayExerciseIdByOrder(
+        final programDayExerciseId =
+            await programRepo.getProgramDayExerciseIdByOrder(
           programDayId: programDayId,
           orderIndex: orderIndex,
         );
         if (programDayExerciseId != null) {
-          final blocks = await programRepo.getSetPlanBlocks(programDayExerciseId);
+          final blocks =
+              await programRepo.getSetPlanBlocks(programDayExerciseId);
           planBlocks.addAll(blocks.map((b) => SetPlanBlock.fromRow(b)));
         }
       }
@@ -146,6 +165,7 @@ class SessionService {
         exerciseName: exerciseName,
         weightModeDefault: weightModeDefault,
         planBlocks: planBlocks,
+        supersetGroupId: supersetGroupId,
       ));
     }
 

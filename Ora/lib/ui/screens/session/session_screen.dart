@@ -24,6 +24,7 @@ import '../../../data/repositories/workout_repo.dart';
 import '../../../domain/models/last_logged_set.dart';
 import '../../../domain/models/session_context.dart';
 import '../../../domain/models/session_exercise_info.dart';
+import '../../../domain/models/workout_set_tag.dart';
 import '../../../domain/services/exercise_matcher.dart';
 import '../../../domain/services/set_plan_service.dart';
 import '../shell/app_shell_controller.dart';
@@ -84,6 +85,7 @@ class _DraftSet {
     int? initialReps,
     this.restSeconds,
     this.targetSetIndex,
+    this.setTag = WorkoutSetTag.normal,
   }) {
     if (initialReps != null && initialReps > 0) {
       reps.text = initialReps.toString();
@@ -93,6 +95,7 @@ class _DraftSet {
   final String? repsHint;
   int? restSeconds;
   int? targetSetIndex;
+  WorkoutSetTag setTag;
   final TextEditingController weight = TextEditingController();
   final TextEditingController reps = TextEditingController();
   bool _isDisposed = false;
@@ -114,6 +117,7 @@ class _DraftSetSnapshot {
     required this.repsText,
     required this.restSeconds,
     required this.targetSetIndex,
+    required this.setTag,
   });
 
   factory _DraftSetSnapshot.fromDraft(_DraftSet draft) {
@@ -123,6 +127,7 @@ class _DraftSetSnapshot {
       repsText: draft.reps.text,
       restSeconds: draft.restSeconds,
       targetSetIndex: draft.targetSetIndex,
+      setTag: draft.setTag,
     );
   }
 
@@ -131,12 +136,14 @@ class _DraftSetSnapshot {
   final String repsText;
   final int? restSeconds;
   final int? targetSetIndex;
+  final WorkoutSetTag setTag;
 
   _DraftSet toDraftSet() {
     final draft = _DraftSet(
       repsHint: repsHint,
       restSeconds: restSeconds,
       targetSetIndex: targetSetIndex,
+      setTag: setTag,
     );
     draft.weight.text = weightText;
     draft.reps.text = repsText;
@@ -489,6 +496,8 @@ class _SessionScreenState extends State<SessionScreen> {
   bool _isHandleMinimizing = false;
   bool _isEditingSessionTitle = false;
   bool _isPersistingSessionTitle = false;
+  bool _isReorderingExercises = false;
+  int? _draggingSessionExerciseId;
 
   @override
   void initState() {
@@ -763,6 +772,9 @@ class _SessionScreenState extends State<SessionScreen> {
             repsHint: repsPlaceholder,
             restSeconds: defaultRestSeconds,
             targetSetIndex: nextSetIndex,
+            setTag: block.role.toUpperCase() == 'WARMUP'
+                ? WorkoutSetTag.warmup
+                : WorkoutSetTag.normal,
           ),
         );
         nextSetIndex += 1;
@@ -1436,6 +1448,146 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
+  Color _setTagColor(WorkoutSetTag tag, ThemeData theme) {
+    switch (tag) {
+      case WorkoutSetTag.normal:
+        return theme.colorScheme.onSurface;
+      case WorkoutSetTag.warmup:
+        return const Color(0xFFF6C453);
+      case WorkoutSetTag.failure:
+        return const Color(0xFFFF5D5D);
+      case WorkoutSetTag.dropset:
+        return const Color(0xFFB58CFF);
+    }
+  }
+
+  WorkoutSetTag _setTagForRow(Map<String, Object?> row) {
+    final parsed = WorkoutSetTag.fromStorage(row['set_tag'] as String?);
+    if (parsed != WorkoutSetTag.normal) return parsed;
+    final isWarmup = (row['flag_warmup'] as int? ?? 0) == 1;
+    return isWarmup ? WorkoutSetTag.warmup : WorkoutSetTag.normal;
+  }
+
+  String _setDisplayLabel({
+    required int setNumber,
+    required WorkoutSetTag tag,
+  }) {
+    final short = tag.shortLabel;
+    if (short.isEmpty) return '$setNumber';
+    return short;
+  }
+
+  Future<WorkoutSetTag?> _showSetTagPicker({
+    required WorkoutSetTag currentTag,
+    required String title,
+  }) {
+    return showModalBottomSheet<WorkoutSetTag>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        final options = WorkoutSetTag.values;
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: GlassCard(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final option in options) ...[
+                    ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      leading: Container(
+                        width: 24,
+                        height: 24,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          color: _setTagColor(option, theme).withValues(
+                            alpha: option == WorkoutSetTag.normal ? 0.12 : 0.22,
+                          ),
+                          border: Border.all(
+                            color: _setTagColor(option, theme).withValues(
+                              alpha: 0.4,
+                            ),
+                          ),
+                        ),
+                        child: Text(
+                          option.shortLabel.isEmpty ? '#' : option.shortLabel,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: _setTagColor(option, theme),
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      title: Text(option.displayLabel),
+                      trailing: option == currentTag
+                          ? Icon(
+                              Icons.check_rounded,
+                              color: theme.colorScheme.primary,
+                            )
+                          : null,
+                      onTap: () => Navigator.of(sheetContext).pop(option),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _editSavedSetTag(
+    SessionExerciseInfo info,
+    Map<String, Object?> row, {
+    required int displayNumber,
+  }) async {
+    final setId = row['id'] as int?;
+    if (setId == null) return;
+    final currentTag = _setTagForRow(row);
+    final selected = await _showSetTagPicker(
+      currentTag: currentTag,
+      title: 'Set $displayNumber',
+    );
+    if (selected == null || selected == currentTag) return;
+    await _workoutRepo.updateSetEntry(
+      id: setId,
+      setTag: selected.storageValue,
+    );
+    _refreshInlineSetData(info);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _editDraftSetTag(
+    SessionExerciseInfo info,
+    _DraftSet draft, {
+    required int displayNumber,
+  }) async {
+    final selected = await _showSetTagPicker(
+      currentTag: draft.setTag,
+      title: 'Set $displayNumber',
+    );
+    if (selected == null || selected == draft.setTag || !mounted) return;
+    setState(() {
+      draft.setTag = selected;
+    });
+    _refreshInlineSetData(info);
+  }
+
   void _scheduleDeleteSet(
     Map<String, Object?> row,
     SessionExerciseInfo info,
@@ -1612,6 +1764,7 @@ class _SessionScreenState extends State<SessionScreen> {
       restSeconds:
           (row['rest_sec_actual'] as int?) ?? _restSecondsForExercise(info),
       targetSetIndex: row['set_index'] as int?,
+      setTag: _setTagForRow(row),
     );
     if (weight != null) {
       draft.weight.text = _formatSetWeight(weight);
@@ -2326,6 +2479,7 @@ class _SessionScreenState extends State<SessionScreen> {
         weight: weight,
         restSeconds: draft.restSeconds ?? _restSecondsForExercise(info),
         setIndex: setNumber ?? draft.targetSetIndex,
+        setTag: draft.setTag,
       );
       final afterSets =
           await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
@@ -2371,8 +2525,11 @@ class _SessionScreenState extends State<SessionScreen> {
       final index = row['set_index'] as int?;
       final reps = row['reps'] as int?;
       final weight = row['weight_value'] as num?;
+      final setTag = _setTagForRow(row);
       final weightLabel = _formatSetWeight(weight);
-      parts.add('${id ?? '?'}:${index ?? '?'} ${weightLabel}x${reps ?? '?'}');
+      parts.add(
+        '${id ?? '?'}:${index ?? '?'}(${setTag.storageValue}) ${weightLabel}x${reps ?? '?'}',
+      );
     }
     return _summarizeParts(parts);
   }
@@ -2837,11 +2994,45 @@ class _SessionScreenState extends State<SessionScreen> {
       );
     }
 
+    Widget setChip({
+      required int displayNumber,
+      required WorkoutSetTag tag,
+      required VoidCallback onTap,
+      Color? foregroundColor,
+    }) {
+      final tagColor = _setTagColor(tag, theme);
+      final effectiveForeground = foregroundColor ??
+          (tag == WorkoutSetTag.normal
+              ? theme.colorScheme.onSurface
+              : tagColor);
+      final highlight = tag == WorkoutSetTag.normal
+          ? fieldFill
+          : tagColor.withValues(alpha: 0.2);
+      final outline = tag == WorkoutSetTag.normal
+          ? borderColor
+          : tagColor.withValues(alpha: 0.42);
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: valueChip(
+            _setDisplayLabel(setNumber: displayNumber, tag: tag),
+            emphasize: true,
+            foregroundColor: effectiveForeground,
+            fillColor: highlight,
+            outlineColor: outline,
+          ),
+        ),
+      );
+    }
+
     Widget savedRowWidget(
       Map<String, Object?> row,
       int displayNumber,
       Map<String, Object?>? previousRow,
     ) {
+      final setTag = _setTagForRow(row);
       final restSecondsActual =
           (row['rest_sec_actual'] as int?) ?? _restSecondsForExercise(info);
       final createdAt = DateTime.tryParse((row['created_at'] as String?) ?? '');
@@ -2877,10 +3068,17 @@ class _SessionScreenState extends State<SessionScreen> {
           children: [
             flexCell(
               flex: setFlex,
-              child: valueChip(
-                '$displayNumber',
-                emphasize: true,
-                foregroundColor: Colors.green.shade900,
+              child: setChip(
+                displayNumber: displayNumber,
+                tag: setTag,
+                onTap: () => _editSavedSetTag(
+                  info,
+                  row,
+                  displayNumber: displayNumber,
+                ),
+                foregroundColor: setTag == WorkoutSetTag.normal
+                    ? Colors.green.shade900
+                    : _setTagColor(setTag, theme),
               ),
             ),
             const SizedBox(width: colGap),
@@ -3009,7 +3207,15 @@ class _SessionScreenState extends State<SessionScreen> {
           children: [
             flexCell(
               flex: setFlex,
-              child: valueChip('$displayNumber', emphasize: true),
+              child: setChip(
+                displayNumber: displayNumber,
+                tag: draft.setTag,
+                onTap: () => _editDraftSetTag(
+                  info,
+                  draft,
+                  displayNumber: displayNumber,
+                ),
+              ),
             ),
             const SizedBox(width: colGap),
             flexCell(
@@ -3265,6 +3471,7 @@ class _SessionScreenState extends State<SessionScreen> {
     required int restSeconds,
     double? weight,
     int? setIndex,
+    WorkoutSetTag? setTag,
   }) async {
     final existing =
         await _workoutRepo.getSetsForSessionExercise(info.sessionExerciseId);
@@ -3283,8 +3490,12 @@ class _SessionScreenState extends State<SessionScreen> {
     );
     final role = planResult?.nextRole ?? 'TOP';
     final isAmrap = planResult?.isAmrap ?? false;
+    final resolvedTag = setTag ??
+        (role.toUpperCase() == 'WARMUP'
+            ? WorkoutSetTag.warmup
+            : WorkoutSetTag.normal);
     _pushSetDebug(
-      '[log] ex=${info.sessionExerciseId} setIndex=$resolvedSetIndex role=$role reps=$reps weight=$weight',
+      '[log] ex=${info.sessionExerciseId} setIndex=$resolvedSetIndex role=$role tag=${resolvedTag.storageValue} reps=$reps weight=$weight',
     );
     final id = await _workoutRepo.addSetEntry(
       sessionExerciseId: info.sessionExerciseId,
@@ -3293,6 +3504,7 @@ class _SessionScreenState extends State<SessionScreen> {
       weightValue: weight,
       weightUnit: _weightUnit,
       weightMode: info.weightModeDefault,
+      setTag: resolvedTag.storageValue,
       reps: reps,
       partialReps: 0,
       rpe: null,
@@ -5016,9 +5228,377 @@ class _SessionScreenState extends State<SessionScreen> {
     return chips;
   }
 
-  Widget _buildExerciseCard(BuildContext context, SessionExerciseInfo info) {
+  Map<int, int> _sessionSupersetCounts() {
+    final counts = <int, int>{};
+    for (final info in _sessionExercises) {
+      final groupId = info.supersetGroupId;
+      if (groupId == null) continue;
+      counts[groupId] = (counts[groupId] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  bool _isLinkedSupersetGroup(int? groupId) {
+    if (groupId == null) return false;
+    return (_sessionSupersetCounts()[groupId] ?? 0) >= 2;
+  }
+
+  List<int> _allSupersetGroupIdsSorted() {
+    final ids = _sessionExercises
+        .map((entry) => entry.supersetGroupId)
+        .whereType<int>()
+        .toSet()
+        .toList()
+      ..sort();
+    return ids;
+  }
+
+  String _alphaLabelForIndex(int index) {
+    var value = index;
+    final chars = <int>[];
+    do {
+      chars.insert(0, 65 + (value % 26));
+      value = (value ~/ 26) - 1;
+    } while (value >= 0);
+    return String.fromCharCodes(chars);
+  }
+
+  String _supersetLabelForGroup(int groupId) {
+    final ids = _allSupersetGroupIdsSorted();
+    final index = ids.indexOf(groupId);
+    final normalizedIndex = index < 0 ? 0 : index;
+    return 'Superset ${_alphaLabelForIndex(normalizedIndex)}';
+  }
+
+  Color _supersetColor(BuildContext context, int groupId) {
+    final scheme = Theme.of(context).colorScheme;
+    final palette = <Color>[
+      scheme.primary,
+      scheme.secondary,
+      scheme.tertiary,
+      scheme.primary.withValues(alpha: 0.82),
+      scheme.secondary.withValues(alpha: 0.82),
+    ];
+    return palette[groupId.abs() % palette.length];
+  }
+
+  int _nextSupersetGroupId() {
+    var maxGroupId = 0;
+    for (final info in _sessionExercises) {
+      final groupId = info.supersetGroupId;
+      if (groupId != null && groupId > maxGroupId) {
+        maxGroupId = groupId;
+      }
+    }
+    return maxGroupId + 1;
+  }
+
+  void _replaceSessionExerciseInfo(SessionExerciseInfo updated) {
+    final index = _sessionExercises.indexWhere(
+      (item) => item.sessionExerciseId == updated.sessionExerciseId,
+    );
+    if (index == -1) return;
+    _sessionExercises[index] = updated;
+    _exerciseById[updated.exerciseId] = updated;
+    _sessionExerciseById[updated.sessionExerciseId] = updated;
+    if (_lastExerciseInfo?.sessionExerciseId == updated.sessionExerciseId) {
+      _lastExerciseInfo = updated;
+    }
+  }
+
+  Future<void> _setSessionExerciseSupersetGroup(
+    SessionExerciseInfo info,
+    int? supersetGroupId,
+  ) async {
+    await _workoutRepo.updateSessionExerciseSupersetGroup(
+      sessionExerciseId: info.sessionExerciseId,
+      supersetGroupId: supersetGroupId,
+    );
+    _replaceSessionExerciseInfo(
+      supersetGroupId == null
+          ? info.copyWith(clearSupersetGroupId: true)
+          : info.copyWith(supersetGroupId: supersetGroupId),
+    );
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _showSupersetPicker(SessionExerciseInfo info) async {
+    final linkedIds = _allSupersetGroupIdsSorted()
+        .where((id) => id != info.supersetGroupId)
+        .toList(growable: false);
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: GlassCard(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Add to Superset',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    leading: Icon(
+                      Icons.add_link_rounded,
+                      color: theme.colorScheme.primary,
+                    ),
+                    title: const Text('Create New Superset'),
+                    onTap: () => Navigator.of(sheetContext).pop(-1),
+                  ),
+                  for (final groupId in linkedIds)
+                    ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      leading: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: _supersetColor(sheetContext, groupId)
+                              .withValues(alpha: 0.82),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      title: Text(_supersetLabelForGroup(groupId)),
+                      onTap: () => Navigator.of(sheetContext).pop(groupId),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (selected == null) return;
+    final nextGroupId = selected == -1 ? _nextSupersetGroupId() : selected;
+    await _setSessionExerciseSupersetGroup(info, nextGroupId);
+  }
+
+  bool _isSupersetGroupStartAtIndex(int index) {
+    final current = _sessionExercises[index];
+    final groupId = current.supersetGroupId;
+    if (!_isLinkedSupersetGroup(groupId) || groupId == null) return false;
+    if (index == 0) return true;
+    return _sessionExercises[index - 1].supersetGroupId != groupId;
+  }
+
+  bool _isSupersetGroupEndAtIndex(int index) {
+    final current = _sessionExercises[index];
+    final groupId = current.supersetGroupId;
+    if (!_isLinkedSupersetGroup(groupId) || groupId == null) return false;
+    if (index == _sessionExercises.length - 1) return true;
+    return _sessionExercises[index + 1].supersetGroupId != groupId;
+  }
+
+  Widget _buildSupersetGroupChip(BuildContext context, int groupId) {
+    final theme = Theme.of(context);
+    final color = _supersetColor(context, groupId);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: color.withValues(alpha: 0.18),
+        border: Border.all(
+          color: color.withValues(alpha: 0.38),
+        ),
+      ),
+      child: Text(
+        _supersetLabelForGroup(groupId),
+        style: theme.textTheme.bodySmall?.copyWith(
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _wrapExerciseItemWithSupersetGroup({
+    required BuildContext context,
+    required int index,
+    required Widget child,
+  }) {
+    final info = _sessionExercises[index];
+    final groupId = info.supersetGroupId;
+    final linked = _isLinkedSupersetGroup(groupId);
+    if (!linked || groupId == null) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: child,
+      );
+    }
+    final isStart = _isSupersetGroupStartAtIndex(index);
+    final isEnd = _isSupersetGroupEndAtIndex(index);
+    final color = _supersetColor(context, groupId);
+    final radius = BorderRadius.only(
+      topLeft: Radius.circular(isStart ? 20 : 8),
+      topRight: Radius.circular(isStart ? 20 : 8),
+      bottomLeft: Radius.circular(isEnd ? 20 : 8),
+      bottomRight: Radius.circular(isEnd ? 20 : 8),
+    );
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: isEnd ? 16 : 0,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          color: color.withValues(alpha: 0.08),
+          border: Border.all(
+            color: color.withValues(alpha: 0.44),
+            width: 1.2,
+          ),
+        ),
+        padding: EdgeInsets.fromLTRB(0, isStart ? 10 : 4, 0, isEnd ? 10 : 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isStart) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: _buildSupersetGroupChip(context, groupId),
+              ),
+              const SizedBox(height: 8),
+            ],
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _persistSessionExerciseOrder() async {
+    for (var i = 0; i < _sessionExercises.length; i++) {
+      await _workoutRepo.updateSessionExerciseOrder(
+        sessionExerciseId: _sessionExercises[i].sessionExerciseId,
+        orderIndex: i,
+      );
+    }
+  }
+
+  void _handleExerciseReorderStart(int oldIndex) {
+    if (oldIndex < 0 || oldIndex >= _sessionExercises.length) return;
+    setState(() {
+      _isReorderingExercises = true;
+      _draggingSessionExerciseId =
+          _sessionExercises[oldIndex].sessionExerciseId;
+    });
+  }
+
+  void _enterExerciseReorderModeFromHandle() {
+    if (_isReorderingExercises) return;
+    setState(() {
+      _isReorderingExercises = true;
+    });
+  }
+
+  void _handleExerciseReorderEnd(int index) {
+    if (!mounted) return;
+    setState(() {
+      _isReorderingExercises = false;
+      _draggingSessionExerciseId = null;
+    });
+  }
+
+  void _handleExerciseReorder(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _sessionExercises.length) return;
+    if (newIndex < 0) return;
+    if (newIndex > _sessionExercises.length) {
+      newIndex = _sessionExercises.length;
+    }
+    if (newIndex > oldIndex) {
+      newIndex -= 1;
+    }
+    if (newIndex == oldIndex) return;
+    setState(() {
+      final moved = _sessionExercises.removeAt(oldIndex);
+      _sessionExercises.insert(newIndex, moved);
+      _currentDayExerciseNames =
+          _sessionExercises.map((entry) => entry.exerciseName).toList();
+    });
+    unawaited(_persistSessionExerciseOrder());
+  }
+
+  Widget _buildCompactExerciseCard(
+    BuildContext context,
+    SessionExerciseInfo info, {
+    required int index,
+    bool withDragHandle = true,
+  }) {
+    final theme = Theme.of(context);
+    final isDragging = _draggingSessionExerciseId == info.sessionExerciseId;
+    final title = Text(
+      info.exerciseName,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.titleMedium?.copyWith(
+        color: theme.colorScheme.primary,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface
+            .withValues(alpha: isDragging ? 0.8 : 0.72),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDragging
+              ? theme.colorScheme.primary.withValues(alpha: 0.42)
+              : theme.colorScheme.onSurface.withValues(alpha: 0.08),
+        ),
+        boxShadow: isDragging
+            ? [
+                BoxShadow(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.18),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                ),
+              ]
+            : const [],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: withDragHandle
+                ? ReorderableDelayedDragStartListener(
+                    index: index,
+                    child: title,
+                  )
+                : title,
+          ),
+          Icon(
+            Icons.drag_indicator_rounded,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+            size: 20,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExerciseCard(
+    BuildContext context,
+    SessionExerciseInfo info, {
+    required int index,
+  }) {
     final theme = Theme.of(context);
     final muscleChips = _buildExerciseChips(context, info);
+    final supersetGroupId = info.supersetGroupId;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
@@ -5034,11 +5614,21 @@ class _SessionScreenState extends State<SessionScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  info.exerciseName,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.w700,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onLongPressDown: (_) => _enterExerciseReorderModeFromHandle(),
+                  child: ReorderableDelayedDragStartListener(
+                    index: index,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        info.exerciseName,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -5087,25 +5677,50 @@ class _SessionScreenState extends State<SessionScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  onSelected: (value) {
+                  onSelected: (value) async {
                     if (value == 'timer') {
                       _editExerciseRestTimers(info);
+                      return;
+                    }
+                    if (value == 'superset_add') {
+                      await _showSupersetPicker(info);
+                      return;
+                    }
+                    if (value == 'superset_remove') {
+                      await _setSessionExerciseSupersetGroup(info, null);
                       return;
                     }
                     if (value == 'delete') {
                       _deleteExerciseFromSession(info);
                     }
                   },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem<String>(
-                      value: 'timer',
-                      child: Text('Edit Exercise Timers'),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'delete',
-                      child: Text('Delete Exercise'),
-                    ),
-                  ],
+                  itemBuilder: (context) {
+                    final items = <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'timer',
+                        child: Text('Edit Exercise Timers'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'superset_add',
+                        child: Text('Add to Superset'),
+                      ),
+                    ];
+                    if (supersetGroupId != null) {
+                      items.add(
+                        const PopupMenuItem<String>(
+                          value: 'superset_remove',
+                          child: Text('Remove from Superset'),
+                        ),
+                      );
+                    }
+                    items.add(
+                      const PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Text('Delete Exercise'),
+                      ),
+                    );
+                    return items;
+                  },
                 ),
               ),
             ],
@@ -5151,6 +5766,77 @@ class _SessionScreenState extends State<SessionScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildExerciseList(BuildContext context) {
+    if (_sessionExercises.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final theme = Theme.of(context);
+    return ReorderableListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _sessionExercises.length,
+      buildDefaultDragHandles: false,
+      proxyDecorator: (child, index, animation) {
+        return AnimatedBuilder(
+          animation: animation,
+          builder: (context, _) {
+            final lift = Curves.easeOut.transform(animation.value);
+            return Transform.scale(
+              scale: 1 + (0.02 * lift),
+              child: Material(
+                color: Colors.transparent,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                        blurRadius: 16,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: child,
+                ),
+              ),
+            );
+          },
+        );
+      },
+      onReorderStart: _handleExerciseReorderStart,
+      onReorderEnd: _handleExerciseReorderEnd,
+      onReorder: _handleExerciseReorder,
+      itemBuilder: (context, index) {
+        final info = _sessionExercises[index];
+        final isCompact = _isReorderingExercises;
+        final content = isCompact
+            ? Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildCompactExerciseCard(
+                  context,
+                  info,
+                  index: index,
+                ),
+              )
+            : _buildExerciseCard(
+                context,
+                info,
+                index: index,
+              );
+        return KeyedSubtree(
+          key: ValueKey('session-exercise-${info.sessionExerciseId}'),
+          child: isCompact
+              ? content
+              : _wrapExerciseItemWithSupersetGroup(
+                  context: context,
+                  index: index,
+                  child: content,
+                ),
+        );
+      },
     );
   }
 
@@ -5211,11 +5897,7 @@ class _SessionScreenState extends State<SessionScreen> {
                   sessionTimer: sessionTimer,
                 ),
                 if (_sessionExercises.isNotEmpty) const SizedBox(height: 18),
-                for (var i = 0; i < _sessionExercises.length; i++) ...[
-                  _buildExerciseCard(context, _sessionExercises[i]),
-                  if (i != _sessionExercises.length - 1)
-                    const SizedBox(height: 16),
-                ],
+                _buildExerciseList(context),
                 const SizedBox(height: 20),
                 _buildAddExerciseButton(context),
                 if (_showVoiceDebug) ...[

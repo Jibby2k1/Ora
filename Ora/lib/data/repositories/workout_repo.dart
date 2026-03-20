@@ -98,12 +98,14 @@ class WorkoutRepo {
     required int workoutSessionId,
     required int exerciseId,
     required int orderIndex,
+    int? supersetGroupId,
   }) async {
     final db = await _db.database;
     return db.insert('session_exercise', {
       'workout_session_id': workoutSessionId,
       'exercise_id': exerciseId,
       'order_index': orderIndex,
+      'superset_group_id': supersetGroupId,
     });
   }
 
@@ -124,6 +126,36 @@ class WorkoutRepo {
       'session_exercise',
       row,
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateSessionExerciseSupersetGroup({
+    required int sessionExerciseId,
+    int? supersetGroupId,
+  }) async {
+    final db = await _db.database;
+    await db.update(
+      'session_exercise',
+      {
+        'superset_group_id': supersetGroupId,
+      },
+      where: 'id = ?',
+      whereArgs: [sessionExerciseId],
+    );
+  }
+
+  Future<void> updateSessionExerciseOrder({
+    required int sessionExerciseId,
+    required int orderIndex,
+  }) async {
+    final db = await _db.database;
+    await db.update(
+      'session_exercise',
+      {
+        'order_index': orderIndex,
+      },
+      where: 'id = ?',
+      whereArgs: [sessionExerciseId],
     );
   }
 
@@ -170,6 +202,7 @@ WHERE workout_session_id = ? AND order_index > ?
     required String setRole,
     required String weightUnit,
     required String weightMode,
+    String setTag = 'normal',
     double? weightValue,
     int? reps,
     int partialReps = 0,
@@ -195,6 +228,7 @@ WHERE workout_session_id = ? AND order_index > ?
       'flag_warmup': flagWarmup ? 1 : 0,
       'flag_partials': flagPartials ? 1 : 0,
       'is_amrap': isAmrap ? 1 : 0,
+      'set_tag': setTag,
       'rest_sec_actual': restSecActual,
       'created_at': DateTime.now().toIso8601String(),
     });
@@ -257,6 +291,7 @@ ORDER BY se.set_index ASC
     Object? rpe = _unchangedSetEntryField,
     Object? rir = _unchangedSetEntryField,
     Object? restSecActual = _unchangedSetEntryField,
+    Object? setTag = _unchangedSetEntryField,
   }) async {
     final values = <String, Object?>{};
     if (!identical(weightValue, _unchangedSetEntryField)) {
@@ -276,6 +311,9 @@ ORDER BY se.set_index ASC
     }
     if (!identical(restSecActual, _unchangedSetEntryField)) {
       values['rest_sec_actual'] = restSecActual as int?;
+    }
+    if (!identical(setTag, _unchangedSetEntryField)) {
+      values['set_tag'] = (setTag as String?) ?? 'normal';
     }
     if (values.isEmpty) return;
     final db = await _db.database;
@@ -336,7 +374,7 @@ ORDER BY se.set_index ASC
   Future<List<Map<String, Object?>>> getSessionExercises(int sessionId) async {
     final db = await _db.database;
     return db.rawQuery(
-        '''\nSELECT sx.id as session_exercise_id,\n       sx.exercise_id,\n       sx.order_index,\n       e.canonical_name,\n       e.weight_mode_default\nFROM session_exercise sx\nJOIN exercise e ON e.id = sx.exercise_id\nWHERE sx.workout_session_id = ?\nORDER BY sx.order_index ASC\n''',
+        '''\nSELECT sx.id as session_exercise_id,\n       sx.exercise_id,\n       sx.order_index,\n       sx.superset_group_id,\n       e.canonical_name,\n       e.weight_mode_default\nFROM session_exercise sx\nJOIN exercise e ON e.id = sx.exercise_id\nWHERE sx.workout_session_id = ?\nORDER BY sx.order_index ASC\n''',
         [sessionId]);
   }
 
@@ -385,7 +423,7 @@ ORDER BY se.set_index ASC
   Future<List<Map<String, Object?>>> getSessionSets(int sessionId) async {
     final db = await _db.database;
     return db.rawQuery(
-        '''\nSELECT sx.id as session_exercise_id,\n       sx.order_index,\n       sx.exercise_id,\n       e.canonical_name,\n       se.id as set_id,\n       se.set_index,\n       se.weight_value,\n       se.weight_unit,\n       se.reps,\n       se.rpe,\n       se.rir,\n       se.flag_warmup,\n       se.flag_partials,\n       se.is_amrap,\n       se.rest_sec_actual\nFROM set_entry se\nJOIN session_exercise sx ON sx.id = se.session_exercise_id\nJOIN exercise e ON e.id = sx.exercise_id\nWHERE sx.workout_session_id = ?\nORDER BY sx.order_index ASC, se.set_index ASC\n''',
+        '''\nSELECT sx.id as session_exercise_id,\n       sx.order_index,\n       sx.exercise_id,\n       e.canonical_name,\n       se.id as set_id,\n       se.set_index,\n       se.weight_value,\n       se.weight_unit,\n       se.reps,\n       se.rpe,\n       se.rir,\n       se.flag_warmup,\n       se.flag_partials,\n       se.is_amrap,\n       se.set_tag,\n       se.rest_sec_actual\nFROM set_entry se\nJOIN session_exercise sx ON sx.id = se.session_exercise_id\nJOIN exercise e ON e.id = sx.exercise_id\nWHERE sx.workout_session_id = ?\nORDER BY sx.order_index ASC, se.set_index ASC\n''',
         [sessionId]);
   }
 }

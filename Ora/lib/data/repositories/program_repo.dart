@@ -119,6 +119,7 @@ class ProgramRepo {
     required int programDayId,
     required int exerciseId,
     required int orderIndex,
+    int? supersetGroupId,
     String? notes,
   }) async {
     final db = await _db.database;
@@ -126,8 +127,26 @@ class ProgramRepo {
       'program_day_id': programDayId,
       'exercise_id': exerciseId,
       'order_index': orderIndex,
+      'superset_group_id': supersetGroupId,
       'notes': notes,
     });
+  }
+
+  Future<List<Map<String, Object?>>> getProgramDayExerciseDetails(
+      int programDayId) async {
+    final db = await _db.database;
+    return db.rawQuery(
+        '''\nSELECT pde.id as program_day_exercise_id,\n       pde.exercise_id,\n       pde.order_index,\n       pde.superset_group_id,\n       pde.notes,\n       e.canonical_name,\n       e.weight_mode_default\nFROM program_day_exercise pde\nJOIN exercise e ON e.id = pde.exercise_id\nWHERE pde.program_day_id = ?\nORDER BY pde.order_index ASC\n''',
+        [programDayId]);
+  }
+
+  Future<void> deleteProgramDayExercise(int programDayExerciseId) async {
+    final db = await _db.database;
+    await db.delete('set_plan_block',
+        where: 'program_day_exercise_id = ?',
+        whereArgs: [programDayExerciseId]);
+    await db.delete('program_day_exercise',
+        where: 'id = ?', whereArgs: [programDayExerciseId]);
   }
 
   Future<void> updateProgramDayExerciseOrder({
@@ -143,21 +162,19 @@ class ProgramRepo {
     );
   }
 
-  Future<List<Map<String, Object?>>> getProgramDayExerciseDetails(
-      int programDayId) async {
+  Future<void> updateProgramDayExerciseSupersetGroup({
+    required int id,
+    int? supersetGroupId,
+  }) async {
     final db = await _db.database;
-    return db.rawQuery(
-        '''\nSELECT pde.id as program_day_exercise_id,\n       pde.exercise_id,\n       pde.order_index,\n       pde.notes,\n       e.canonical_name,\n       e.weight_mode_default\nFROM program_day_exercise pde\nJOIN exercise e ON e.id = pde.exercise_id\nWHERE pde.program_day_id = ?\nORDER BY pde.order_index ASC\n''',
-        [programDayId]);
-  }
-
-  Future<void> deleteProgramDayExercise(int programDayExerciseId) async {
-    final db = await _db.database;
-    await db.delete('set_plan_block',
-        where: 'program_day_exercise_id = ?',
-        whereArgs: [programDayExerciseId]);
-    await db.delete('program_day_exercise',
-        where: 'id = ?', whereArgs: [programDayExerciseId]);
+    await db.update(
+      'program_day_exercise',
+      {
+        'superset_group_id': supersetGroupId,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<int> addSetPlanBlock({

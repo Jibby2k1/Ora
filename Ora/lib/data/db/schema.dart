@@ -1,5 +1,5 @@
 const dbName = 'ora.db';
-const dbVersion = 12;
+const dbVersion = 13;
 
 const createTableExerciseScienceInfo = '''
 CREATE TABLE exercise_science_info(
@@ -62,6 +62,7 @@ CREATE TABLE program_day_exercise(
   program_day_id INTEGER NOT NULL,
   exercise_id INTEGER NOT NULL,
   order_index INTEGER NOT NULL,
+  superset_group_id INTEGER,
   notes TEXT,
   FOREIGN KEY(program_day_id) REFERENCES program_day(id),
   FOREIGN KEY(exercise_id) REFERENCES exercise(id)
@@ -113,6 +114,7 @@ CREATE TABLE session_exercise(
   workout_session_id INTEGER NOT NULL,
   exercise_id INTEGER NOT NULL,
   order_index INTEGER NOT NULL,
+  superset_group_id INTEGER,
   FOREIGN KEY(workout_session_id) REFERENCES workout_session(id),
   FOREIGN KEY(exercise_id) REFERENCES exercise(id)
 );
@@ -134,6 +136,7 @@ CREATE TABLE set_entry(
   flag_warmup INTEGER NOT NULL DEFAULT 0,
   flag_partials INTEGER NOT NULL DEFAULT 0,
   is_amrap INTEGER NOT NULL DEFAULT 0,
+  set_tag TEXT NOT NULL DEFAULT 'normal',
   rest_sec_actual INTEGER,
   created_at TEXT NOT NULL,
   FOREIGN KEY(session_exercise_id) REFERENCES session_exercise(id)

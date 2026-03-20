@@ -97,6 +97,7 @@ class _DayEditorScreenState extends State<DayEditorScreen> {
         'program_day_exercise_id': programDayExerciseId,
         'exercise_id': exerciseId,
         'order_index': orderIndex,
+        'superset_group_id': null,
         'notes': null,
         'canonical_name': result.name,
         'weight_mode_default': null,
@@ -264,6 +265,203 @@ class _DayEditorScreenState extends State<DayEditorScreen> {
     );
   }
 
+  int? _supersetGroupIdForRow(Map<String, Object?> row) {
+    return row['superset_group_id'] as int?;
+  }
+
+  Map<int, int> _daySupersetCounts() {
+    final counts = <int, int>{};
+    for (final row in _exerciseRows) {
+      final groupId = _supersetGroupIdForRow(row);
+      if (groupId == null) continue;
+      counts[groupId] = (counts[groupId] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  bool _isDayLinkedSupersetGroup(int? groupId) {
+    if (groupId == null) return false;
+    return (_daySupersetCounts()[groupId] ?? 0) >= 2;
+  }
+
+  List<int> _allDaySupersetIds() {
+    final ids = _exerciseRows
+        .map((row) => _supersetGroupIdForRow(row))
+        .whereType<int>()
+        .toSet()
+        .toList()
+      ..sort();
+    return ids;
+  }
+
+  String _alphaLabelForIndex(int index) {
+    var value = index;
+    final chars = <int>[];
+    do {
+      chars.insert(0, 65 + (value % 26));
+      value = (value ~/ 26) - 1;
+    } while (value >= 0);
+    return String.fromCharCodes(chars);
+  }
+
+  String _supersetLabelForGroup(int groupId) {
+    final ids = _allDaySupersetIds();
+    final index = ids.indexOf(groupId);
+    final normalized = index < 0 ? 0 : index;
+    return 'Superset ${_alphaLabelForIndex(normalized)}';
+  }
+
+  Color _supersetColor(BuildContext context, int groupId) {
+    final scheme = Theme.of(context).colorScheme;
+    final palette = <Color>[
+      scheme.primary,
+      scheme.secondary,
+      scheme.tertiary,
+      scheme.primary.withValues(alpha: 0.82),
+      scheme.secondary.withValues(alpha: 0.82),
+    ];
+    return palette[groupId.abs() % palette.length];
+  }
+
+  bool _isSupersetGroupStartForIndex(int index) {
+    final current = _supersetGroupIdForRow(_exerciseRows[index]);
+    if (!_isDayLinkedSupersetGroup(current) || current == null) return false;
+    if (index == 0) return true;
+    return _supersetGroupIdForRow(_exerciseRows[index - 1]) != current;
+  }
+
+  bool _isSupersetGroupEndForIndex(int index) {
+    final current = _supersetGroupIdForRow(_exerciseRows[index]);
+    if (!_isDayLinkedSupersetGroup(current) || current == null) return false;
+    if (index == _exerciseRows.length - 1) return true;
+    return _supersetGroupIdForRow(_exerciseRows[index + 1]) != current;
+  }
+
+  Widget _buildSupersetChip(BuildContext context, int groupId) {
+    final theme = Theme.of(context);
+    final color = _supersetColor(context, groupId);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: color.withValues(alpha: 0.2),
+        border: Border.all(
+          color: color.withValues(alpha: 0.42),
+        ),
+      ),
+      child: Text(
+        _supersetLabelForGroup(groupId),
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
+        ),
+      ),
+    );
+  }
+
+  int _nextDaySupersetGroupId() {
+    var maxId = 0;
+    for (final row in _exerciseRows) {
+      final groupId = _supersetGroupIdForRow(row);
+      if (groupId != null && groupId > maxId) {
+        maxId = groupId;
+      }
+    }
+    return maxId + 1;
+  }
+
+  void _replaceExerciseRow(Map<String, Object?> row) {
+    final id = row['program_day_exercise_id'] as int?;
+    if (id == null) return;
+    final index = _exerciseRows.indexWhere(
+      (item) => item['program_day_exercise_id'] == id,
+    );
+    if (index == -1) return;
+    _exerciseRows[index] = row;
+  }
+
+  Future<void> _setRowSupersetGroup(
+    Map<String, Object?> row,
+    int? groupId,
+  ) async {
+    final id = row['program_day_exercise_id'] as int?;
+    if (id == null) return;
+    await _programRepo.updateProgramDayExerciseSupersetGroup(
+      id: id,
+      supersetGroupId: groupId,
+    );
+    final updated = Map<String, Object?>.from(row)
+      ..['superset_group_id'] = groupId;
+    _replaceExerciseRow(updated);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _showSupersetPicker(Map<String, Object?> row) async {
+    final current = _supersetGroupIdForRow(row);
+    final groupOptions =
+        _allDaySupersetIds().where((id) => id != current).toList();
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: GlassCard(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Add to Superset',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    leading: Icon(
+                      Icons.add_link_rounded,
+                      color: theme.colorScheme.primary,
+                    ),
+                    title: const Text('Create New Superset'),
+                    onTap: () => Navigator.of(sheetContext).pop(-1),
+                  ),
+                  for (final groupId in groupOptions)
+                    ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      leading: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: _supersetColor(sheetContext, groupId)
+                              .withValues(alpha: 0.82),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      title: Text(_supersetLabelForGroup(groupId)),
+                      onTap: () => Navigator.of(sheetContext).pop(groupId),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (selected == null) return;
+    final nextGroupId = selected == -1 ? _nextDaySupersetGroupId() : selected;
+    await _setRowSupersetGroup(row, nextGroupId);
+  }
+
   Future<void> _exitAndSave() async {
     if (_isLeaving) {
       // Recover from stale exit state that can survive hot reloads.
@@ -318,15 +516,23 @@ class _DayEditorScreenState extends State<DayEditorScreen> {
                         padding: EdgeInsets.only(bottom: 12),
                         child: Text('Add an exercise.'),
                       ),
-                    for (var index = 0;
-                        index < _exerciseRows.length;
-                        index++) ...[
+                    for (var index = 0; index < _exerciseRows.length; index++)
                       Builder(
                         builder: (context) {
                           final row = _exerciseRows[index];
                           final name = row['canonical_name'] as String;
                           final programDayExerciseId =
                               row['program_day_exercise_id'] as int;
+                          final supersetGroupId = _supersetGroupIdForRow(row);
+                          final linkedSuperset =
+                              _isDayLinkedSupersetGroup(supersetGroupId);
+                          final isSupersetStart =
+                              _isSupersetGroupStartForIndex(index);
+                          final isSupersetEnd =
+                              _isSupersetGroupEndForIndex(index);
+                          final supersetColor = supersetGroupId == null
+                              ? null
+                              : _supersetColor(context, supersetGroupId);
                           final tile = GlassCard(
                             padding: EdgeInsets.zero,
                             child: ListTile(
@@ -372,21 +578,107 @@ class _DayEditorScreenState extends State<DayEditorScreen> {
                                     );
                                     return;
                                   }
+                                  if (value == 'superset_add') {
+                                    await _showSupersetPicker(row);
+                                    return;
+                                  }
+                                  if (value == 'superset_remove') {
+                                    await _setRowSupersetGroup(row, null);
+                                    return;
+                                  }
                                   await _scheduleExerciseRemoval(row);
                                 },
-                                itemBuilder: (_) => const [
-                                  PopupMenuItem(
-                                    value: 'stats',
-                                    child: Text('View stats'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'delete',
-                                    child: Text('Remove'),
-                                  ),
-                                ],
+                                itemBuilder: (_) {
+                                  final items = <PopupMenuEntry<String>>[
+                                    const PopupMenuItem(
+                                      value: 'stats',
+                                      child: Text('View stats'),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'superset_add',
+                                      child: Text('Add to Superset'),
+                                    ),
+                                  ];
+                                  if (supersetGroupId != null) {
+                                    items.add(
+                                      const PopupMenuItem(
+                                        value: 'superset_remove',
+                                        child: Text('Remove from Superset'),
+                                      ),
+                                    );
+                                  }
+                                  items.add(
+                                    const PopupMenuItem(
+                                      value: 'delete',
+                                      child: Text('Remove'),
+                                    ),
+                                  );
+                                  return items;
+                                },
                               ),
                             ),
                           );
+                          final groupedTile = linkedSuperset &&
+                                  supersetGroupId != null
+                              ? Container(
+                                  margin: EdgeInsets.only(
+                                    bottom: isSupersetEnd ? 12 : 0,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: supersetColor!.withValues(
+                                      alpha: 0.08,
+                                    ),
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: Radius.circular(
+                                        isSupersetStart ? 20 : 8,
+                                      ),
+                                      topRight: Radius.circular(
+                                        isSupersetStart ? 20 : 8,
+                                      ),
+                                      bottomLeft: Radius.circular(
+                                        isSupersetEnd ? 20 : 8,
+                                      ),
+                                      bottomRight: Radius.circular(
+                                        isSupersetEnd ? 20 : 8,
+                                      ),
+                                    ),
+                                    border: Border.all(
+                                      color: supersetColor.withValues(
+                                        alpha: 0.44,
+                                      ),
+                                      width: 1.2,
+                                    ),
+                                  ),
+                                  padding: EdgeInsets.fromLTRB(
+                                    0,
+                                    isSupersetStart ? 10 : 4,
+                                    0,
+                                    isSupersetEnd ? 10 : 4,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (isSupersetStart) ...[
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                          ),
+                                          child: _buildSupersetChip(
+                                            context,
+                                            supersetGroupId,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                      ],
+                                      tile,
+                                    ],
+                                  ),
+                                )
+                              : Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: tile,
+                                );
                           return Dismissible(
                             key: ValueKey(programDayExerciseId),
                             direction: DismissDirection.startToEnd,
@@ -406,12 +698,10 @@ class _DayEditorScreenState extends State<DayEditorScreen> {
                             onDismissed: (_) {
                               unawaited(_scheduleExerciseRemoval(row));
                             },
-                            child: tile,
+                            child: groupedTile,
                           );
                         },
                       ),
-                      const SizedBox(height: 12),
-                    ],
                     _buildAddExerciseCard(),
                   ],
                 ),

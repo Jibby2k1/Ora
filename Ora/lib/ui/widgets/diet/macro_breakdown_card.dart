@@ -126,15 +126,22 @@ class _ProgressBarRow extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(999),
-          child: LinearProgressIndicator(
-            value: progress,
-            minHeight: 8,
-            backgroundColor:
-                theme.colorScheme.onSurface.withValues(alpha: 0.16),
-            color: color,
-          ),
+        TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: progress),
+          duration: const Duration(milliseconds: 360),
+          curve: Curves.easeOutCubic,
+          builder: (context, animatedProgress, _) {
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: animatedProgress,
+                minHeight: 8,
+                backgroundColor:
+                    theme.colorScheme.onSurface.withValues(alpha: 0.16),
+                color: color,
+              ),
+            );
+          },
         ),
       ],
     );
