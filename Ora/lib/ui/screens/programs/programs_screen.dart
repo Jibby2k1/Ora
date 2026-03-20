@@ -1068,8 +1068,8 @@ class _ProgramsScreenState extends State<ProgramsScreen>
   Widget _buildTrainingHub(List<Map<String, Object?>> programs) {
     final theme = Theme.of(context);
     final activeSession = AppShellController.instance.activeSession.value;
-    final selectedProgram = _selectedProgramName ??
-        (programs.isEmpty ? 'No program selected' : 'Program selected');
+    final selectedProgram =
+        _selectedProgramName ?? (programs.isEmpty ? 'None selected' : 'Loaded');
 
     Future<void> openDashboardAfter(Future<void> Function() action) async {
       await action();
@@ -1079,142 +1079,82 @@ class _ProgramsScreenState extends State<ProgramsScreen>
 
     return ListView(
       key: const ValueKey('training-hub'),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
       children: [
         GlassCard(
-          padding: EdgeInsets.zero,
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  theme.colorScheme.primary.withValues(alpha: 0.18),
-                  theme.colorScheme.secondary.withValues(alpha: 0.10),
-                  theme.colorScheme.surface.withValues(alpha: 0.72),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color:
-                            theme.colorScheme.surface.withValues(alpha: 0.70),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color:
-                              theme.colorScheme.primary.withValues(alpha: 0.24),
-                        ),
-                      ),
-                      child: Icon(
-                        Icons.fitness_center_rounded,
-                        color: theme.colorScheme.primary,
-                      ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Training Hub',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Choose the exact training workflow you want instead of landing in the full dashboard immediately.',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
+                    child: Icon(
+                      Icons.fitness_center_rounded,
+                      color: theme.colorScheme.primary,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  programs.isEmpty
-                      ? 'No programs are loaded yet, so the highest-leverage next step is to create one or upload one.'
-                      : 'Use the hub to jump into the dashboard, start a session, manage programs, or inspect the exercise catalog.',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    height: 1.1,
                   ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'Current focus: $selectedProgram',
-                  style: theme.textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    _buildTrainingMetric(
-                        'Programs', programs.length.toString()),
-                    _buildTrainingMetric(
-                      'Session',
-                      activeSession ? 'Active' : 'Idle',
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Training Hub',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Programs ${programs.length} • Session ${activeSession ? 'active' : 'idle'} • Selected $selectedProgram',
+                          style: theme.textTheme.bodySmall,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                    _buildTrainingMetric(
-                      'Stats focus',
-                      _selectedStatsMuscle ?? 'Unset',
-                    ),
-                    _buildTrainingMetric(
-                      'Selected',
-                      _selectedProgramName ?? 'None',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: () =>
-                          _openTrainingSection(_TrainingHubSection.dashboard),
-                      icon: const Icon(Icons.dashboard_customize_rounded),
-                      label: const Text('Open dashboard'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _startFreeStyleSession,
-                      icon: const Icon(Icons.play_arrow_rounded),
-                      label: const Text('Start workout'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                  FilledButton(
+                    onPressed: () =>
+                        _openTrainingSection(_TrainingHubSection.dashboard),
+                    child: const Text('Dashboard'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _buildTrainingMetric('Programs', programs.length.toString()),
+                  _buildTrainingMetric(
+                      'Session', activeSession ? 'Active' : 'Idle'),
+                  _buildTrainingMetric(
+                      'Stats', _selectedStatsMuscle ?? 'Unset'),
+                  _buildTrainingMetric(
+                      'Selected', _selectedProgramName ?? 'None'),
+                ],
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 18),
-        Text(
-          'Choose what to do',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Session launch, program management, and reference tools are split into explicit paths so the screen stays readable.',
-          style: theme.textTheme.bodyMedium,
         ),
         const SizedBox(height: 12),
         LayoutBuilder(
           builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 760;
+            final columns = constraints.maxWidth >= 1100
+                ? 4
+                : constraints.maxWidth >= 760
+                    ? 3
+                    : 2;
             final cardWidth =
-                isWide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+                (constraints.maxWidth - ((columns - 1) * 12)) / columns;
             return Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -1224,11 +1164,10 @@ class _ProgramsScreenState extends State<ProgramsScreen>
                   child: _buildTrainingActionCard(
                     icon: Icons.dashboard_customize_rounded,
                     title: 'Dashboard',
-                    description:
-                        'Open the full training dashboard with steps, quick start, programs, and stats.',
+                    description: 'Steps, quick start, programs, stats',
                     meta: programs.isEmpty
-                        ? 'No programs loaded yet'
-                        : '${programs.length} program${programs.length == 1 ? '' : 's'} loaded',
+                        ? 'No programs loaded'
+                        : '${programs.length} loaded',
                     accent: theme.colorScheme.primary,
                     onTap: () =>
                         _openTrainingSection(_TrainingHubSection.dashboard),
@@ -1239,9 +1178,8 @@ class _ProgramsScreenState extends State<ProgramsScreen>
                   child: _buildTrainingActionCard(
                     icon: Icons.play_circle_outline_rounded,
                     title: 'Start Workout',
-                    description:
-                        'Launch a free-style workout immediately from the hub.',
-                    meta: 'Fastest training entry point',
+                    description: 'Launch a free-style session',
+                    meta: 'Fastest workout entry',
                     accent: Colors.greenAccent.shade400,
                     onTap: _startFreeStyleSession,
                   ),
@@ -1251,9 +1189,8 @@ class _ProgramsScreenState extends State<ProgramsScreen>
                   child: _buildTrainingActionCard(
                     icon: Icons.calendar_view_week_rounded,
                     title: 'Program Day',
-                    description:
-                        'Open the selected program and choose a day to run or edit.',
-                    meta: _selectedProgramName ?? 'Requires a selected program',
+                    description: 'Open the selected program day',
+                    meta: _selectedProgramName ?? 'Needs a selected program',
                     accent: Colors.orangeAccent,
                     onTap: _openSelectedProgramDayPicker,
                   ),
@@ -1263,8 +1200,8 @@ class _ProgramsScreenState extends State<ProgramsScreen>
                   child: _buildTrainingActionCard(
                     icon: Icons.add_box_outlined,
                     title: 'Create Program',
-                    description: 'Create a new training program from scratch.',
-                    meta: 'Opens the program editor',
+                    description: 'Start a new program',
+                    meta: 'Opens the editor',
                     accent: Colors.lightBlueAccent,
                     onTap: () => openDashboardAfter(_createProgram),
                   ),
@@ -1274,9 +1211,8 @@ class _ProgramsScreenState extends State<ProgramsScreen>
                   child: _buildTrainingActionCard(
                     icon: Icons.upload_file_rounded,
                     title: 'Upload Program',
-                    description:
-                        'Import a structured training program from a file.',
-                    meta: 'Workbook and file import path',
+                    description: 'Import from file',
+                    meta: 'Workbook import path',
                     accent: Colors.purpleAccent,
                     onTap: () => openDashboardAfter(_uploadProgram),
                   ),
@@ -1286,9 +1222,8 @@ class _ProgramsScreenState extends State<ProgramsScreen>
                   child: _buildTrainingActionCard(
                     icon: Icons.menu_book_rounded,
                     title: 'Exercise Catalog',
-                    description:
-                        'Browse and search the exercise catalog without opening the main dashboard.',
-                    meta: 'Reference library for exercise selection',
+                    description: 'Browse the exercise library',
+                    meta: 'Reference without dashboard',
                     accent: Colors.tealAccent.shade400,
                     onTap: () async {
                       await Navigator.of(context).push(
@@ -1306,9 +1241,8 @@ class _ProgramsScreenState extends State<ProgramsScreen>
                   child: _buildTrainingActionCard(
                     icon: Icons.directions_walk_rounded,
                     title: 'Step Details',
-                    description:
-                        'Inspect steps and activity details without opening the full dashboard.',
-                    meta: 'Uses the existing steps detail flow',
+                    description: 'Inspect live steps and activity',
+                    meta: 'Uses the existing steps flow',
                     accent: Colors.amberAccent.shade400,
                     onTap: _openStepsDetails,
                   ),
@@ -1324,23 +1258,25 @@ class _ProgramsScreenState extends State<ProgramsScreen>
   Widget _buildTrainingMetric(String label, String value) {
     final theme = Theme.of(context);
     return Container(
-      constraints: const BoxConstraints(minWidth: 132),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      constraints: const BoxConstraints(minWidth: 104),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(16),
+        color: theme.colorScheme.surface.withValues(alpha: 0.48),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: theme.colorScheme.outline.withValues(alpha: 0.16),
+          color: theme.colorScheme.outline.withValues(alpha: 0.14),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: theme.textTheme.bodySmall),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             value,
-            style: theme.textTheme.titleMedium?.copyWith(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -1363,13 +1299,14 @@ class _ProgramsScreenState extends State<ProgramsScreen>
       child: GlassCard(
         padding: EdgeInsets.zero,
         child: Container(
-          padding: const EdgeInsets.all(18),
+          constraints: const BoxConstraints(minHeight: 156),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                accent.withValues(alpha: 0.12),
+                accent.withValues(alpha: 0.10),
                 theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.38),
+                    .withValues(alpha: 0.30),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -1378,36 +1315,45 @@ class _ProgramsScreenState extends State<ProgramsScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: accent),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface.withValues(alpha: 0.72),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, size: 18, color: accent),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.arrow_outward_rounded, size: 18, color: accent),
+                ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Text(
                 title,
-                style: theme.textTheme.titleMedium?.copyWith(
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(description, style: theme.textTheme.bodyMedium),
-              const SizedBox(height: 12),
+              const SizedBox(height: 4),
               Text(
                 meta,
-                style: theme.textTheme.labelLarge?.copyWith(
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(
                   color: accent,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 14),
-              TextButton.icon(
-                onPressed: onTap,
-                icon: const Icon(Icons.arrow_forward_rounded),
-                label: Text(title),
+              const SizedBox(height: 8),
+              Text(
+                description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
               ),
             ],
           ),

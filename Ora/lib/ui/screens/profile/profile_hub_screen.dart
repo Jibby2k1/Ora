@@ -109,118 +109,77 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
     final theme = Theme.of(context);
     return ListView(
       key: const ValueKey('profile-hub'),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
       children: [
         GlassCard(
-          padding: EdgeInsets.zero,
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  theme.colorScheme.primary.withValues(alpha: 0.18),
-                  theme.colorScheme.secondary.withValues(alpha: 0.10),
-                  theme.colorScheme.surface.withValues(alpha: 0.72),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color:
-                            theme.colorScheme.surface.withValues(alpha: 0.70),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color:
-                              theme.colorScheme.primary.withValues(alpha: 0.24),
-                        ),
-                      ),
-                      child: Icon(
-                        Icons.account_circle_rounded,
-                        color: theme.colorScheme.primary,
-                      ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Profile Hub',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Start from a landing page, then choose profile editing, rankings, or settings explicitly.',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
+                    child: Icon(
+                      Icons.account_circle_rounded,
+                      color: theme.colorScheme.primary,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  'Manage identity, rankings, and settings without dropping straight into a tab strip.',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    height: 1.1,
                   ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'The hub keeps account work more organized: choose the exact path you want first, then work inside that section.',
-                  style: theme.textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    _buildMetric(
-                        theme, 'Sections', _sections.length.toString()),
-                    _buildMetric(theme, 'Recommended', 'Profile'),
-                    _buildMetric(theme, 'Settings', 'Available'),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () => _openSection(_ProfileHubSection.profile),
-                  icon: const Icon(Icons.person_rounded),
-                  label: const Text('Open profile'),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Profile Hub',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Profile, rankings, and settings in one compact control panel.',
+                          style: theme.textTheme.bodySmall,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  FilledButton(
+                    onPressed: () => _openSection(_ProfileHubSection.profile),
+                    child: const Text('Profile'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _buildMetric(theme, 'Sections', _sections.length.toString()),
+                  _buildMetric(theme, 'Rankings', 'Friends'),
+                  _buildMetric(theme, 'Settings', 'Ready'),
+                ],
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 18),
-        Text(
-          'Choose what to do',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Each path opens one focused workspace instead of placing all three modes on the same screen.',
-          style: theme.textTheme.bodyMedium,
         ),
         const SizedBox(height: 12),
         LayoutBuilder(
           builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 760;
+            final columns = constraints.maxWidth >= 1100
+                ? 4
+                : constraints.maxWidth >= 760
+                    ? 3
+                    : 2;
             final cardWidth =
-                isWide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+                (constraints.maxWidth - ((columns - 1) * 12)) / columns;
             return Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -240,23 +199,25 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
 
   Widget _buildMetric(ThemeData theme, String label, String value) {
     return Container(
-      constraints: const BoxConstraints(minWidth: 132),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      constraints: const BoxConstraints(minWidth: 104),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(16),
+        color: theme.colorScheme.surface.withValues(alpha: 0.48),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: theme.colorScheme.outline.withValues(alpha: 0.16),
+          color: theme.colorScheme.outline.withValues(alpha: 0.14),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: theme.textTheme.bodySmall),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             value,
-            style: theme.textTheme.titleMedium?.copyWith(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -273,13 +234,14 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
       child: GlassCard(
         padding: EdgeInsets.zero,
         child: Container(
-          padding: const EdgeInsets.all(18),
+          constraints: const BoxConstraints(minHeight: 156),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                accent.withValues(alpha: 0.12),
+                accent.withValues(alpha: 0.10),
                 theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.38),
+                    .withValues(alpha: 0.30),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -288,39 +250,45 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(_sectionIcon(section), color: accent),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface.withValues(alpha: 0.72),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(_sectionIcon(section), size: 18, color: accent),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.arrow_outward_rounded, size: 18, color: accent),
+                ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Text(
                 _sectionTitle(section),
-                style: theme.textTheme.titleMedium?.copyWith(
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _sectionMeta(section),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: accent,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 _sectionDescription(section),
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _sectionMeta(section),
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: accent,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 14),
-              TextButton.icon(
-                onPressed: () => _openSection(section),
-                icon: const Icon(Icons.arrow_forward_rounded),
-                label: Text('Open ${_sectionTitle(section)}'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
               ),
             ],
           ),

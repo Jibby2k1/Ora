@@ -562,6 +562,9 @@ class _DietScreenState extends State<DietScreen> {
         hasDiary ? vm.remainingCalories.round().toString() : '--';
     final entries = hasDiary ? vm.totalEntries.toString() : '0';
     final mealSlot = DietDiaryService.mealSlots.first;
+    final status = hasDiary
+        ? '${_relativeDayLabel(_selectedDay)} • $consumedCalories kcal • $entries entries'
+        : 'No diary loaded for the selected day';
 
     Future<void> launchAndOpenDiary(Future<void> Function() action) async {
       await action();
@@ -574,135 +577,79 @@ class _DietScreenState extends State<DietScreen> {
       child: ListView(
         key: const ValueKey('diet-hub'),
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
         children: [
           GlassCard(
-            padding: EdgeInsets.zero,
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.primary.withValues(alpha: 0.18),
-                    theme.colorScheme.secondary.withValues(alpha: 0.10),
-                    theme.colorScheme.surface.withValues(alpha: 0.72),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color:
-                              theme.colorScheme.surface.withValues(alpha: 0.70),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: theme.colorScheme.primary
-                                .withValues(alpha: 0.24),
-                          ),
-                        ),
-                        child: Icon(
-                          Icons.restaurant_menu_rounded,
-                          color: theme.colorScheme.primary,
-                        ),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color:
+                            theme.colorScheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Diet Hub',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Pick the exact nutrition workflow you want instead of landing in the full diary immediately.',
-                              style: theme.textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
+                      child: Icon(
+                        Icons.restaurant_menu_rounded,
+                        color: theme.colorScheme.primary,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    hasDiary
-                        ? "Today's diary is loaded. Use the hub to log food, inspect the diary, or jump straight to recipes and settings."
-                        : 'Start from the hub, then jump into the diary or the specific logging flow you need.',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      height: 1.1,
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    hasDiary
-                        ? 'Selected day: ${_relativeDayLabel(_selectedDay)}'
-                        : 'No diary loaded yet for the selected day.',
-                    style: theme.textTheme.bodyLarge,
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _buildDietMetric('Consumed', consumedCalories),
-                      _buildDietMetric('Remaining', remainingCalories),
-                      _buildDietMetric('Entries', entries),
-                      _buildDietMetric('Day', _relativeDayLabel(_selectedDay)),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      FilledButton.icon(
-                        onPressed: () =>
-                            _openDietSection(_DietHubSection.diary),
-                        icon: const Icon(Icons.menu_book_rounded),
-                        label: const Text('Open diary'),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Diet Hub',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            status,
+                            style: theme.textTheme.bodySmall,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                      OutlinedButton.icon(
-                        onPressed: _pickDay,
-                        icon: const Icon(Icons.calendar_month_rounded),
-                        label: const Text('Pick day'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                    FilledButton(
+                      onPressed: () => _openDietSection(_DietHubSection.diary),
+                      child: const Text('Diary'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _buildDietMetric('Consumed', consumedCalories),
+                    _buildDietMetric('Remain', remainingCalories),
+                    _buildDietMetric('Entries', entries),
+                    _buildDietMetric('Day', _relativeDayLabel(_selectedDay)),
+                  ],
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 18),
-          Text(
-            'Choose what to do',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Logging, searching, scanning, recipes, and settings are separated so the page stays readable.',
-            style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 760;
-              final cardWidth = isWide
-                  ? (constraints.maxWidth - 12) / 2
-                  : constraints.maxWidth;
+              final columns = constraints.maxWidth >= 1100
+                  ? 4
+                  : constraints.maxWidth >= 760
+                      ? 3
+                      : 2;
+              final cardWidth =
+                  (constraints.maxWidth - ((columns - 1) * 12)) / columns;
               return Wrap(
                 spacing: 12,
                 runSpacing: 12,
@@ -712,11 +659,8 @@ class _DietScreenState extends State<DietScreen> {
                     child: _buildDietActionCard(
                       icon: Icons.menu_book_rounded,
                       title: 'Diary',
-                      description:
-                          'Open the full day diary with totals, meal groups, and edits.',
-                      meta: hasDiary
-                          ? '${vm.totalEntries} entries logged'
-                          : 'No entries yet',
+                      description: 'Totals, meals, edits',
+                      meta: hasDiary ? '$entries logged' : 'Open the day diary',
                       accent: theme.colorScheme.primary,
                       onTap: () => _openDietSection(_DietHubSection.diary),
                     ),
@@ -726,9 +670,8 @@ class _DietScreenState extends State<DietScreen> {
                     child: _buildDietActionCard(
                       icon: Icons.add_circle_outline_rounded,
                       title: 'Log Food',
-                      description:
-                          'Open the add sheet and choose the fastest logging method.',
-                      meta: 'Quick add, search, scan, or recipe',
+                      description: 'Quick add, search, scan',
+                      meta: 'Fastest logging path',
                       accent: Colors.greenAccent.shade400,
                       onTap: () => launchAndOpenDiary(() => _openAddActions()),
                     ),
@@ -737,9 +680,8 @@ class _DietScreenState extends State<DietScreen> {
                     width: cardWidth,
                     child: _buildDietActionCard(
                       icon: Icons.search_rounded,
-                      title: 'Search Foods',
-                      description:
-                          'Find a food manually and add it to the selected day.',
+                      title: 'Search',
+                      description: 'Manual food lookup',
                       meta: 'Starts in $mealSlot',
                       accent: Colors.lightBlueAccent,
                       onTap: () =>
@@ -750,10 +692,9 @@ class _DietScreenState extends State<DietScreen> {
                     width: cardWidth,
                     child: _buildDietActionCard(
                       icon: Icons.qr_code_scanner_rounded,
-                      title: 'Scan Barcode',
-                      description:
-                          'Scan a packaged food and add or create the entry from the barcode flow.',
-                      meta: 'Fastest packaged-food logging path',
+                      title: 'Scan',
+                      description: 'Packaged food barcode flow',
+                      meta: 'Best for packaged foods',
                       accent: Colors.orangeAccent,
                       onTap: () =>
                           launchAndOpenDiary(() => _scanBarcode(mealSlot)),
@@ -764,9 +705,8 @@ class _DietScreenState extends State<DietScreen> {
                     child: _buildDietActionCard(
                       icon: Icons.menu_book_outlined,
                       title: 'Recipes',
-                      description:
-                          'Open the recipe manager and add saved recipes to the selected day.',
-                      meta: 'Plan repeated meals once, reuse them later',
+                      description: 'Saved recipes and reuse',
+                      meta: 'Manage repeat meals',
                       accent: Colors.purpleAccent,
                       onTap: _openRecipesManager,
                     ),
@@ -776,8 +716,7 @@ class _DietScreenState extends State<DietScreen> {
                     child: _buildDietActionCard(
                       icon: Icons.tune_rounded,
                       title: 'Goals',
-                      description:
-                          'Adjust calorie and macro targets for the diary calculations.',
+                      description: 'Calories and macro targets',
                       meta: 'Open diet settings',
                       accent: Colors.tealAccent.shade400,
                       onTap: _openDietSettings,
@@ -795,23 +734,25 @@ class _DietScreenState extends State<DietScreen> {
   Widget _buildDietMetric(String label, String value) {
     final theme = Theme.of(context);
     return Container(
-      constraints: const BoxConstraints(minWidth: 132),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      constraints: const BoxConstraints(minWidth: 104),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(16),
+        color: theme.colorScheme.surface.withValues(alpha: 0.48),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: theme.colorScheme.outline.withValues(alpha: 0.16),
+          color: theme.colorScheme.outline.withValues(alpha: 0.14),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: theme.textTheme.bodySmall),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             value,
-            style: theme.textTheme.titleMedium?.copyWith(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -834,13 +775,14 @@ class _DietScreenState extends State<DietScreen> {
       child: GlassCard(
         padding: EdgeInsets.zero,
         child: Container(
-          padding: const EdgeInsets.all(18),
+          constraints: const BoxConstraints(minHeight: 156),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                accent.withValues(alpha: 0.12),
+                accent.withValues(alpha: 0.10),
                 theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.38),
+                    .withValues(alpha: 0.30),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -849,36 +791,45 @@ class _DietScreenState extends State<DietScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: accent),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface.withValues(alpha: 0.72),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, size: 18, color: accent),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.arrow_outward_rounded, size: 18, color: accent),
+                ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Text(
                 title,
-                style: theme.textTheme.titleMedium?.copyWith(
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(description, style: theme.textTheme.bodyMedium),
-              const SizedBox(height: 12),
+              const SizedBox(height: 4),
               Text(
                 meta,
-                style: theme.textTheme.labelLarge?.copyWith(
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(
                   color: accent,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 14),
-              TextButton.icon(
-                onPressed: onTap,
-                icon: const Icon(Icons.arrow_forward_rounded),
-                label: Text(title == 'Diary' ? 'Open diary' : title),
+              const SizedBox(height: 8),
+              Text(
+                description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
               ),
             ],
           ),

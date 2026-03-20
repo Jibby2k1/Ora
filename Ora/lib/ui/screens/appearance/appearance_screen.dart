@@ -591,218 +591,132 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     }
   }
 
-  String _hubHeadline() {
-    final assessment = _latestAssessment;
-    if (assessment == null) {
-      return 'Start with one structured review, then branch into the exact workflow you need.';
-    }
-    if (assessment.hasRedFlags) {
-      return 'The latest review flagged consult-first issues, so the hub keeps those decisions explicit.';
-    }
-    if (_activePlans.isNotEmpty) {
-      return 'Your appearance cycles are active. Use the hub to review, track, or audit the evidence behind them.';
-    }
-    return 'The hub is ready for the next appearance review.';
-  }
-
-  String _hubSummary() {
-    final assessment = _latestAssessment;
-    if (assessment == null) {
-      return 'The hub keeps appearance work organized: assessment intake, treatment cycles, checkpoint tracking, and source review are separated so the page stays readable.';
-    }
-    return 'Latest verdict: ${assessment.directVerdict}';
-  }
-
   Widget _buildHubView() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final recommended = _recommendedSection();
-    final scheme = Theme.of(context).colorScheme;
+    final accent = _sectionAccent(recommended);
     final statusCard = _buildStatusCard();
     final hasStatus = statusCard is! SizedBox;
     final assessment = _latestAssessment;
+    final reviewState = assessment == null
+        ? 'Not started'
+        : assessment.hasRedFlags
+            ? 'Consult'
+            : 'Active';
+
     return RefreshIndicator(
       onRefresh: _refreshHub,
       child: ListView(
         key: const ValueKey('appearance-hub'),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
         children: [
           if (hasStatus) ...[
             statusCard,
             const SizedBox(height: 12),
           ],
           GlassCard(
-            padding: EdgeInsets.zero,
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    _sectionAccent(recommended).withValues(alpha: 0.18),
-                    scheme.surfaceContainerHighest.withValues(alpha: 0.48),
-                    scheme.surface.withValues(alpha: 0.72),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: scheme.surface.withValues(alpha: 0.7),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: _sectionAccent(recommended).withValues(
-                              alpha: 0.32,
-                            ),
-                          ),
-                        ),
-                        child: Icon(
-                          Icons.auto_awesome_rounded,
-                          color: _sectionAccent(recommended),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Appearance Hub',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w800),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Review, plan, track, or audit evidence from one landing page.',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                      _Badge(
-                        label: 'Recommended ${_sectionTitle(recommended)}',
-                        color: _sectionAccent(recommended),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    _hubHeadline(),
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          height: 1.1,
-                        ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    _hubSummary(),
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                  if (assessment != null) ...[
-                    const SizedBox(height: 16),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Container(
-                      padding: const EdgeInsets.all(14),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: scheme.surface.withValues(alpha: 0.62),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: scheme.outline.withValues(alpha: 0.18),
-                        ),
+                        color: accent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
                       ),
+                      child: Icon(
+                        Icons.auto_awesome_rounded,
+                        color: accent,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Overall summary',
-                            style: Theme.of(context).textTheme.labelLarge,
+                            'Appearance Hub',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
-                          const SizedBox(height: 6),
-                          Text(assessment.overallSummary),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Recommended ${_sectionTitle(recommended)} • $reviewState',
+                            style: theme.textTheme.bodySmall,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ],
                       ),
                     ),
+                    FilledButton(
+                      onPressed: () => _openSection(recommended),
+                      child: Text(_sectionTitle(recommended)),
+                    ),
                   ],
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _buildQuickStat(
-                        label: 'Review state',
-                        value: assessment == null
-                            ? 'Not started'
-                            : assessment.hasRedFlags
-                                ? 'Consult-first'
-                                : 'Active',
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _buildQuickStat(label: 'Review', value: reviewState),
+                    _buildQuickStat(
+                      label: 'Plans',
+                      value: _activePlans.length.toString(),
+                    ),
+                    _buildQuickStat(
+                      label: 'Checks',
+                      value: _recentReviews.length.toString(),
+                    ),
+                    _buildQuickStat(
+                      label: 'Sources',
+                      value: _sourceDocuments.length.toString(),
+                    ),
+                  ],
+                ),
+                if (assessment != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: scheme.surface.withValues(alpha: 0.52),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: scheme.outline.withValues(alpha: 0.14),
                       ),
-                      _buildQuickStat(
-                        label: 'Plans',
-                        value: _activePlans.isEmpty
-                            ? '0 active'
-                            : '${_activePlans.length} active',
-                      ),
-                      _buildQuickStat(
-                        label: 'Checkpoints',
-                        value: _recentReviews.isEmpty
-                            ? '0 logged'
-                            : '${_recentReviews.length} logged',
-                      ),
-                      _buildQuickStat(
-                        label: 'Sources',
-                        value: _sourceDocuments.isEmpty
-                            ? '0 loaded'
-                            : '${_sourceDocuments.length} loaded',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      FilledButton.icon(
-                        onPressed: () => _openSection(recommended),
-                        icon: Icon(_sectionIcon(recommended)),
-                        label: Text('Open ${_sectionTitle(recommended)}'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _refreshHub,
-                        icon: const Icon(Icons.sync_rounded),
-                        label: const Text('Refresh hub'),
-                      ),
-                    ],
+                    ),
+                    child: Text(
+                      assessment.directVerdict,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall,
+                    ),
                   ),
                 ],
-              ),
+              ],
             ),
-          ),
-          const SizedBox(height: 18),
-          Text(
-            'Choose what to do',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Each path narrows the workflow so users can focus on one job at a time.',
-            style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 760;
-              final cardWidth = isWide
-                  ? (constraints.maxWidth - 12) / 2
-                  : constraints.maxWidth;
+              final columns = constraints.maxWidth >= 1100
+                  ? 4
+                  : constraints.maxWidth >= 760
+                      ? 3
+                      : 2;
+              final cardWidth =
+                  (constraints.maxWidth - ((columns - 1) * 12)) / columns;
               return Wrap(
                 spacing: 12,
                 runSpacing: 12,
@@ -827,21 +741,23 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   Widget _buildQuickStat({required String label, required String value}) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      constraints: const BoxConstraints(minWidth: 132),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      constraints: const BoxConstraints(minWidth: 104),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.outline.withValues(alpha: 0.16)),
+        color: scheme.surface.withValues(alpha: 0.48),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outline.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             value,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
           ),
@@ -854,19 +770,21 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     _AppearanceHubSection section, {
     required bool recommended,
   }) {
+    final theme = Theme.of(context);
     final color = _sectionAccent(section);
-    final scheme = Theme.of(context).colorScheme;
+    final scheme = theme.colorScheme;
     return GestureDetector(
       onTap: () => _openSection(section),
       child: GlassCard(
         padding: EdgeInsets.zero,
         child: Container(
-          padding: const EdgeInsets.all(18),
+          constraints: const BoxConstraints(minHeight: 164),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                color.withValues(alpha: 0.12),
-                scheme.surfaceContainerHighest.withValues(alpha: 0.38),
+                color.withValues(alpha: 0.10),
+                scheme.surfaceContainerHighest.withValues(alpha: 0.30),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -876,46 +794,48 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: scheme.surface.withValues(alpha: 0.72),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(_sectionIcon(section), color: color),
+                    child: Icon(_sectionIcon(section), size: 18, color: color),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _sectionTitle(section),
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
-                  ),
-                  if (recommended) _Badge(label: 'Recommended', color: color),
+                  const Spacer(),
+                  if (recommended) ...[
+                    _Badge(label: 'Next', color: color),
+                    const SizedBox(width: 6),
+                  ],
+                  Icon(Icons.arrow_outward_rounded, size: 18, color: color),
                 ],
-              ),
-              const SizedBox(height: 14),
-              Text(
-                _sectionDescription(section),
-                style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
               Text(
-                _sectionMeta(section),
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: color,
-                      fontWeight: FontWeight.w700,
-                    ),
+                _sectionTitle(section),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-              const SizedBox(height: 14),
-              TextButton.icon(
-                onPressed: () => _openSection(section),
-                icon: const Icon(Icons.arrow_forward_rounded),
-                label: Text('Open ${_sectionTitle(section)}'),
+              const SizedBox(height: 4),
+              Text(
+                _sectionMeta(section),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _sectionDescription(section),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
               ),
             ],
           ),
