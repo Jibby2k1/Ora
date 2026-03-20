@@ -22,6 +22,7 @@ import 'migrations/m0011_recipes.dart';
 import 'migrations/m0012_exercise_science_info.dart';
 import 'migrations/m0013_set_tags_supersets.dart';
 import 'migrations/m0014_exercise_science_structure.dart';
+import 'migrations/m0015_appearance_care.dart';
 import 'schema.dart';
 
 class AppDatabase {
@@ -100,6 +101,9 @@ class AppDatabase {
     }
     if (from < 14 && to >= 14) {
       batches.add(migration0014());
+    }
+    if (from < 15 && to >= 15) {
+      batches.add(migration0015());
     }
 
     for (final statements in batches) {

@@ -1,5 +1,5 @@
 const dbName = 'ora.db';
-const dbVersion = 14;
+const dbVersion = 15;
 
 const createTableExerciseScienceInfo = '''
 CREATE TABLE exercise_science_info(
@@ -189,6 +189,94 @@ CREATE TABLE appearance_entry(
   measurements TEXT,
   notes TEXT,
   image_path TEXT
+);
+''';
+
+const createTableAppearanceAssessment = '''
+CREATE TABLE appearance_assessment(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  image_path TEXT,
+  overall_summary TEXT NOT NULL,
+  direct_verdict TEXT NOT NULL,
+  questionnaire_json TEXT NOT NULL DEFAULT '{}'
+);
+''';
+
+const createTableAppearanceConcern = '''
+CREATE TABLE appearance_concern(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  assessment_id INTEGER NOT NULL,
+  concern_key TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  title TEXT NOT NULL,
+  confidence REAL NOT NULL DEFAULT 0,
+  severity TEXT NOT NULL,
+  evidence_summary TEXT,
+  direct_feedback TEXT,
+  intervention_tier TEXT NOT NULL,
+  red_flag INTEGER NOT NULL DEFAULT 0,
+  source_ids_json TEXT NOT NULL DEFAULT '[]',
+  FOREIGN KEY(assessment_id) REFERENCES appearance_assessment(id)
+);
+''';
+
+const createTableAppearancePlan = '''
+CREATE TABLE appearance_plan(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  assessment_id INTEGER NOT NULL,
+  concern_key TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  intervention_tier TEXT NOT NULL,
+  current_phase TEXT NOT NULL,
+  checkpoint_days_json TEXT NOT NULL DEFAULT '[]',
+  escalation_rules_json TEXT NOT NULL DEFAULT '[]',
+  source_ids_json TEXT NOT NULL DEFAULT '[]',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(assessment_id) REFERENCES appearance_assessment(id)
+);
+''';
+
+const createTableAppearancePlanStep = '''
+CREATE TABLE appearance_plan_step(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  plan_id INTEGER NOT NULL,
+  order_index INTEGER NOT NULL,
+  phase_key TEXT NOT NULL,
+  title TEXT NOT NULL,
+  cadence TEXT NOT NULL,
+  duration_days INTEGER NOT NULL,
+  actions_json TEXT NOT NULL DEFAULT '[]',
+  stop_conditions_json TEXT NOT NULL DEFAULT '[]',
+  FOREIGN KEY(plan_id) REFERENCES appearance_plan(id)
+);
+''';
+
+const createTableAppearanceReview = '''
+CREATE TABLE appearance_review(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  plan_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  adherence INTEGER,
+  symptom_change TEXT,
+  side_effects TEXT,
+  notes TEXT,
+  image_path TEXT,
+  FOREIGN KEY(plan_id) REFERENCES appearance_plan(id)
+);
+''';
+
+const createTableAppearanceSourceDocument = '''
+CREATE TABLE appearance_source_document(
+  id TEXT PRIMARY KEY,
+  domain TEXT NOT NULL,
+  title TEXT NOT NULL,
+  citation TEXT NOT NULL,
+  url TEXT,
+  rationale TEXT
 );
 ''';
 

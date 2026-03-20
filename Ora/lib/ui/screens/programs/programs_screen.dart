@@ -41,6 +41,8 @@ class _ProgramDayMatch {
 
 enum _VoiceDayChoiceType { freeStyle, programDay }
 
+enum _TrainingHubSection { hub, dashboard }
+
 class _VoiceDayChoice {
   const _VoiceDayChoice.freeStyle()
       : type = _VoiceDayChoiceType.freeStyle,
@@ -77,6 +79,7 @@ class _ProgramsScreenState extends State<ProgramsScreen>
   String _appearanceSex = 'neutral';
   String? _selectedStatsMuscle;
   bool _handlingInput = false;
+  _TrainingHubSection _selectedSection = _TrainingHubSection.hub;
 
   @override
   void initState() {
@@ -1034,329 +1037,765 @@ class _ProgramsScreenState extends State<ProgramsScreen>
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Training'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.list),
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => const ExerciseCatalogScreen()),
-              );
-            },
+  void _openTrainingSection(_TrainingHubSection section) {
+    if (_selectedSection == section) return;
+    setState(() => _selectedSection = section);
+  }
+
+  void _showTrainingSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _openSelectedProgramDayPicker() async {
+    if (_selectedProgramId == null) {
+      _showTrainingSnack('Select or create a program first.');
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DayPickerScreen(programId: _selectedProgramId!),
+      ),
+    );
+    await _syncActiveSessionBanner();
+    if (!mounted) return;
+    setState(() {
+      _selectedSection = _TrainingHubSection.dashboard;
+    });
+  }
+
+  Widget _buildTrainingHub(List<Map<String, Object?>> programs) {
+    final theme = Theme.of(context);
+    final activeSession = AppShellController.instance.activeSession.value;
+    final selectedProgram = _selectedProgramName ??
+        (programs.isEmpty ? 'No program selected' : 'Program selected');
+
+    Future<void> openDashboardAfter(Future<void> Function() action) async {
+      await action();
+      if (!mounted) return;
+      _openTrainingSection(_TrainingHubSection.dashboard);
+    }
+
+    return ListView(
+      key: const ValueKey('training-hub'),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      children: [
+        GlassCard(
+          padding: EdgeInsets.zero,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary.withValues(alpha: 0.18),
+                  theme.colorScheme.secondary.withValues(alpha: 0.10),
+                  theme.colorScheme.surface.withValues(alpha: 0.72),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color:
+                            theme.colorScheme.surface.withValues(alpha: 0.70),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color:
+                              theme.colorScheme.primary.withValues(alpha: 0.24),
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.fitness_center_rounded,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Training Hub',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Choose the exact training workflow you want instead of landing in the full dashboard immediately.',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  programs.isEmpty
+                      ? 'No programs are loaded yet, so the highest-leverage next step is to create one or upload one.'
+                      : 'Use the hub to jump into the dashboard, start a session, manage programs, or inspect the exercise catalog.',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Current focus: $selectedProgram',
+                  style: theme.textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    _buildTrainingMetric(
+                        'Programs', programs.length.toString()),
+                    _buildTrainingMetric(
+                      'Session',
+                      activeSession ? 'Active' : 'Idle',
+                    ),
+                    _buildTrainingMetric(
+                      'Stats focus',
+                      _selectedStatsMuscle ?? 'Unset',
+                    ),
+                    _buildTrainingMetric(
+                      'Selected',
+                      _selectedProgramName ?? 'None',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () =>
+                          _openTrainingSection(_TrainingHubSection.dashboard),
+                      icon: const Icon(Icons.dashboard_customize_rounded),
+                      label: const Text('Open dashboard'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _startFreeStyleSession,
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('Start workout'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'Choose what to do',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Session launch, program management, and reference tools are split into explicit paths so the screen stays readable.',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 760;
+            final cardWidth =
+                isWide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: cardWidth,
+                  child: _buildTrainingActionCard(
+                    icon: Icons.dashboard_customize_rounded,
+                    title: 'Dashboard',
+                    description:
+                        'Open the full training dashboard with steps, quick start, programs, and stats.',
+                    meta: programs.isEmpty
+                        ? 'No programs loaded yet'
+                        : '${programs.length} program${programs.length == 1 ? '' : 's'} loaded',
+                    accent: theme.colorScheme.primary,
+                    onTap: () =>
+                        _openTrainingSection(_TrainingHubSection.dashboard),
+                  ),
+                ),
+                SizedBox(
+                  width: cardWidth,
+                  child: _buildTrainingActionCard(
+                    icon: Icons.play_circle_outline_rounded,
+                    title: 'Start Workout',
+                    description:
+                        'Launch a free-style workout immediately from the hub.',
+                    meta: 'Fastest training entry point',
+                    accent: Colors.greenAccent.shade400,
+                    onTap: _startFreeStyleSession,
+                  ),
+                ),
+                SizedBox(
+                  width: cardWidth,
+                  child: _buildTrainingActionCard(
+                    icon: Icons.calendar_view_week_rounded,
+                    title: 'Program Day',
+                    description:
+                        'Open the selected program and choose a day to run or edit.',
+                    meta: _selectedProgramName ?? 'Requires a selected program',
+                    accent: Colors.orangeAccent,
+                    onTap: _openSelectedProgramDayPicker,
+                  ),
+                ),
+                SizedBox(
+                  width: cardWidth,
+                  child: _buildTrainingActionCard(
+                    icon: Icons.add_box_outlined,
+                    title: 'Create Program',
+                    description: 'Create a new training program from scratch.',
+                    meta: 'Opens the program editor',
+                    accent: Colors.lightBlueAccent,
+                    onTap: () => openDashboardAfter(_createProgram),
+                  ),
+                ),
+                SizedBox(
+                  width: cardWidth,
+                  child: _buildTrainingActionCard(
+                    icon: Icons.upload_file_rounded,
+                    title: 'Upload Program',
+                    description:
+                        'Import a structured training program from a file.',
+                    meta: 'Workbook and file import path',
+                    accent: Colors.purpleAccent,
+                    onTap: () => openDashboardAfter(_uploadProgram),
+                  ),
+                ),
+                SizedBox(
+                  width: cardWidth,
+                  child: _buildTrainingActionCard(
+                    icon: Icons.menu_book_rounded,
+                    title: 'Exercise Catalog',
+                    description:
+                        'Browse and search the exercise catalog without opening the main dashboard.',
+                    meta: 'Reference library for exercise selection',
+                    accent: Colors.tealAccent.shade400,
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ExerciseCatalogScreen(),
+                        ),
+                      );
+                      if (!mounted) return;
+                      setState(() {});
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: cardWidth,
+                  child: _buildTrainingActionCard(
+                    icon: Icons.directions_walk_rounded,
+                    title: 'Step Details',
+                    description:
+                        'Inspect steps and activity details without opening the full dashboard.',
+                    meta: 'Uses the existing steps detail flow',
+                    accent: Colors.amberAccent.shade400,
+                    onTap: _openStepsDetails,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTrainingMetric(String label, String value) {
+    final theme = Theme.of(context);
+    return Container(
+      constraints: const BoxConstraints(minWidth: 132),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.16),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          const GlassBackground(),
-          FutureBuilder<List<Map<String, Object?>>>(
-            future: _programRepo.getPrograms(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final programs = snapshot.data ?? [];
-              if (programs.isEmpty) {
-                _selectedProgramId = null;
-                _selectedProgramName = null;
-              } else {
-                final selectedExists = _selectedProgramId != null &&
-                    programs
-                        .any((program) => program['id'] == _selectedProgramId);
-                if (!selectedExists) {
-                  final first = programs.first;
-                  _selectedProgramId = first['id'] as int;
-                  _selectedProgramName = first['name'] as String;
-                }
-              }
-              final muscleOptions = _muscleOrder;
-              return ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  StepsSummaryCard(
-                    stepsService: _ensureStepsService(),
-                    onOpenDetails: _openStepsDetails,
-                    onRequestAccess: _handleStepsAccessAction,
-                  ),
-                  const SizedBox(height: 12),
-                  GlassCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Quick Start'),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () => _startFreeStyleSession(),
-                            child: const Text('Start Workout'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  Theme.of(context).colorScheme.primary,
-                              foregroundColor:
-                                  Theme.of(context).colorScheme.surface,
-                              minimumSize: const Size.fromHeight(64),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              textStyle: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ),
-                      ],
+    );
+  }
+
+  Widget _buildTrainingActionCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required String meta,
+    required Color accent,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: GlassCard(
+        padding: EdgeInsets.zero,
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                accent.withValues(alpha: 0.12),
+                theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.38),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface.withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: accent),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(description, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 12),
+              Text(
+                meta,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextButton.icon(
+                onPressed: onTap,
+                icon: const Icon(Icons.arrow_forward_rounded),
+                label: Text(title),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrainingDashboard(List<Map<String, Object?>> programs) {
+    final theme = Theme.of(context);
+    final muscleOptions = _muscleOrder;
+    return ListView(
+      key: const ValueKey('training-dashboard'),
+      padding: const EdgeInsets.all(16),
+      children: [
+        GlassCard(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  Icons.dashboard_customize_rounded,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Dashboard',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'This is the full training workspace with steps, quick start, programs, and stats.',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _selectedProgramName ?? 'No program selected',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () => _openTrainingSection(_TrainingHubSection.hub),
+                icon: const Icon(Icons.grid_view_rounded),
+                label: const Text('Hub'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        StepsSummaryCard(
+          stepsService: _ensureStepsService(),
+          onOpenDetails: _openStepsDetails,
+          onRequestAccess: _handleStepsAccessAction,
+        ),
+        const SizedBox(height: 12),
+        GlassCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Quick Start'),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => _startFreeStyleSession(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.surface,
+                    minimumSize: const Size.fromHeight(64),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    textStyle: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  GlassCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Programs'),
-                        const SizedBox(height: 12),
-                        Column(
-                          children: [
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: () async {
-                                  await _createProgram();
-                                  if (!mounted) return;
-                                  setState(() {});
-                                },
-                                icon: const Icon(Icons.add, size: 18),
-                                label: const Text('Create New Program'),
-                                style: ElevatedButton.styleFrom(
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  await _uploadProgram();
-                                  if (!mounted) return;
-                                  setState(() {});
-                                },
-                                icon: const Icon(Icons.upload_file, size: 18),
-                                label: const Text('Upload Program'),
-                                style: OutlinedButton.styleFrom(
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                  child: const Text('Start Workout'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        GlassCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Programs'),
+              const SizedBox(height: 12),
+              Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        await _createProgram();
+                        if (!mounted) return;
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Create New Program'),
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        const SizedBox(height: 12),
-                        if (programs.isEmpty)
-                          Text(
-                            'No programs yet. Create one or upload from a file.',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          )
-                        else
-                          Builder(
-                            builder: (context) {
-                              final listHeight = ((programs.length * 86.0) + 8)
-                                  .clamp(150.0, 360.0)
-                                  .toDouble();
-                              return SizedBox(
-                                height: listHeight,
-                                child: ListView.separated(
-                                  primary: false,
-                                  padding: EdgeInsets.zero,
-                                  itemCount: programs.length,
-                                  separatorBuilder: (_, __) =>
-                                      const SizedBox(height: 12),
-                                  itemBuilder: (context, index) {
-                                    final program = programs[index];
-                                    final id = program['id'] as int;
-                                    final colorScheme =
-                                        Theme.of(context).colorScheme;
-                                    return Material(
-                                      color: colorScheme.primary,
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: ListTile(
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        title: Text(
-                                          program['name'] as String,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium
-                                              ?.copyWith(
-                                                color: colorScheme.surface,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                        ),
-                                        subtitle: Text(
-                                          'Tap to start or edit days',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                color: colorScheme.surface
-                                                    .withValues(alpha: 0.86),
-                                                fontSize: 12,
-                                              ),
-                                        ),
-                                        onTap: () async {
-                                          await Navigator.of(context).push(
-                                            MaterialPageRoute(
-                                              builder: (_) => DayPickerScreen(
-                                                  programId: id),
-                                            ),
-                                          );
-                                          await _syncActiveSessionBanner();
-                                          if (!mounted) return;
-                                          setState(() {});
-                                        },
-                                        trailing: PopupMenuButton<String>(
-                                          iconColor: colorScheme.surface,
-                                          onSelected: (value) async {
-                                            if (value == 'edit') {
-                                              final saved =
-                                                  await Navigator.of(context)
-                                                      .push<bool>(
-                                                MaterialPageRoute(
-                                                  builder: (_) =>
-                                                      ProgramEditorScreen(
-                                                    programId: id,
-                                                  ),
-                                                ),
-                                              );
-                                              if (!mounted) return;
-                                              setState(() {});
-                                              if (saved == true) {
-                                                await _showProgramSavedAlert();
-                                              }
-                                            } else if (value == 'delete') {
-                                              final confirm =
-                                                  await showDialog<bool>(
-                                                context: context,
-                                                builder: (context) {
-                                                  return AlertDialog(
-                                                    title: const Text(
-                                                      'Delete program?',
-                                                    ),
-                                                    content: const Text(
-                                                      'This removes the program and its days. Sessions remain in history.',
-                                                    ),
-                                                    actions: [
-                                                      TextButton(
-                                                        onPressed: () =>
-                                                            Navigator.of(
-                                                          context,
-                                                        ).pop(false),
-                                                        child: const Text(
-                                                          'Cancel',
-                                                        ),
-                                                      ),
-                                                      ElevatedButton(
-                                                        onPressed: () =>
-                                                            Navigator.of(
-                                                          context,
-                                                        ).pop(true),
-                                                        child: const Text(
-                                                          'Delete',
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  );
-                                                },
-                                              );
-                                              if (confirm == true) {
-                                                await _programRepo
-                                                    .deleteProgram(id);
-                                                setState(() {});
-                                              }
-                                            }
-                                          },
-                                          itemBuilder: (_) => const [
-                                            PopupMenuItem(
-                                              value: 'edit',
-                                              child: Text('Edit'),
-                                            ),
-                                            PopupMenuItem(
-                                              value: 'delete',
-                                              child: Text('Delete'),
-                                            ),
-                                          ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        await _uploadProgram();
+                        if (!mounted) return;
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.upload_file, size: 18),
+                      label: const Text('Upload Program'),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (programs.isEmpty)
+                Text(
+                  'No programs yet. Create one or upload from a file.',
+                  style: theme.textTheme.bodySmall,
+                )
+              else
+                Builder(
+                  builder: (context) {
+                    final listHeight = ((programs.length * 86.0) + 8)
+                        .clamp(150.0, 360.0)
+                        .toDouble();
+                    return SizedBox(
+                      height: listHeight,
+                      child: ListView.separated(
+                        primary: false,
+                        padding: EdgeInsets.zero,
+                        itemCount: programs.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final program = programs[index];
+                          final id = program['id'] as int;
+                          final colorScheme = theme.colorScheme;
+                          return Material(
+                            color: colorScheme.primary,
+                            borderRadius: BorderRadius.circular(12),
+                            child: ListTile(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              title: Text(
+                                program['name'] as String,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  color: colorScheme.surface,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: Text(
+                                'Tap to start or edit days',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.surface
+                                      .withValues(alpha: 0.86),
+                                  fontSize: 12,
+                                ),
+                              ),
+                              onTap: () async {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        DayPickerScreen(programId: id),
+                                  ),
+                                );
+                                await _syncActiveSessionBanner();
+                                if (!mounted) return;
+                                setState(() {});
+                              },
+                              trailing: PopupMenuButton<String>(
+                                iconColor: colorScheme.surface,
+                                onSelected: (value) async {
+                                  if (value == 'edit') {
+                                    final saved =
+                                        await Navigator.of(context).push<bool>(
+                                      MaterialPageRoute(
+                                        builder: (_) => ProgramEditorScreen(
+                                          programId: id,
                                         ),
                                       ),
                                     );
-                                  },
-                                ),
-                              );
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  GlassCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Stats'),
-                        const SizedBox(height: 12),
-                        InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Muscle group',
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value:
-                                  muscleOptions.contains(_selectedStatsMuscle)
-                                      ? _selectedStatsMuscle
-                                      : null,
-                              hint: const Text('Select a muscle group'),
-                              menuMaxHeight: 320,
-                              isExpanded: true,
-                              items: muscleOptions
-                                  .map(
-                                    (muscle) => DropdownMenuItem<String>(
-                                      value: muscle,
-                                      child: Text(muscle),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) {
-                                setState(() => _selectedStatsMuscle = value);
-                              },
+                                    if (!mounted) return;
+                                    setState(() {});
+                                    if (saved == true) {
+                                      await _showProgramSavedAlert();
+                                    }
+                                  } else if (value == 'delete') {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (context) {
+                                        return AlertDialog(
+                                          title: const Text('Delete program?'),
+                                          content: const Text(
+                                            'This removes the program and its days. Sessions remain in history.',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.of(context)
+                                                      .pop(false),
+                                              child: const Text('Cancel'),
+                                            ),
+                                            ElevatedButton(
+                                              onPressed: () =>
+                                                  Navigator.of(context)
+                                                      .pop(true),
+                                              child: const Text('Delete'),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    );
+                                    if (confirm == true) {
+                                      await _programRepo.deleteProgram(id);
+                                      setState(() {});
+                                    }
+                                  }
+                                },
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(
+                                    value: 'edit',
+                                    child: Text('Edit'),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'delete',
+                                    child: Text('Delete'),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _selectedStatsMuscle == null
-                            ? _buildStatsPlaceholder()
-                            : _buildSelectedMuscleStats(_selectedStatsMuscle!),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
-              );
-            },
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+            ],
           ),
-        ],
+        ),
+        const SizedBox(height: 16),
+        GlassCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Stats'),
+              const SizedBox(height: 12),
+              InputDecorator(
+                decoration: const InputDecoration(labelText: 'Muscle group'),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: muscleOptions.contains(_selectedStatsMuscle)
+                        ? _selectedStatsMuscle
+                        : null,
+                    hint: const Text('Select a muscle group'),
+                    menuMaxHeight: 320,
+                    isExpanded: true,
+                    items: muscleOptions
+                        .map(
+                          (muscle) => DropdownMenuItem<String>(
+                            value: muscle,
+                            child: Text(muscle),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      setState(() => _selectedStatsMuscle = value);
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _selectedStatsMuscle == null
+                  ? _buildStatsPlaceholder()
+                  : _buildSelectedMuscleStats(_selectedStatsMuscle!),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope<void>(
+      canPop: _selectedSection == _TrainingHubSection.hub,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _selectedSection != _TrainingHubSection.hub) {
+          _openTrainingSection(_TrainingHubSection.hub);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            _selectedSection == _TrainingHubSection.hub
+                ? 'Training Hub'
+                : 'Training • Dashboard',
+          ),
+          actions: [
+            if (_selectedSection != _TrainingHubSection.hub)
+              IconButton(
+                tooltip: 'Back to hub',
+                onPressed: () => _openTrainingSection(_TrainingHubSection.hub),
+                icon: const Icon(Icons.grid_view_rounded),
+              ),
+            IconButton(
+              icon: const Icon(Icons.list),
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ExerciseCatalogScreen(),
+                  ),
+                );
+                if (!mounted) return;
+                setState(() {});
+              },
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            const GlassBackground(),
+            FutureBuilder<List<Map<String, Object?>>>(
+              future: _programRepo.getPrograms(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final programs = snapshot.data ?? [];
+                if (programs.isEmpty) {
+                  _selectedProgramId = null;
+                  _selectedProgramName = null;
+                } else {
+                  final selectedExists = _selectedProgramId != null &&
+                      programs.any(
+                        (program) => program['id'] == _selectedProgramId,
+                      );
+                  if (!selectedExists) {
+                    final first = programs.first;
+                    _selectedProgramId = first['id'] as int;
+                    _selectedProgramName = first['name'] as String;
+                  }
+                }
+                return AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 240),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  child: _selectedSection == _TrainingHubSection.hub
+                      ? _buildTrainingHub(programs)
+                      : _buildTrainingDashboard(programs),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

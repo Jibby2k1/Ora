@@ -17,49 +17,449 @@ import '../../widgets/glass/glass_card.dart';
 import '../leaderboard/leaderboard_screen.dart';
 import '../settings/settings_screen.dart';
 
-class ProfileHubScreen extends StatelessWidget {
+enum _ProfileHubSection { hub, profile, leaderboard, settings }
+
+class ProfileHubScreen extends StatefulWidget {
   const ProfileHubScreen({super.key});
 
   @override
+  State<ProfileHubScreen> createState() => _ProfileHubScreenState();
+}
+
+class _ProfileHubScreenState extends State<ProfileHubScreen> {
+  _ProfileHubSection _selectedSection = _ProfileHubSection.hub;
+
+  void _openSection(_ProfileHubSection section) {
+    if (_selectedSection == section) return;
+    setState(() => _selectedSection = section);
+  }
+
+  String _sectionTitle(_ProfileHubSection section) {
+    switch (section) {
+      case _ProfileHubSection.hub:
+        return 'Profile Hub';
+      case _ProfileHubSection.profile:
+        return 'Profile';
+      case _ProfileHubSection.leaderboard:
+        return 'Leaderboard';
+      case _ProfileHubSection.settings:
+        return 'Settings';
+    }
+  }
+
+  String _sectionDescription(_ProfileHubSection section) {
+    switch (section) {
+      case _ProfileHubSection.hub:
+        return 'Choose whether you want to edit identity details, check rankings, or change app settings.';
+      case _ProfileHubSection.profile:
+        return 'Edit personal details, avatar, and core body metrics.';
+      case _ProfileHubSection.leaderboard:
+        return 'Inspect friends and global ranking workflows.';
+      case _ProfileHubSection.settings:
+        return 'Adjust cloud, training, app, and advanced settings.';
+    }
+  }
+
+  String _sectionMeta(_ProfileHubSection section) {
+    switch (section) {
+      case _ProfileHubSection.hub:
+        return 'One landing page for identity, rankings, and configuration.';
+      case _ProfileHubSection.profile:
+        return 'Identity and personal metrics';
+      case _ProfileHubSection.leaderboard:
+        return 'Friends and global comparisons';
+      case _ProfileHubSection.settings:
+        return 'Cloud, app, training, and advanced controls';
+    }
+  }
+
+  IconData _sectionIcon(_ProfileHubSection section) {
+    switch (section) {
+      case _ProfileHubSection.hub:
+        return Icons.dashboard_customize_rounded;
+      case _ProfileHubSection.profile:
+        return Icons.person_rounded;
+      case _ProfileHubSection.leaderboard:
+        return Icons.leaderboard_rounded;
+      case _ProfileHubSection.settings:
+        return Icons.tune_rounded;
+    }
+  }
+
+  Color _sectionAccent(BuildContext context, _ProfileHubSection section) {
+    switch (section) {
+      case _ProfileHubSection.hub:
+        return Theme.of(context).colorScheme.primary;
+      case _ProfileHubSection.profile:
+        return Colors.lightBlueAccent;
+      case _ProfileHubSection.leaderboard:
+        return Colors.orangeAccent;
+      case _ProfileHubSection.settings:
+        return Colors.tealAccent.shade400;
+    }
+  }
+
+  List<_ProfileHubSection> get _sections => const [
+        _ProfileHubSection.profile,
+        _ProfileHubSection.leaderboard,
+        _ProfileHubSection.settings,
+      ];
+
+  Widget _buildHubView() {
+    final theme = Theme.of(context);
+    return ListView(
+      key: const ValueKey('profile-hub'),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      children: [
+        GlassCard(
+          padding: EdgeInsets.zero,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary.withValues(alpha: 0.18),
+                  theme.colorScheme.secondary.withValues(alpha: 0.10),
+                  theme.colorScheme.surface.withValues(alpha: 0.72),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color:
+                            theme.colorScheme.surface.withValues(alpha: 0.70),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color:
+                              theme.colorScheme.primary.withValues(alpha: 0.24),
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.account_circle_rounded,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Profile Hub',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Start from a landing page, then choose profile editing, rankings, or settings explicitly.',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Manage identity, rankings, and settings without dropping straight into a tab strip.',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'The hub keeps account work more organized: choose the exact path you want first, then work inside that section.',
+                  style: theme.textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    _buildMetric(
+                        theme, 'Sections', _sections.length.toString()),
+                    _buildMetric(theme, 'Recommended', 'Profile'),
+                    _buildMetric(theme, 'Settings', 'Available'),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () => _openSection(_ProfileHubSection.profile),
+                  icon: const Icon(Icons.person_rounded),
+                  label: const Text('Open profile'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'Choose what to do',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Each path opens one focused workspace instead of placing all three modes on the same screen.',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 760;
+            final cardWidth =
+                isWide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final section in _sections)
+                  SizedBox(
+                    width: cardWidth,
+                    child: _buildActionCard(section),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMetric(ThemeData theme, String label, String value) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 132),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.16),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionCard(_ProfileHubSection section) {
+    final theme = Theme.of(context);
+    final accent = _sectionAccent(context, section);
+    return GestureDetector(
+      onTap: () => _openSection(section),
+      child: GlassCard(
+        padding: EdgeInsets.zero,
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                accent.withValues(alpha: 0.12),
+                theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.38),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface.withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(_sectionIcon(section), color: accent),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                _sectionTitle(section),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _sectionDescription(section),
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _sectionMeta(section),
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextButton.icon(
+                onPressed: () => _openSection(section),
+                icon: const Icon(Icons.arrow_forward_rounded),
+                label: Text('Open ${_sectionTitle(section)}'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(_ProfileHubSection section) {
+    final theme = Theme.of(context);
+    final accent = _sectionAccent(context, section);
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(_sectionIcon(section), color: accent),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _sectionTitle(section),
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(_sectionDescription(section)),
+                    const SizedBox(height: 6),
+                    Text(
+                      _sectionMeta(section),
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () => _openSection(_ProfileHubSection.hub),
+                icon: const Icon(Icons.grid_view_rounded),
+                label: const Text('Hub'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final item in _sections)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(_sectionTitle(item)),
+                      selected: item == section,
+                      onSelected: (_) => _openSection(item),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionBody(_ProfileHubSection section) {
+    switch (section) {
+      case _ProfileHubSection.hub:
+        return _buildHubView();
+      case _ProfileHubSection.profile:
+        return const _ProfileTab();
+      case _ProfileHubSection.leaderboard:
+        return const LeaderboardContent(showBackground: false);
+      case _ProfileHubSection.settings:
+        return const SettingsContent(showBackground: false);
+    }
+  }
+
+  Widget _buildDetailView() {
+    final section = _selectedSection;
+    return Column(
+      key: ValueKey(_sectionTitle(section)),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: _buildSectionHeader(section),
+        ),
+        Expanded(child: _buildSectionBody(section)),
+      ],
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
+    return PopScope<void>(
+      canPop: _selectedSection == _ProfileHubSection.hub,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _selectedSection != _ProfileHubSection.hub) {
+          _openSection(_ProfileHubSection.hub);
+        }
+      },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Profile'),
-          actions: const [SizedBox(width: 72)],
+          title: Text(
+            _selectedSection == _ProfileHubSection.hub
+                ? 'Profile Hub'
+                : 'Profile • ${_sectionTitle(_selectedSection)}',
+          ),
+          actions: [
+            if (_selectedSection != _ProfileHubSection.hub)
+              IconButton(
+                tooltip: 'Back to hub',
+                onPressed: () => _openSection(_ProfileHubSection.hub),
+                icon: const Icon(Icons.grid_view_rounded),
+              ),
+          ],
         ),
         body: Stack(
           children: [
             const GlassBackground(),
-            Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: GlassCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: const Center(
-                      child: TabBar(
-                        isScrollable: true,
-                        tabs: [
-                          Tab(text: 'Profile'),
-                          Tab(text: 'Leaderboard'),
-                          Tab(text: 'Settings'),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const Expanded(
-                  child: TabBarView(
-                    children: [
-                      _ProfileTab(),
-                      LeaderboardContent(showBackground: false),
-                      SettingsContent(showBackground: false),
-                    ],
-                  ),
-                ),
-              ],
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 240),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: _selectedSection == _ProfileHubSection.hub
+                  ? _buildHubView()
+                  : _buildDetailView(),
             ),
           ],
         ),
@@ -195,7 +595,8 @@ class _ProfileTabState extends State<_ProfileTab> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
     try {
-      final ref = FirebaseStorage.instance.ref('users/${user.uid}/profile/avatar.jpg');
+      final ref =
+          FirebaseStorage.instance.ref('users/${user.uid}/profile/avatar.jpg');
       await ref.putFile(File(path));
       return ref.getDownloadURL();
     } catch (e) {
@@ -255,7 +656,9 @@ class _ProfileTabState extends State<_ProfileTab> {
       SnackBar(
         content: Text(
           syncError ??
-              (user == null ? 'Profile saved locally.' : 'Profile saved + synced.'),
+              (user == null
+                  ? 'Profile saved locally.'
+                  : 'Profile saved + synced.'),
         ),
       ),
     );
@@ -330,10 +733,13 @@ class _ProfileTabState extends State<_ProfileTab> {
                     onChanged: (value) async {
                       if (value == null) return;
                       final previousUnit = _heightUnit;
-                      final currentValue = double.tryParse(_heightController.text.trim());
+                      final currentValue =
+                          double.tryParse(_heightController.text.trim());
                       double? cmValue;
                       if (currentValue != null) {
-                        cmValue = previousUnit == 'in' ? currentValue * 2.54 : currentValue;
+                        cmValue = previousUnit == 'in'
+                            ? currentValue * 2.54
+                            : currentValue;
                       }
                       setState(() {
                         _heightUnit = value;
@@ -383,10 +789,12 @@ class _ProfileTabState extends State<_ProfileTab> {
   Widget _buildAvatar() {
     final radius = 32.0;
     if (_avatarPath != null && File(_avatarPath!).existsSync()) {
-      return CircleAvatar(radius: radius, backgroundImage: FileImage(File(_avatarPath!)));
+      return CircleAvatar(
+          radius: radius, backgroundImage: FileImage(File(_avatarPath!)));
     }
     if (_remoteAvatarUrl != null && _remoteAvatarUrl!.isNotEmpty) {
-      return CircleAvatar(radius: radius, backgroundImage: NetworkImage(_remoteAvatarUrl!));
+      return CircleAvatar(
+          radius: radius, backgroundImage: NetworkImage(_remoteAvatarUrl!));
     }
     return CircleAvatar(
       radius: radius,

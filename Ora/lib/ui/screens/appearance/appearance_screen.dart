@@ -2,21 +2,22 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart';
 
+import '../../../core/cloud/appearance_analysis_service.dart';
+import '../../../core/input/input_router.dart';
+import '../../../core/utils/image_downscaler.dart';
 import '../../../data/db/db.dart';
 import '../../../data/repositories/appearance_repo.dart';
 import '../../../data/repositories/settings_repo.dart';
-import '../../../core/cloud/appearance_analysis_service.dart';
-import '../../../core/utils/image_downscaler.dart';
+import '../../../domain/models/appearance_care.dart';
 import '../../../domain/models/appearance_entry.dart';
+import '../../widgets/consent/cloud_consent.dart';
 import '../../widgets/glass/glass_background.dart';
 import '../../widgets/glass/glass_card.dart';
 import '../shell/app_shell_controller.dart';
-import '../../../core/input/input_router.dart';
-import '../../widgets/consent/cloud_consent.dart';
 
-enum AppearanceAssessment { skin, physique, style }
+enum _AppearanceHubSection { hub, assessment, plans, progress, sources }
 
 class AppearanceScreen extends StatefulWidget {
   const AppearanceScreen({super.key});
@@ -30,23 +31,31 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   late final AppearanceRepo _appearanceRepo;
   final AppearanceAnalysisService _appearanceAnalysis =
       AppearanceAnalysisService();
-  bool _accessReady = false;
-  AppearanceAssessment _assessment = AppearanceAssessment.physique;
-  double _skinScore = 0;
-  double _physiqueScore = 0;
-  double _styleScore = 0;
-  Color _physiqueColor = Colors.blue;
-  Color _skinColor = Colors.purple;
-  Color _styleColor = Colors.teal;
-  String _selectedFeedbackCategory = 'skin';
-  Future<List<AppearanceEntry>>? _timelineFuture;
-  bool _handlingInput = false;
 
-  // Gemini API state
-  String? _geminiResponse;
-  bool _geminiLoading = false;
-  String? _geminiError;
-  final TextEditingController _adviceInputController = TextEditingController();
+  final TextEditingController _diagnosedController = TextEditingController();
+  final TextEditingController _concernsController = TextEditingController();
+  final TextEditingController _symptomsController = TextEditingController();
+  final TextEditingController _goalsController = TextEditingController();
+  final TextEditingController _routineController = TextEditingController();
+  final TextEditingController _historyController = TextEditingController();
+  final TextEditingController _styleContextController = TextEditingController();
+
+  bool _accessReady = false;
+  bool _refreshing = true;
+  bool _analysisRunning = false;
+  bool _handlingInput = false;
+  String? _statusMessage;
+  String? _statusError;
+  Set<String> _selectedDomains = {
+    ...AppearanceProtocolLibrary.supportedDomains
+  };
+  _AppearanceHubSection _selectedSection = _AppearanceHubSection.hub;
+
+  AppearanceAssessmentResult? _latestAssessment;
+  List<AppearanceCarePlan> _activePlans = const [];
+  List<AppearanceProgressReview> _recentReviews = const [];
+  List<AppearanceSourceDocument> _sourceDocuments = const [];
+  List<AppearanceEntry> _legacyEntries = const [];
 
   @override
   void initState() {
@@ -54,7 +63,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     _settingsRepo = SettingsRepo(AppDatabase.instance);
     _appearanceRepo = AppearanceRepo(AppDatabase.instance);
     _ensureAccess();
-    _refreshTimeline();
+    _refreshHub();
     AppShellController.instance.pendingInput.addListener(_handlePendingInput);
   }
 
@@ -62,654 +71,14 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   void dispose() {
     AppShellController.instance.pendingInput
         .removeListener(_handlePendingInput);
-    _adviceInputController.dispose();
+    _diagnosedController.dispose();
+    _concernsController.dispose();
+    _symptomsController.dispose();
+    _goalsController.dispose();
+    _routineController.dispose();
+    _historyController.dispose();
+    _styleContextController.dispose();
     super.dispose();
-  }
-
-  Future<void> _handlePendingInput() async {
-    if (!mounted || _handlingInput) return;
-    final dispatch = AppShellController.instance.pendingInput.value;
-    if (dispatch == null || dispatch.intent != InputIntent.appearanceLog)
-      return;
-    _handlingInput = true;
-    AppShellController.instance.clearPendingInput();
-    final event = dispatch.event;
-    if (event.file != null) {
-      await _processAppearanceImage(event.file!);
-    } else if ((dispatch.entity ?? event.text)?.trim().isNotEmpty == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Appearance logs require a photo upload.')),
-      );
-    }
-    _handlingInput = false;
-  }
-
-  Future<void> _processAppearanceImage(File file) async {
-    final consent =
-        await CloudConsent.ensureAppearanceConsent(context, _settingsRepo);
-    if (!consent || !mounted) return;
-    final enabled = await _settingsRepo.getCloudEnabled();
-    final apiKey = await _settingsRepo.getCloudApiKey();
-    final provider = await _settingsRepo.getCloudProvider();
-    final model = await _settingsRepo.getCloudModelForTask(
-      CloudModelTask.documentImageAnalysis,
-    );
-    if (!enabled || apiKey == null || apiKey.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cloud analysis requires an API key.')),
-      );
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Analyzing appearance...')),
-    );
-    final result = await _appearanceAnalysis.analyzeImage(
-      file: file,
-      provider: provider,
-      apiKey: apiKey,
-      model: model,
-    );
-    if (!mounted) return;
-    if (result == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to analyze appearance.')),
-      );
-      return;
-    }
-    final category = result.category;
-    final persisted = await ImageDownscaler.persistImageToSubdir(
-      file,
-      'appearance/$category',
-    );
-    final recent = await _appearanceRepo.getRecentEntries(limit: 200);
-    final scores = _latestScoresFromEntries(recent);
-    final score = _scoreForCategory(scores, category);
-    await _appearanceRepo.addEntry(
-      createdAt: DateTime.now(),
-      measurements: _buildFeedbackPayload(
-        category: category,
-        score: score,
-        delta: 0,
-        feedback: result.feedback,
-        uploadName: file.uri.pathSegments.last,
-      ),
-      imagePath: persisted.path,
-    );
-    _refreshTimeline();
-  }
-
-  void _refreshTimeline() {
-    setState(() {
-      _timelineFuture = _appearanceRepo.getRecentEntries(limit: 30);
-    });
-    _refreshScores();
-  }
-
-  Future<void> _refreshScores() async {
-    final entries = await _appearanceRepo.getRecentEntries(limit: 200);
-    final scores = _latestScoresFromEntries(entries);
-    if (!mounted) return;
-    setState(() {
-      _skinScore = scores.skin;
-      _physiqueScore = scores.physique;
-      _styleScore = scores.style;
-    });
-  }
-
-  Future<void> _saveAppearanceEntry({
-    required String type,
-    Map<String, Object?>? payload,
-    String? notes,
-  }) async {
-    final data = <String, Object?>{
-      'type': type,
-      'payload': payload ?? <String, Object?>{},
-    };
-    await _appearanceRepo.addEntry(
-      createdAt: DateTime.now(),
-      measurements: jsonEncode(data),
-      notes: notes?.trim().isEmpty == true ? null : notes?.trim(),
-    );
-    _refreshTimeline();
-  }
-
-  Map<String, Object?> _decodeMeasurements(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return {};
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        return decoded.map((key, value) => MapEntry(key.toString(), value));
-      }
-    } catch (_) {}
-    return {};
-  }
-
-  String _formatDate(DateTime date) {
-    final mm = date.month.toString().padLeft(2, '0');
-    final dd = date.day.toString().padLeft(2, '0');
-    return '${date.year}-$mm-$dd';
-  }
-
-  _FeedbackScores _latestScoresFromEntries(List<AppearanceEntry> entries) {
-    double skin = 0;
-    double physique = 0;
-    double style = 0;
-    for (final entry in entries) {
-      final data = _decodeMeasurements(entry.measurements);
-      if (data['type'] != 'feedback') continue;
-      final category = data['category']?.toString();
-      final score = _readScore(data['score']);
-      if (score == null) continue;
-      switch (category) {
-        case 'skin':
-          skin = score;
-          break;
-        case 'physique':
-          physique = score;
-          break;
-        case 'style':
-          style = score;
-          break;
-      }
-    }
-    return _FeedbackScores(skin: skin, physique: physique, style: style);
-  }
-
-  double? _readScore(Object? raw) {
-    if (raw is int) return raw.toDouble();
-    if (raw is double) return raw;
-    final parsed = double.tryParse(raw?.toString() ?? '');
-    return parsed;
-  }
-
-  double _scoreForCategory(_FeedbackScores scores, String category) {
-    switch (category) {
-      case 'physique':
-        return scores.physique;
-      case 'style':
-        return scores.style;
-      case 'skin':
-      default:
-        return scores.skin;
-    }
-  }
-
-  String _buildFeedbackPayload({
-    required String category,
-    required double score,
-    required int delta,
-    required String feedback,
-    required String uploadName,
-  }) {
-    return jsonEncode({
-      'type': 'feedback',
-      'category': category,
-      'score': score.round(),
-      'score_delta': delta,
-      'feedback': feedback,
-      'upload_name': uploadName,
-    });
-  }
-
-  Future<void> _requestGeminiAdvice(String category, String userInput) async {
-    if (!mounted || userInput.trim().isEmpty) return;
-    setState(() {
-      _geminiLoading = true;
-      _geminiError = null;
-      _geminiResponse = null;
-    });
-
-    try {
-      final prompt = '''You are a fitness and personal development coach.
-The user wants advice on how to improve their $category.
-User's request: "$userInput"
-
-Provide a brief, practical assessment (2-3 sentences maximum) on how they can improve their $category.
-Do NOT give advice on ways to change appearance in illegal, immoral, or unethical ways.
-Focus only on practical, health-based improvements.
-Remember: you are only giving guidance, the user will determine their own score.''';
-
-      final enabled = await _settingsRepo.getCloudEnabled();
-      final apiKey = await _settingsRepo.getCloudApiKey();
-      final provider = await _settingsRepo.getCloudProvider();
-      final model = await _settingsRepo.getCloudModelForTask(
-        CloudModelTask.documentImageAnalysis,
-      );
-      if (!enabled || apiKey == null || apiKey.trim().isEmpty) {
-        if (mounted) {
-          setState(() {
-            _geminiError =
-                'Cloud API key not configured. Please set it in settings.';
-            _geminiLoading = false;
-          });
-        }
-        return;
-      }
-
-      if (provider == 'openai') {
-        await _requestOpenAiAdvice(prompt, apiKey, model);
-        return;
-      }
-
-      final uri = Uri.https(
-        'generativelanguage.googleapis.com',
-        '/v1beta/models/$model:generateContent',
-        {'key': apiKey},
-      );
-
-      final payload = {
-        'contents': [
-          {
-            'role': 'user',
-            'parts': [
-              {'text': prompt}
-            ],
-          }
-        ],
-        'generationConfig': {
-          'temperature': 0.7,
-          'maxOutputTokens': 200,
-        },
-      };
-
-      final response = await http
-          .post(
-            uri,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(payload),
-          )
-          .timeout(const Duration(seconds: 15));
-
-      if (!mounted) return;
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        try {
-          final data = jsonDecode(response.body) as Map<String, dynamic>;
-          final candidates = data['candidates'] as List<dynamic>? ?? [];
-          if (candidates.isNotEmpty) {
-            final content =
-                candidates.first['content'] as Map<String, dynamic>?;
-            final parts = content?['parts'] as List<dynamic>? ?? [];
-            if (parts.isNotEmpty) {
-              final text = parts.first['text']?.toString() ?? '';
-              setState(() {
-                _geminiResponse = text;
-                _geminiLoading = false;
-              });
-              return;
-            }
-          }
-          setState(() {
-            _geminiError = 'No response from Gemini API.';
-            _geminiLoading = false;
-          });
-        } catch (e) {
-          setState(() {
-            _geminiError = 'Failed to parse Gemini response: $e';
-            _geminiLoading = false;
-          });
-        }
-      } else {
-        setState(() {
-          _geminiError = 'Gemini API error: ${response.statusCode}';
-          _geminiLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _geminiError = 'Request failed: $e';
-          _geminiLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _requestOpenAiAdvice(
-      String prompt, String apiKey, String model) async {
-    final useResponses = _openAiUsesResponses(model);
-    final uri = Uri.https(
-      'api.openai.com',
-      useResponses ? '/v1/responses' : '/v1/chat/completions',
-    );
-    final payload = useResponses
-        ? <String, dynamic>{
-            'model': model,
-            'input': [
-              {
-                'role': 'user',
-                'content': [
-                  {'type': 'input_text', 'text': prompt},
-                ],
-              },
-            ],
-          }
-        : <String, dynamic>{
-            'model': model,
-            'messages': [
-              {'role': 'user', 'content': prompt},
-            ],
-          };
-    if (!useResponses && _openAiSupportsTemperature(model)) {
-      payload['temperature'] = 0.7;
-    }
-
-    try {
-      final response = await http
-          .post(
-            uri,
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $apiKey',
-            },
-            body: jsonEncode(payload),
-          )
-          .timeout(const Duration(seconds: 15));
-
-      if (!mounted) return;
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final text = useResponses
-            ? (_extractResponseText(data) ?? '')
-            : _extractChatContent(data);
-        if (text.trim().isEmpty) {
-          setState(() {
-            _geminiError = 'No response from OpenAI.';
-            _geminiLoading = false;
-          });
-          return;
-        }
-        setState(() {
-          _geminiResponse = text;
-          _geminiLoading = false;
-        });
-        return;
-      }
-      setState(() {
-        _geminiError = 'OpenAI API error: ${response.statusCode}';
-        _geminiLoading = false;
-      });
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _geminiError = 'Request failed: $e';
-          _geminiLoading = false;
-        });
-      }
-    }
-  }
-
-  bool _openAiSupportsTemperature(String model) {
-    final lower = model.toLowerCase();
-    return !lower.startsWith('gpt-5');
-  }
-
-  bool _openAiUsesResponses(String model) {
-    final lower = model.toLowerCase();
-    return lower.startsWith('gpt-5');
-  }
-
-  String? _extractResponseText(Map<String, dynamic> data) {
-    final output = data['output'] as List<dynamic>? ?? [];
-    for (final item in output) {
-      final content =
-          (item as Map<String, dynamic>)['content'] as List<dynamic>? ?? [];
-      for (final part in content) {
-        final map = part as Map<String, dynamic>;
-        final type = map['type']?.toString();
-        if (type == 'output_text' || type == 'text') {
-          return map['text']?.toString();
-        }
-      }
-    }
-    return null;
-  }
-
-  String _extractChatContent(Map<String, dynamic> data) {
-    final choices = data['choices'];
-    if (choices is! List || choices.isEmpty) return '';
-    final first = choices.first;
-    if (first is! Map) return '';
-    final message = first['message'];
-    if (message is! Map) return '';
-    final content = message['content'];
-    return content?.toString() ?? '';
-  }
-
-  Widget _buildAssessmentCard() {
-    final categoryName = _assessment.toString().split('.').last;
-    final categoryDisplay =
-        categoryName[0].toUpperCase() + categoryName.substring(1);
-
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Advice for $categoryDisplay'),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _adviceInputController,
-            decoration: InputDecoration(
-              hintText:
-                  'What advice would you like to improve your $categoryDisplay?',
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            ),
-            maxLines: 3,
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton(
-              onPressed: _geminiLoading
-                  ? null
-                  : () => _requestGeminiAdvice(
-                      categoryName, _adviceInputController.text),
-              child: _geminiLoading
-                  ? const SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Get Advice'),
-            ),
-          ),
-          if (_geminiError != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
-              ),
-              child: Text(
-                _geminiError!,
-                style: TextStyle(color: Colors.red[700], fontSize: 13),
-              ),
-            ),
-          ],
-          if (_geminiResponse != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Advice:',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _geminiResponse!,
-                    style: const TextStyle(fontSize: 13, height: 1.5),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.amber.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              'ⓘ This AI will not give advice on illegal, immoral, or unethical ways to change appearance. Focus is on treatable improvements only.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontSize: 11,
-                    color: Colors.amber[900],
-                    height: 1.4,
-                  ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFeedbackHistoryCard() {
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Feedback History'),
-          const SizedBox(height: 12),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'skin', label: Text('Skin')),
-              ButtonSegment(value: 'physique', label: Text('Physique')),
-              ButtonSegment(value: 'style', label: Text('Style')),
-            ],
-            selected: {_selectedFeedbackCategory},
-            onSelectionChanged: (value) {
-              setState(() {
-                _selectedFeedbackCategory = value.first;
-              });
-            },
-          ),
-          const SizedBox(height: 12),
-          FutureBuilder<List<AppearanceEntry>>(
-            future: _timelineFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final entries = snapshot.data ?? [];
-              final filtered = entries.where((entry) {
-                final data = _decodeMeasurements(entry.measurements);
-                return data['type'] == 'feedback' &&
-                    data['category'] == _selectedFeedbackCategory;
-              }).toList();
-              if (filtered.isEmpty) {
-                return const Text('No feedback yet.');
-              }
-              return Column(
-                children: filtered.take(6).map((entry) {
-                  final data = _decodeMeasurements(entry.measurements);
-                  final feedback = data['feedback']?.toString().trim();
-                  final delta = data['score_delta'];
-                  final score = data['score'];
-                  final uploadName = data['upload_name']?.toString();
-                  final deltaLabel =
-                      delta == null ? null : 'Δ ${delta.toString()}';
-                  final scoreLabel =
-                      score == null ? null : 'Score ${score.toString()}';
-                  final meta = [
-                    if (scoreLabel != null) scoreLabel,
-                    if (deltaLabel != null) deltaLabel,
-                    if (uploadName != null && uploadName.trim().isNotEmpty)
-                      uploadName.trim(),
-                  ].join(' • ');
-                  final imagePath = entry.imagePath;
-                  final imageFile = imagePath == null || imagePath.isEmpty
-                      ? null
-                      : File(imagePath);
-                  final hasImage = imageFile != null && imageFile.existsSync();
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (hasImage)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.file(
-                            imageFile,
-                            height: 160,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          feedback == null || feedback.isEmpty
-                              ? 'Feedback logged.'
-                              : feedback,
-                        ),
-                        subtitle: meta.isEmpty ? null : Text(meta),
-                        trailing: Text(_formatDate(entry.createdAt),
-                            style: Theme.of(context).textTheme.bodySmall),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  );
-                }).toList(),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProgressRingsCard() {
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Progress Rings'),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.center,
-            child: _StackedRings(
-              skin: _skinScore / 100.0,
-              physique: _physiqueScore / 100.0,
-              style: _styleScore / 100.0,
-              physiqueColor: _physiqueColor,
-              skinColor: _skinColor,
-              styleColor: _styleColor,
-              selectedAssessment: _assessment,
-              onPhysiqueColorChanged: (color) =>
-                  setState(() => _physiqueColor = color),
-              onSkinColorChanged: (color) => setState(() => _skinColor = color),
-              onStyleColorChanged: (color) =>
-                  setState(() => _styleColor = color),
-              onAssessmentChanged: (assessment) =>
-                  setState(() => _assessment = assessment),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Scores update only from upload feedback.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _ensureAccess() async {
@@ -753,6 +122,1618 @@ Remember: you are only giving guidance, the user will determine their own score.
     }
   }
 
+  Future<void> _refreshHub() async {
+    setState(() {
+      _refreshing = true;
+    });
+    final assessment = await _appearanceRepo.getLatestStructuredAssessment();
+    final plans = await _appearanceRepo.getActivePlans();
+    final reviews = await _appearanceRepo.getRecentReviews(limit: 20);
+    final legacyEntries = await _appearanceRepo.getRecentEntries(limit: 20);
+    final sources = assessment?.sourceDocuments.isNotEmpty == true
+        ? assessment!.sourceDocuments
+        : await _appearanceRepo.getSourceDocuments();
+    if (!mounted) return;
+    setState(() {
+      _latestAssessment = assessment;
+      _activePlans = plans;
+      _recentReviews = reviews;
+      _legacyEntries = legacyEntries;
+      _sourceDocuments = sources;
+      _refreshing = false;
+    });
+  }
+
+  Future<void> _handlePendingInput() async {
+    if (!mounted || _handlingInput) return;
+    final dispatch = AppShellController.instance.pendingInput.value;
+    if (dispatch == null || dispatch.intent != InputIntent.appearanceLog) {
+      return;
+    }
+    _handlingInput = true;
+    AppShellController.instance.clearPendingInput();
+    final event = dispatch.event;
+    if (event.file != null) {
+      await _processAppearanceImage(event.file!);
+    } else if ((dispatch.entity ?? event.text)?.trim().isNotEmpty == true) {
+      _showSnack('Appearance reviews require a photo upload.');
+    }
+    _handlingInput = false;
+  }
+
+  Future<void> _processAppearanceImage(File file) async {
+    final consent =
+        await CloudConsent.ensureAppearanceConsent(context, _settingsRepo);
+    if (!consent || !mounted) return;
+    final enabled = await _settingsRepo.getCloudEnabled();
+    final apiKey = await _settingsRepo.getCloudApiKey();
+    final provider = await _settingsRepo.getCloudProvider();
+    final model = await _settingsRepo.getCloudModelForTask(
+      CloudModelTask.documentImageAnalysis,
+    );
+    if (!enabled || apiKey == null || apiKey.trim().isEmpty) {
+      _showSnack('Cloud analysis requires an API key.');
+      return;
+    }
+
+    final questionnaire = await _buildQuestionnaire();
+    if (!mounted) return;
+    setState(() {
+      _analysisRunning = true;
+      _statusError = null;
+      _statusMessage = 'Running structured appearance assessment...';
+    });
+
+    final result = await _appearanceAnalysis.analyzeStructuredAssessment(
+      file: file,
+      questionnaire: questionnaire,
+      provider: provider,
+      apiKey: apiKey,
+      model: model,
+    );
+
+    if (!mounted) return;
+    if (result == null) {
+      setState(() {
+        _analysisRunning = false;
+        _statusError = 'Unable to generate a structured appearance assessment.';
+        _statusMessage = null;
+      });
+      _showSnack('Unable to analyze appearance.');
+      return;
+    }
+
+    final persisted = await ImageDownscaler.persistImageToSubdir(
+      file,
+      'appearance/assessments',
+    );
+    final enriched = AppearanceAssessmentResult(
+      imagePath: persisted.path,
+      questionnaire: questionnaire,
+      generatedAt: result.generatedAt,
+      overallSummary: result.overallSummary,
+      directVerdict: result.directVerdict,
+      candidateConcerns: result.candidateConcerns,
+      plans: result.plans,
+      sourceDocuments: result.sourceDocuments,
+    );
+    final assessmentId =
+        await _appearanceRepo.saveStructuredAssessment(enriched);
+    await _appearanceRepo.addEntry(
+      createdAt: result.generatedAt,
+      measurements: jsonEncode({
+        'type': 'feedback',
+        'category': _legacyCategoryFromAssessment(result),
+        'feedback': result.directVerdict,
+        'assessment_id': assessmentId,
+        'upload_name': file.uri.pathSegments.isEmpty
+            ? 'appearance-photo'
+            : file.uri.pathSegments.last,
+      }),
+      imagePath: persisted.path,
+    );
+
+    await _refreshHub();
+    if (!mounted) return;
+    setState(() {
+      _analysisRunning = false;
+      _selectedSection = _AppearanceHubSection.assessment;
+      _statusMessage = result.hasRedFlags
+          ? 'Assessment saved. Red-flag items were routed to consult-first guidance.'
+          : 'Assessment saved. Active cycles updated.';
+    });
+    _showSnack('Appearance assessment updated.');
+  }
+
+  Future<AppearanceQuestionnaire> _buildQuestionnaire() async {
+    final sex = await _settingsRepo.getAppearanceProfileSex();
+    return AppearanceQuestionnaire(
+      domains: _selectedDomains.toList()..sort(),
+      diagnosedConditions: _splitInput(_diagnosedController.text),
+      mainConcerns: _splitInput(_concernsController.text),
+      symptoms: _splitInput(_symptomsController.text),
+      goals: _splitInput(_goalsController.text),
+      currentRoutine: _trimOrNull(_routineController.text),
+      history: _trimOrNull(_historyController.text),
+      styleContext: _trimOrNull(_styleContextController.text),
+      profileSex: sex,
+    );
+  }
+
+  String _legacyCategoryFromAssessment(AppearanceAssessmentResult result) {
+    final domain = result.orderedConcerns.isNotEmpty
+        ? result.orderedConcerns.first.domain
+        : 'skin';
+    switch (domain) {
+      case 'physique':
+        return 'physique';
+      case 'style':
+      case 'hair':
+        return 'style';
+      case 'skin':
+      default:
+        return 'skin';
+    }
+  }
+
+  List<String> _splitInput(String raw) {
+    return raw
+        .split(RegExp(r'[\n,]'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList();
+  }
+
+  String? _trimOrNull(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return null;
+    return value;
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _copyText(String label, String value) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) return;
+    _showSnack('$label copied.');
+  }
+
+  Future<void> _showReviewDialog(AppearanceCarePlan plan) async {
+    if (plan.id == null) return;
+    var adherence = 70.0;
+    var symptomChange = 'holding';
+    final sideEffectsController = TextEditingController();
+    final notesController = TextEditingController();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text('Log checkpoint: ${plan.title}'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Adherence ${adherence.round()}%'),
+                  Slider(
+                    value: adherence,
+                    min: 0,
+                    max: 100,
+                    divisions: 20,
+                    onChanged: (value) {
+                      setDialogState(() {
+                        adherence = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: symptomChange,
+                    decoration: const InputDecoration(
+                      labelText: 'Symptom trend',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'improving', child: Text('Improving')),
+                      DropdownMenuItem(
+                          value: 'holding', child: Text('Holding')),
+                      DropdownMenuItem(
+                          value: 'worsening', child: Text('Worsening')),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setDialogState(() {
+                        symptomChange = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: sideEffectsController,
+                    minLines: 2,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Side effects or friction',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: notesController,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Save review'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    sideEffectsController.dispose();
+    notesController.dispose();
+    if (saved != true) return;
+    await _appearanceRepo.addProgressReview(
+      planId: plan.id!,
+      createdAt: DateTime.now(),
+      adherence: adherence.round(),
+      symptomChange: symptomChange,
+      sideEffects: sideEffectsController.text,
+      notes: notesController.text,
+    );
+    await _refreshHub();
+    if (!mounted) return;
+    _showSnack('Checkpoint logged.');
+  }
+
+  Future<void> _clearIntake() async {
+    _diagnosedController.clear();
+    _concernsController.clear();
+    _symptomsController.clear();
+    _goalsController.clear();
+    _routineController.clear();
+    _historyController.clear();
+    _styleContextController.clear();
+    setState(() {
+      _selectedDomains = {...AppearanceProtocolLibrary.supportedDomains};
+      _statusError = null;
+      _statusMessage = null;
+    });
+  }
+
+  String _formatDate(DateTime date) {
+    final mm = date.month.toString().padLeft(2, '0');
+    final dd = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$mm-$dd';
+  }
+
+  String _tierLabel(String raw) {
+    switch (raw) {
+      case 'procedure':
+        return 'Procedure consult';
+      case 'clinician':
+        return 'Clinician gate';
+      case 'routine':
+        return 'Routine cycle';
+      case 'otc':
+        return 'OTC cycle';
+      default:
+        return raw;
+    }
+  }
+
+  Color _tierColor(BuildContext context, String raw) {
+    switch (raw) {
+      case 'procedure':
+        return Colors.deepOrange;
+      case 'clinician':
+        return Colors.redAccent;
+      case 'otc':
+        return Colors.teal;
+      case 'routine':
+      default:
+        return Theme.of(context).colorScheme.secondary;
+    }
+  }
+
+  Color _severityColor(String raw) {
+    switch (raw) {
+      case 'high':
+        return Colors.redAccent;
+      case 'moderate':
+        return Colors.orangeAccent;
+      case 'low':
+      default:
+        return Colors.green;
+    }
+  }
+
+  void _openSection(_AppearanceHubSection section) {
+    if (_selectedSection == section) {
+      return;
+    }
+    setState(() {
+      _selectedSection = section;
+    });
+  }
+
+  List<_AppearanceHubSection> get _navigableSections => const [
+        _AppearanceHubSection.assessment,
+        _AppearanceHubSection.plans,
+        _AppearanceHubSection.progress,
+        _AppearanceHubSection.sources,
+      ];
+
+  _AppearanceHubSection _recommendedSection() {
+    final assessment = _latestAssessment;
+    if (assessment == null) {
+      return _AppearanceHubSection.assessment;
+    }
+    if (assessment.hasRedFlags) {
+      return _AppearanceHubSection.assessment;
+    }
+    if (_activePlans.isNotEmpty && _recentReviews.isEmpty) {
+      return _AppearanceHubSection.plans;
+    }
+    if (_recentReviews.isNotEmpty) {
+      return _AppearanceHubSection.progress;
+    }
+    if (_sourceDocuments.isNotEmpty) {
+      return _AppearanceHubSection.sources;
+    }
+    return _AppearanceHubSection.assessment;
+  }
+
+  String _sectionTitle(_AppearanceHubSection section) {
+    switch (section) {
+      case _AppearanceHubSection.hub:
+        return 'Appearance Hub';
+      case _AppearanceHubSection.assessment:
+        return 'Assessment';
+      case _AppearanceHubSection.plans:
+        return 'Plans';
+      case _AppearanceHubSection.progress:
+        return 'Progress';
+      case _AppearanceHubSection.sources:
+        return 'Sources';
+    }
+  }
+
+  String _sectionDescription(_AppearanceHubSection section) {
+    switch (section) {
+      case _AppearanceHubSection.hub:
+        return 'Choose a focused workflow instead of navigating the whole system at once.';
+      case _AppearanceHubSection.assessment:
+        return 'Build or review the structured appearance critique from the latest photo and intake context.';
+      case _AppearanceHubSection.plans:
+        return 'Review the active treatment or optimization cycles, checkpoints, and escalation gates.';
+      case _AppearanceHubSection.progress:
+        return 'Track checkpoints, adherence, and the recent appearance log in one place.';
+      case _AppearanceHubSection.sources:
+        return 'Inspect the evidence bundle and policy references behind the current recommendations.';
+    }
+  }
+
+  String _sectionMeta(_AppearanceHubSection section) {
+    switch (section) {
+      case _AppearanceHubSection.hub:
+        return 'One landing page for review, planning, tracking, and source audit.';
+      case _AppearanceHubSection.assessment:
+        final assessment = _latestAssessment;
+        return assessment == null
+            ? 'No structured review yet.'
+            : 'Last review ${_formatDate(assessment.generatedAt)}';
+      case _AppearanceHubSection.plans:
+        final count = _activePlans.length;
+        return count == 0
+            ? 'No active cycles yet.'
+            : '$count active cycle${count == 1 ? '' : 's'}';
+      case _AppearanceHubSection.progress:
+        final count = _recentReviews.length;
+        return count == 0
+            ? 'No checkpoint reviews yet.'
+            : '$count recent checkpoint${count == 1 ? '' : 's'}';
+      case _AppearanceHubSection.sources:
+        final count = _sourceDocuments.length;
+        return count == 0
+            ? 'No source bundle loaded yet.'
+            : '$count source document${count == 1 ? '' : 's'}';
+    }
+  }
+
+  IconData _sectionIcon(_AppearanceHubSection section) {
+    switch (section) {
+      case _AppearanceHubSection.hub:
+        return Icons.dashboard_customize_rounded;
+      case _AppearanceHubSection.assessment:
+        return Icons.face_retouching_natural_rounded;
+      case _AppearanceHubSection.plans:
+        return Icons.route_rounded;
+      case _AppearanceHubSection.progress:
+        return Icons.timeline_rounded;
+      case _AppearanceHubSection.sources:
+        return Icons.library_books_rounded;
+    }
+  }
+
+  Color _sectionAccent(_AppearanceHubSection section) {
+    switch (section) {
+      case _AppearanceHubSection.hub:
+        return Theme.of(context).colorScheme.primary;
+      case _AppearanceHubSection.assessment:
+        return Colors.orangeAccent;
+      case _AppearanceHubSection.plans:
+        return Colors.tealAccent.shade400;
+      case _AppearanceHubSection.progress:
+        return Colors.lightBlueAccent;
+      case _AppearanceHubSection.sources:
+        return Colors.amberAccent.shade400;
+    }
+  }
+
+  String _hubHeadline() {
+    final assessment = _latestAssessment;
+    if (assessment == null) {
+      return 'Start with one structured review, then branch into the exact workflow you need.';
+    }
+    if (assessment.hasRedFlags) {
+      return 'The latest review flagged consult-first issues, so the hub keeps those decisions explicit.';
+    }
+    if (_activePlans.isNotEmpty) {
+      return 'Your appearance cycles are active. Use the hub to review, track, or audit the evidence behind them.';
+    }
+    return 'The hub is ready for the next appearance review.';
+  }
+
+  String _hubSummary() {
+    final assessment = _latestAssessment;
+    if (assessment == null) {
+      return 'The hub keeps appearance work organized: assessment intake, treatment cycles, checkpoint tracking, and source review are separated so the page stays readable.';
+    }
+    return 'Latest verdict: ${assessment.directVerdict}';
+  }
+
+  Widget _buildHubView() {
+    final recommended = _recommendedSection();
+    final scheme = Theme.of(context).colorScheme;
+    final statusCard = _buildStatusCard();
+    final hasStatus = statusCard is! SizedBox;
+    final assessment = _latestAssessment;
+    return RefreshIndicator(
+      onRefresh: _refreshHub,
+      child: ListView(
+        key: const ValueKey('appearance-hub'),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: [
+          if (hasStatus) ...[
+            statusCard,
+            const SizedBox(height: 12),
+          ],
+          GlassCard(
+            padding: EdgeInsets.zero,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    _sectionAccent(recommended).withValues(alpha: 0.18),
+                    scheme.surfaceContainerHighest.withValues(alpha: 0.48),
+                    scheme.surface.withValues(alpha: 0.72),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: scheme.surface.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: _sectionAccent(recommended).withValues(
+                              alpha: 0.32,
+                            ),
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.auto_awesome_rounded,
+                          color: _sectionAccent(recommended),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Appearance Hub',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Review, plan, track, or audit evidence from one landing page.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      _Badge(
+                        label: 'Recommended ${_sectionTitle(recommended)}',
+                        color: _sectionAccent(recommended),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    _hubHeadline(),
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                        ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _hubSummary(),
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  if (assessment != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: scheme.surface.withValues(alpha: 0.62),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: scheme.outline.withValues(alpha: 0.18),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Overall summary',
+                            style: Theme.of(context).textTheme.labelLarge,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(assessment.overallSummary),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _buildQuickStat(
+                        label: 'Review state',
+                        value: assessment == null
+                            ? 'Not started'
+                            : assessment.hasRedFlags
+                                ? 'Consult-first'
+                                : 'Active',
+                      ),
+                      _buildQuickStat(
+                        label: 'Plans',
+                        value: _activePlans.isEmpty
+                            ? '0 active'
+                            : '${_activePlans.length} active',
+                      ),
+                      _buildQuickStat(
+                        label: 'Checkpoints',
+                        value: _recentReviews.isEmpty
+                            ? '0 logged'
+                            : '${_recentReviews.length} logged',
+                      ),
+                      _buildQuickStat(
+                        label: 'Sources',
+                        value: _sourceDocuments.isEmpty
+                            ? '0 loaded'
+                            : '${_sourceDocuments.length} loaded',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: () => _openSection(recommended),
+                        icon: Icon(_sectionIcon(recommended)),
+                        label: Text('Open ${_sectionTitle(recommended)}'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _refreshHub,
+                        icon: const Icon(Icons.sync_rounded),
+                        label: const Text('Refresh hub'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'Choose what to do',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Each path narrows the workflow so users can focus on one job at a time.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 760;
+              final cardWidth = isWide
+                  ? (constraints.maxWidth - 12) / 2
+                  : constraints.maxWidth;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  for (final section in _navigableSections)
+                    SizedBox(
+                      width: cardWidth,
+                      child: _buildHubActionCard(
+                        section,
+                        recommended: section == recommended,
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickStat({required String label, required String value}) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      constraints: const BoxConstraints(minWidth: 132),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outline.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHubActionCard(
+    _AppearanceHubSection section, {
+    required bool recommended,
+  }) {
+    final color = _sectionAccent(section);
+    final scheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: () => _openSection(section),
+      child: GlassCard(
+        padding: EdgeInsets.zero,
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                color.withValues(alpha: 0.12),
+                scheme.surfaceContainerHighest.withValues(alpha: 0.38),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: scheme.surface.withValues(alpha: 0.72),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(_sectionIcon(section), color: color),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _sectionTitle(section),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                  ),
+                  if (recommended) _Badge(label: 'Recommended', color: color),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                _sectionDescription(section),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _sectionMeta(section),
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              const SizedBox(height: 14),
+              TextButton.icon(
+                onPressed: () => _openSection(section),
+                icon: const Icon(Icons.arrow_forward_rounded),
+                label: Text('Open ${_sectionTitle(section)}'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailView() {
+    final section = _selectedSection;
+    return Column(
+      key: ValueKey(_sectionTitle(section)),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: _buildSectionHeader(section),
+        ),
+        Expanded(child: _buildSectionBody(section)),
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader(_AppearanceHubSection section) {
+    final color = _sectionAccent(section);
+    final scheme = Theme.of(context).colorScheme;
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(_sectionIcon(section), color: color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _sectionTitle(section),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(_sectionDescription(section)),
+                    const SizedBox(height: 6),
+                    Text(
+                      _sectionMeta(section),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () => _openSection(_AppearanceHubSection.hub),
+                icon: const Icon(Icons.grid_view_rounded),
+                label: const Text('Hub'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final item in _navigableSections)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(_sectionTitle(item)),
+                      selected: item == section,
+                      onSelected: (_) => _openSection(item),
+                      avatar: Icon(
+                        _sectionIcon(item),
+                        size: 18,
+                        color: item == section ? color : null,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (_refreshing) ...[
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              minHeight: 3,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionBody(_AppearanceHubSection section) {
+    switch (section) {
+      case _AppearanceHubSection.hub:
+        return _buildHubView();
+      case _AppearanceHubSection.assessment:
+        return _buildAssessmentTab();
+      case _AppearanceHubSection.plans:
+        return _buildPlansTab();
+      case _AppearanceHubSection.progress:
+        return _buildProgressTab();
+      case _AppearanceHubSection.sources:
+        return _buildSourcesTab();
+    }
+  }
+
+  Widget _buildStatusCard() {
+    if (_statusMessage == null && _statusError == null && !_analysisRunning) {
+      return const SizedBox.shrink();
+    }
+    final isError = _statusError != null;
+    final text = _statusError ?? _statusMessage ?? '';
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_analysisRunning)
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: SizedBox(
+                height: 18,
+                width: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else
+            Icon(
+              isError ? Icons.warning_amber_rounded : Icons.check_circle,
+              color: isError ? Colors.redAccent : Colors.green,
+            ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssessmentTab() {
+    final assessment = _latestAssessment;
+    return RefreshIndicator(
+      onRefresh: _refreshHub,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _buildStatusCard(),
+          if (_buildStatusCard() is! SizedBox) const SizedBox(height: 12),
+          GlassCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Assessment Intake',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'This screen is now built for direct appearance review. '
+                  'The questionnaire below will be attached to the next appearance photo you upload through the app input flow.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final domain
+                        in AppearanceProtocolLibrary.supportedDomains)
+                      FilterChip(
+                        label: Text(_capitalize(domain)),
+                        selected: _selectedDomains.contains(domain),
+                        onSelected: (selected) {
+                          setState(() {
+                            if (selected) {
+                              _selectedDomains.add(domain);
+                            } else if (_selectedDomains.length > 1) {
+                              _selectedDomains.remove(domain);
+                            }
+                          });
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildInputField(
+                  controller: _diagnosedController,
+                  label: 'Diagnosed issues or known conditions',
+                  hint:
+                      'e.g. acne vulgaris, seborrheic dermatitis, androgenetic shedding',
+                ),
+                const SizedBox(height: 12),
+                _buildInputField(
+                  controller: _concernsController,
+                  label: 'Main concerns',
+                  hint:
+                      'Comma or line separated: breakouts, under-eye fatigue, thinning, poor fit',
+                ),
+                const SizedBox(height: 12),
+                _buildInputField(
+                  controller: _symptomsController,
+                  label: 'Symptoms or friction',
+                  hint:
+                      'itching, irritation, scalp flaking, picking, inconsistent grooming',
+                ),
+                const SizedBox(height: 12),
+                _buildInputField(
+                  controller: _goalsController,
+                  label: 'Appearance goals',
+                  hint:
+                      'clearer skin, sharper silhouette, denser hair, better posture',
+                ),
+                const SizedBox(height: 12),
+                _buildInputField(
+                  controller: _routineController,
+                  label: 'Current routine',
+                  hint: 'Current skin, hair, grooming, or training routine',
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 12),
+                _buildInputField(
+                  controller: _historyController,
+                  label: 'History and constraints',
+                  hint:
+                      'previous treatments, irritation history, budget, schedule',
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 12),
+                _buildInputField(
+                  controller: _styleContextController,
+                  label: 'Style / context notes',
+                  hint:
+                      'workwear, casual, nightlife, gym, conservative dress code',
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _clearIntake,
+                    child: const Text('Clear intake'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (assessment != null) ...[
+            _buildVerdictCard(assessment),
+            const SizedBox(height: 12),
+            ...assessment.orderedConcerns.map((concern) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildConcernCard(concern),
+              );
+            }),
+          ] else
+            GlassCard(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'No structured assessment yet. Complete the intake, then send an appearance photo through the app input flow to generate a direct review and treatment cycles.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    int maxLines = 2,
+  }) {
+    return TextField(
+      controller: controller,
+      minLines: maxLines,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        border: const OutlineInputBorder(),
+      ),
+    );
+  }
+
+  Widget _buildVerdictCard(AppearanceAssessmentResult assessment) {
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Current Verdict',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              Text(
+                _formatDate(assessment.generatedAt),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            assessment.directVerdict,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            assessment.overallSummary,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          if (assessment.hasRedFlags) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
+              ),
+              child: const Text(
+                'Red-flag concerns were detected. Those items are shown for awareness but are routed to consult-first guidance instead of self-managed cycles.',
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConcernCard(AppearanceCandidateConcern concern) {
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _Badge(
+                label: _capitalize(concern.domain),
+                color: Colors.blueGrey,
+              ),
+              _Badge(
+                label: concern.severity.toUpperCase(),
+                color: _severityColor(concern.severity),
+              ),
+              _Badge(
+                label: _tierLabel(concern.interventionTier),
+                color: _tierColor(context, concern.interventionTier),
+              ),
+              if (concern.redFlag)
+                const _Badge(label: 'Consult first', color: Colors.redAccent),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            concern.title,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            concern.directFeedback,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            concern.evidenceSummary,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Confidence ${(concern.confidence * 100).round()}%',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlansTab() {
+    return RefreshIndicator(
+      onRefresh: _refreshHub,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (_activePlans.isEmpty)
+            GlassCard(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'No active cycles yet. Run a structured assessment from a photo to generate skin, hair, style, or physique plans.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            )
+          else
+            ..._activePlans.map((plan) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildPlanCard(plan),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlanCard(AppearanceCarePlan plan) {
+    final tierColor = _tierColor(context, plan.interventionTier);
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      plan.title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _Badge(
+                            label: _capitalize(plan.domain),
+                            color: Colors.blueGrey),
+                        _Badge(
+                            label: _tierLabel(plan.interventionTier),
+                            color: tierColor),
+                        if (plan.checkpointDays.isNotEmpty)
+                          _Badge(
+                            label: 'Checks ${plan.checkpointDays.join('/')}d',
+                            color: Colors.teal,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (plan.id != null)
+                TextButton(
+                  onPressed: () => _showReviewDialog(plan),
+                  child: const Text('Log checkpoint'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(plan.summary),
+          const SizedBox(height: 12),
+          Text(
+            'Cycle steps',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          const SizedBox(height: 8),
+          ...plan.steps.map((step) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${step.title} · ${step.durationDays}d',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      step.cadence,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    ...step.actions.map((action) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text('• $action'),
+                        )),
+                    if (step.stopConditions.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Stop / pause conditions',
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      ...step.stopConditions.map((condition) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text('• $condition'),
+                          )),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          }),
+          if (plan.escalationRules.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Escalation rules',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const SizedBox(height: 6),
+            ...plan.escalationRules.map((rule) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text('• $rule'),
+                )),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressTab() {
+    return RefreshIndicator(
+      onRefresh: _refreshHub,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          GlassCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Recent checkpoint reviews',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                if (_recentReviews.isEmpty)
+                  const Text('No checkpoint reviews yet.')
+                else
+                  ..._recentReviews.map((review) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _buildReviewCard(review),
+                    );
+                  }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          GlassCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Legacy appearance log',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                if (_legacyEntries.isEmpty)
+                  const Text('No legacy feedback logged yet.')
+                else
+                  ..._legacyEntries.take(8).map((entry) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _buildLegacyEntryCard(entry),
+                    );
+                  }),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReviewCard(AppearanceProgressReview review) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  review.planTitle ?? 'Checkpoint review',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              Text(
+                _formatDate(review.createdAt),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (review.adherence != null)
+                _Badge(
+                    label: 'Adherence ${review.adherence}%',
+                    color: Colors.teal),
+              if (review.symptomChange != null)
+                _Badge(
+                  label: _capitalize(review.symptomChange!),
+                  color: review.symptomChange == 'improving'
+                      ? Colors.green
+                      : review.symptomChange == 'worsening'
+                          ? Colors.redAccent
+                          : Colors.orangeAccent,
+                ),
+            ],
+          ),
+          if (review.sideEffects != null &&
+              review.sideEffects!.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Side effects: ${review.sideEffects}'),
+          ],
+          if (review.notes != null && review.notes!.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(review.notes!),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegacyEntryCard(AppearanceEntry entry) {
+    final data = _decodeMeasurements(entry.measurements);
+    final feedback = data['feedback']?.toString().trim();
+    final uploadName = data['upload_name']?.toString().trim();
+    final imagePath = entry.imagePath;
+    final imageFile =
+        imagePath == null || imagePath.isEmpty ? null : File(imagePath);
+    final hasImage = imageFile != null && imageFile.existsSync();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (hasImage)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.file(
+              imageFile,
+              height: 160,
+              width: double.infinity,
+              fit: BoxFit.cover,
+            ),
+          ),
+        const SizedBox(height: 8),
+        Text(
+          feedback == null || feedback.isEmpty
+              ? 'Appearance feedback logged.'
+              : feedback,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          [
+            _formatDate(entry.createdAt),
+            if (uploadName != null && uploadName.isNotEmpty) uploadName,
+          ].join(' • '),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+
+  Map<String, Object?> _decodeMeasurements(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  Widget _buildSourcesTab() {
+    return RefreshIndicator(
+      onRefresh: _refreshHub,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          GlassCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Source documents',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Every active cycle should map back to a source document or a local policy reference so critiques can target a concrete document instead of vague AI text.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 12),
+                if (_sourceDocuments.isEmpty)
+                  const Text('No source documents loaded yet.')
+                else
+                  ..._sourceDocuments.map((document) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _buildSourceCard(document),
+                    );
+                  }),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSourceCard(AppearanceSourceDocument document) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  document.title,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              _Badge(
+                  label: _capitalize(document.domain), color: Colors.blueGrey),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SelectableText(document.citation),
+          if (document.rationale != null &&
+              document.rationale!.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(document.rationale!),
+          ],
+          if (document.url != null && document.url!.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SelectableText(document.url!),
+          ],
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              TextButton(
+                onPressed: () => _copyText('Citation', document.citation),
+                child: const Text('Copy citation'),
+              ),
+              if (document.url != null && document.url!.trim().isNotEmpty)
+                TextButton(
+                  onPressed: () => _copyText('Link', document.url!),
+                  child: const Text('Copy link'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _capitalize(String value) {
+    if (value.isEmpty) return value;
+    return value[0].toUpperCase() + value.substring(1);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_accessReady) {
@@ -760,554 +1741,98 @@ Remember: you are only giving guidance, the user will determine their own score.
         body: Center(child: Text('Appearance disabled.')),
       );
     }
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Appearance'),
-        actions: const [SizedBox(width: 72)],
-      ),
-      body: Stack(
-        children: [
-          const GlassBackground(),
-          ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _buildAssessmentCard(),
-              const SizedBox(height: 12),
-              _buildProgressRingsCard(),
-              const SizedBox(height: 12),
-              _buildFeedbackHistoryCard(),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FeedbackScores {
-  const _FeedbackScores({
-    required this.skin,
-    required this.physique,
-    required this.style,
-  });
-
-  final double skin;
-  final double physique;
-  final double style;
-}
-
-class _StackedRings extends StatelessWidget {
-  const _StackedRings({
-    required this.skin,
-    required this.physique,
-    required this.style,
-    required this.physiqueColor,
-    required this.skinColor,
-    required this.styleColor,
-    required this.selectedAssessment,
-    required this.onPhysiqueColorChanged,
-    required this.onSkinColorChanged,
-    required this.onStyleColorChanged,
-    required this.onAssessmentChanged,
-  });
-
-  final double skin;
-  final double physique;
-  final double style;
-  final Color physiqueColor;
-  final Color skinColor;
-  final Color styleColor;
-  final AppearanceAssessment selectedAssessment;
-  final ValueChanged<Color> onPhysiqueColorChanged;
-  final ValueChanged<Color> onSkinColorChanged;
-  final ValueChanged<Color> onStyleColorChanged;
-  final ValueChanged<AppearanceAssessment> onAssessmentChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // Rings
-        SizedBox(
-          height: 140,
-          width: 140,
-          child: CustomPaint(
-            painter: _RingsPainter(
-              skin: skin.clamp(0.0, 1.0),
-              physique: physique.clamp(0.0, 1.0),
-              style: style.clamp(0.0, 1.0),
-              skinColor: skinColor,
-              physiqueColor: physiqueColor,
-              styleColor: styleColor,
-              selectedAssessment: selectedAssessment,
-            ),
-          ),
-        ),
-        const SizedBox(width: 24),
-        // Legend
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _LegendItem(
-              color: physiqueColor,
-              label: 'Physique',
-              value: (physique * 100).round(),
-              onColorChanged: onPhysiqueColorChanged,
-              isHighlighted:
-                  selectedAssessment == AppearanceAssessment.physique,
-              onButtonPressed: () =>
-                  onAssessmentChanged(AppearanceAssessment.physique),
-            ),
-            const SizedBox(height: 12),
-            _LegendItem(
-              color: skinColor,
-              label: 'Skin',
-              value: (skin * 100).round(),
-              onColorChanged: onSkinColorChanged,
-              isHighlighted: selectedAssessment == AppearanceAssessment.skin,
-              onButtonPressed: () =>
-                  onAssessmentChanged(AppearanceAssessment.skin),
-            ),
-            const SizedBox(height: 12),
-            _LegendItem(
-              color: styleColor,
-              label: 'Style',
-              value: (style * 100).round(),
-              onColorChanged: onStyleColorChanged,
-              isHighlighted: selectedAssessment == AppearanceAssessment.style,
-              onButtonPressed: () =>
-                  onAssessmentChanged(AppearanceAssessment.style),
-            ),
+    final hasAnyData = _latestAssessment != null ||
+        _activePlans.isNotEmpty ||
+        _recentReviews.isNotEmpty ||
+        _sourceDocuments.isNotEmpty ||
+        _legacyEntries.isNotEmpty;
+    final showInitialLoader = _refreshing && !hasAnyData;
+    final title = _selectedSection == _AppearanceHubSection.hub
+        ? 'Appearance Hub'
+        : 'Appearance • ${_sectionTitle(_selectedSection)}';
+    return PopScope<void>(
+      canPop: _selectedSection == _AppearanceHubSection.hub,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _selectedSection != _AppearanceHubSection.hub) {
+          _openSection(_AppearanceHubSection.hub);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(title),
+          actions: [
+            if (_selectedSection != _AppearanceHubSection.hub)
+              IconButton(
+                tooltip: 'Back to hub',
+                onPressed: () => _openSection(_AppearanceHubSection.hub),
+                icon: const Icon(Icons.grid_view_rounded),
+              ),
+            if (_refreshing)
+              const Padding(
+                padding: EdgeInsets.only(right: 20),
+                child: Center(
+                  child: SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              )
+            else
+              IconButton(
+                tooltip: 'Refresh',
+                onPressed: _refreshHub,
+                icon: const Icon(Icons.sync_rounded),
+              ),
           ],
         ),
-      ],
+        body: Stack(
+          children: [
+            const GlassBackground(),
+            if (showInitialLoader)
+              const Center(child: CircularProgressIndicator())
+            else
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: _selectedSection == _AppearanceHubSection.hub
+                    ? _buildHubView()
+                    : _buildDetailView(),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _LegendItem extends StatelessWidget {
-  const _LegendItem({
+class _Badge extends StatelessWidget {
+  const _Badge({
+    required this.label,
     required this.color,
-    required this.label,
-    required this.value,
-    required this.onColorChanged,
-    required this.onButtonPressed,
-    this.isHighlighted = false,
   });
 
+  final String label;
   final Color color;
-  final String label;
-  final int value;
-  final ValueChanged<Color> onColorChanged;
-  final VoidCallback onButtonPressed;
-  final bool isHighlighted;
-
-  void _showColorPicker(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _ColorPickerSheet(
-        initialColor: color,
-        label: label,
-        onColorSelected: onColorChanged,
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      padding: EdgeInsets.all(isHighlighted ? 4 : 0),
-      decoration: BoxDecoration(
-        color: isHighlighted ? color.withOpacity(0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Color value box (clickable)
-          GestureDetector(
-            onTap: () => _showColorPicker(context),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: color.withOpacity(isHighlighted ? 1.0 : 0.85),
-                borderRadius: BorderRadius.circular(6),
-                boxShadow: isHighlighted
-                    ? [
-                        BoxShadow(
-                            color: color.withOpacity(0.4),
-                            blurRadius: 8,
-                            spreadRadius: 1)
-                      ]
-                    : null,
-              ),
-              child: Text(
-                '$value',
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Label + Button (same width as value box)
-          GestureDetector(
-            onTap: onButtonPressed,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color:
-                    isHighlighted ? color.withOpacity(0.2) : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: isHighlighted ? color : Colors.grey.withOpacity(0.3),
-                  width: isHighlighted ? 1.5 : 1,
-                ),
-              ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
-                  fontSize: 13,
-                  color: isHighlighted
-                      ? color
-                      : Theme.of(context).textTheme.bodyMedium?.color,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ColorPickerSheet extends StatefulWidget {
-  const _ColorPickerSheet({
-    required this.initialColor,
-    required this.label,
-    required this.onColorSelected,
-  });
-
-  final Color initialColor;
-  final String label;
-  final ValueChanged<Color> onColorSelected;
-
-  @override
-  State<_ColorPickerSheet> createState() => _ColorPickerSheetState();
-}
-
-class _ColorPickerSheetState extends State<_ColorPickerSheet> {
-  late Color _selectedColor;
-  late TextEditingController _valueController;
-  late TextEditingController _notesController;
-
-  static const List<Color> _presetColors = [
-    Colors.red,
-    Colors.pink,
-    Colors.purple,
-    Colors.deepPurple,
-    Colors.indigo,
-    Colors.blue,
-    Colors.lightBlue,
-    Colors.cyan,
-    Colors.teal,
-    Colors.green,
-    Colors.lightGreen,
-    Colors.lime,
-    Colors.yellow,
-    Colors.amber,
-    Colors.orange,
-    Colors.deepOrange,
-    Colors.brown,
-    Colors.grey,
-    Colors.blueGrey,
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedColor = widget.initialColor;
-    _valueController = TextEditingController(text: '50');
-    _notesController = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _valueController.dispose();
-    _notesController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-
     return Container(
-      height: screenHeight * 0.85,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
-      child: Column(
-        children: [
-          // Handle bar
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          // Header
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '${widget.label} Color',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: _selectedColor,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Scrollable content
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                // Preset colors
-                const Text(
-                  'Select Color',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: _presetColors.map((color) {
-                    final isSelected = _selectedColor.value == color.value;
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedColor = color;
-                        });
-                      },
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(8),
-                          border: isSelected
-                              ? Border.all(color: Colors.white, width: 3)
-                              : Border.all(color: Colors.grey.withOpacity(0.3)),
-                          boxShadow: isSelected
-                              ? [
-                                  BoxShadow(
-                                      color: color.withOpacity(0.5),
-                                      blurRadius: 8)
-                                ]
-                              : null,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 24),
-                // Enter Value input
-                const Text(
-                  'Enter Value (0-100)',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _valueController,
-                  decoration: InputDecoration(
-                    hintText: 'Enter value',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    counterText: '',
-                  ),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: false),
-                  maxLength: 3,
-                  onChanged: (value) {
-                    final parsed = int.tryParse(value);
-                    if (parsed != null && parsed >= 0 && parsed <= 100) {
-                      // Value is valid
-                    }
-                  },
-                ),
-                const SizedBox(height: 20),
-                // Notes section
-                const Text(
-                  'Notes',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _notesController,
-                  decoration: InputDecoration(
-                    hintText:
-                        'Add personal notes about your ${widget.label}...',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 12),
-                    alignLabelWithHint: true,
-                  ),
-                  maxLines: 6,
-                  minLines: 4,
-                ),
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
-          // Buttons
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Close'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () {
-                      widget.onColorSelected(_selectedColor);
-                      Navigator.of(context).pop();
-                    },
-                    child: const Text('Save'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
       ),
     );
-  }
-}
-
-class _RingsPainter extends CustomPainter {
-  _RingsPainter({
-    required this.skin,
-    required this.physique,
-    required this.style,
-    required this.skinColor,
-    required this.physiqueColor,
-    required this.styleColor,
-    required this.selectedAssessment,
-  });
-
-  final double skin;
-  final double physique;
-  final double style;
-  final Color skinColor;
-  final Color physiqueColor;
-  final Color styleColor;
-  final AppearanceAssessment selectedAssessment;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    const startAngle = -3.14159 / 2; // Start from top
-
-    // Ring configurations (outermost to innermost)
-    final rings = [
-      (
-        radius: size.width / 2 - 8,
-        value: physique,
-        color: physiqueColor,
-        assessment: AppearanceAssessment.physique
-      ),
-      (
-        radius: size.width / 2 - 28,
-        value: skin,
-        color: skinColor,
-        assessment: AppearanceAssessment.skin
-      ),
-      (
-        radius: size.width / 2 - 48,
-        value: style,
-        color: styleColor,
-        assessment: AppearanceAssessment.style
-      ),
-    ];
-
-    for (final ring in rings) {
-      final isSelected = ring.assessment == selectedAssessment;
-      final strokeWidth = isSelected ? 18.0 : 12.0;
-      final bgOpacity = isSelected ? 0.2 : 0.1;
-      final progressOpacity = isSelected ? 1.0 : 0.7;
-
-      // Background track
-      final bgPaint = Paint()
-        ..color = ring.color.withOpacity(bgOpacity)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.round;
-
-      canvas.drawCircle(center, ring.radius, bgPaint);
-
-      // Progress arc
-      if (ring.value > 0) {
-        final progressPaint = Paint()
-          ..color = ring.color.withOpacity(progressOpacity)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = strokeWidth
-          ..strokeCap = StrokeCap.round;
-
-        final sweepAngle = 2 * 3.14159 * ring.value;
-        canvas.drawArc(
-          Rect.fromCircle(center: center, radius: ring.radius),
-          startAngle,
-          sweepAngle,
-          false,
-          progressPaint,
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_RingsPainter oldDelegate) {
-    return skin != oldDelegate.skin ||
-        physique != oldDelegate.physique ||
-        style != oldDelegate.style ||
-        skinColor != oldDelegate.skinColor ||
-        physiqueColor != oldDelegate.physiqueColor ||
-        styleColor != oldDelegate.styleColor ||
-        selectedAssessment != oldDelegate.selectedAssessment;
   }
 }

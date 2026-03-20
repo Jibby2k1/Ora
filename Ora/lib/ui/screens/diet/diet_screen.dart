@@ -18,6 +18,8 @@ import 'food_detail_page.dart';
 import 'food_search_page.dart';
 import 'recipes_page.dart';
 
+enum _DietHubSection { hub, diary }
+
 class DietScreen extends StatefulWidget {
   const DietScreen({super.key});
 
@@ -37,6 +39,7 @@ class _DietScreenState extends State<DietScreen> {
   final Map<String, bool> _collapsedByMeal = {
     for (final slot in DietDiaryService.mealSlots) slot: false,
   };
+  _DietHubSection _selectedSection = _DietHubSection.hub;
 
   @override
   void initState() {
@@ -545,150 +548,571 @@ class _DietScreenState extends State<DietScreen> {
     );
   }
 
+  void _openDietSection(_DietHubSection section) {
+    if (_selectedSection == section) return;
+    setState(() => _selectedSection = section);
+  }
+
+  Widget _buildDietHub(DietDiaryViewModel? vm) {
+    final theme = Theme.of(context);
+    final hasDiary = vm != null;
+    final consumedCalories =
+        hasDiary ? vm.dailyTotals.calories.round().toString() : '--';
+    final remainingCalories =
+        hasDiary ? vm.remainingCalories.round().toString() : '--';
+    final entries = hasDiary ? vm.totalEntries.toString() : '0';
+    final mealSlot = DietDiaryService.mealSlots.first;
+
+    Future<void> launchAndOpenDiary(Future<void> Function() action) async {
+      await action();
+      if (!mounted) return;
+      _openDietSection(_DietHubSection.diary);
+    }
+
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView(
+        key: const ValueKey('diet-hub'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: [
+          GlassCard(
+            padding: EdgeInsets.zero,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    theme.colorScheme.primary.withValues(alpha: 0.18),
+                    theme.colorScheme.secondary.withValues(alpha: 0.10),
+                    theme.colorScheme.surface.withValues(alpha: 0.72),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color:
+                              theme.colorScheme.surface.withValues(alpha: 0.70),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: theme.colorScheme.primary
+                                .withValues(alpha: 0.24),
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.restaurant_menu_rounded,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Diet Hub',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Pick the exact nutrition workflow you want instead of landing in the full diary immediately.',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    hasDiary
+                        ? "Today's diary is loaded. Use the hub to log food, inspect the diary, or jump straight to recipes and settings."
+                        : 'Start from the hub, then jump into the diary or the specific logging flow you need.',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      height: 1.1,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    hasDiary
+                        ? 'Selected day: ${_relativeDayLabel(_selectedDay)}'
+                        : 'No diary loaded yet for the selected day.',
+                    style: theme.textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _buildDietMetric('Consumed', consumedCalories),
+                      _buildDietMetric('Remaining', remainingCalories),
+                      _buildDietMetric('Entries', entries),
+                      _buildDietMetric('Day', _relativeDayLabel(_selectedDay)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: () =>
+                            _openDietSection(_DietHubSection.diary),
+                        icon: const Icon(Icons.menu_book_rounded),
+                        label: const Text('Open diary'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _pickDay,
+                        icon: const Icon(Icons.calendar_month_rounded),
+                        label: const Text('Pick day'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'Choose what to do',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Logging, searching, scanning, recipes, and settings are separated so the page stays readable.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 760;
+              final cardWidth = isWide
+                  ? (constraints.maxWidth - 12) / 2
+                  : constraints.maxWidth;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: cardWidth,
+                    child: _buildDietActionCard(
+                      icon: Icons.menu_book_rounded,
+                      title: 'Diary',
+                      description:
+                          'Open the full day diary with totals, meal groups, and edits.',
+                      meta: hasDiary
+                          ? '${vm.totalEntries} entries logged'
+                          : 'No entries yet',
+                      accent: theme.colorScheme.primary,
+                      onTap: () => _openDietSection(_DietHubSection.diary),
+                    ),
+                  ),
+                  SizedBox(
+                    width: cardWidth,
+                    child: _buildDietActionCard(
+                      icon: Icons.add_circle_outline_rounded,
+                      title: 'Log Food',
+                      description:
+                          'Open the add sheet and choose the fastest logging method.',
+                      meta: 'Quick add, search, scan, or recipe',
+                      accent: Colors.greenAccent.shade400,
+                      onTap: () => launchAndOpenDiary(() => _openAddActions()),
+                    ),
+                  ),
+                  SizedBox(
+                    width: cardWidth,
+                    child: _buildDietActionCard(
+                      icon: Icons.search_rounded,
+                      title: 'Search Foods',
+                      description:
+                          'Find a food manually and add it to the selected day.',
+                      meta: 'Starts in $mealSlot',
+                      accent: Colors.lightBlueAccent,
+                      onTap: () =>
+                          launchAndOpenDiary(() => _openFoodSearch(mealSlot)),
+                    ),
+                  ),
+                  SizedBox(
+                    width: cardWidth,
+                    child: _buildDietActionCard(
+                      icon: Icons.qr_code_scanner_rounded,
+                      title: 'Scan Barcode',
+                      description:
+                          'Scan a packaged food and add or create the entry from the barcode flow.',
+                      meta: 'Fastest packaged-food logging path',
+                      accent: Colors.orangeAccent,
+                      onTap: () =>
+                          launchAndOpenDiary(() => _scanBarcode(mealSlot)),
+                    ),
+                  ),
+                  SizedBox(
+                    width: cardWidth,
+                    child: _buildDietActionCard(
+                      icon: Icons.menu_book_outlined,
+                      title: 'Recipes',
+                      description:
+                          'Open the recipe manager and add saved recipes to the selected day.',
+                      meta: 'Plan repeated meals once, reuse them later',
+                      accent: Colors.purpleAccent,
+                      onTap: _openRecipesManager,
+                    ),
+                  ),
+                  SizedBox(
+                    width: cardWidth,
+                    child: _buildDietActionCard(
+                      icon: Icons.tune_rounded,
+                      title: 'Goals',
+                      description:
+                          'Adjust calorie and macro targets for the diary calculations.',
+                      meta: 'Open diet settings',
+                      accent: Colors.tealAccent.shade400,
+                      onTap: _openDietSettings,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDietMetric(String label, String value) {
+    final theme = Theme.of(context);
+    return Container(
+      constraints: const BoxConstraints(minWidth: 132),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.16),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDietActionCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required String meta,
+    required Color accent,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: GlassCard(
+        padding: EdgeInsets.zero,
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                accent.withValues(alpha: 0.12),
+                theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.38),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface.withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: accent),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(description, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 12),
+              Text(
+                meta,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextButton.icon(
+                onPressed: onTap,
+                icon: const Icon(Icons.arrow_forward_rounded),
+                label: Text(title == 'Diary' ? 'Open diary' : title),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDiaryView(
+    DietDiaryViewModel? vm,
+    bool isToday,
+    ThemeData theme,
+  ) {
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView(
+        key: const ValueKey('diet-diary'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 94),
+        children: [
+          GlassCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color:
+                            theme.colorScheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(
+                        Icons.menu_book_rounded,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Diary',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Review the selected day, add entries, and edit meals without the rest of the hub competing for space.',
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _relativeDayLabel(_selectedDay),
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _openDietSection(_DietHubSection.hub),
+                      icon: const Icon(Icons.grid_view_rounded),
+                      label: const Text('Hub'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: theme.colorScheme.surface.withValues(alpha: 0.14),
+              border: Border.all(
+                color: theme.colorScheme.outline.withValues(alpha: 0.18),
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Row(
+              children: [
+                IconButton(
+                  visualDensity:
+                      const VisualDensity(horizontal: -2, vertical: -2),
+                  onPressed: _goToPreviousDay,
+                  icon: const Icon(Icons.chevron_left),
+                ),
+                Expanded(
+                  child: InkWell(
+                    onTap: _pickDay,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _relativeDayLabel(_selectedDay),
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.72),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          _dayFormat.format(_selectedDay),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 42,
+                  child: isToday
+                      ? const SizedBox.shrink()
+                      : IconButton(
+                          visualDensity:
+                              const VisualDensity(horizontal: -2, vertical: -2),
+                          onPressed: _goToNextDay,
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (vm != null) ...[
+            SummaryCarousel(viewModel: vm),
+            const SizedBox(height: 8),
+            for (final group in vm.mealGroups) ...[
+              MealGroupSection(
+                group: group,
+                collapsed: _collapsedByMeal[group.mealSlot] ?? false,
+                onAdd: () => _openAddActions(mealSlot: group.mealSlot),
+                onEdit: _handleEntryTapEdit,
+                onToggleCollapsed: () {
+                  setState(() {
+                    _collapsedByMeal[group.mealSlot] =
+                        !(_collapsedByMeal[group.mealSlot] ?? false);
+                  });
+                },
+                onEditOrCopy: _handleEntryEditOrCopy,
+                onDelete: _handleEntryDelete,
+                onDropEntry: (item) => _handleEntryDrop(item, group.mealSlot),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ],
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final vm = _viewModel;
     final isToday = _isSameDay(_selectedDay, DateTime.now());
     final theme = Theme.of(context);
+    final showInitialLoader = vm == null && _loading;
+    final title =
+        _selectedSection == _DietHubSection.hub ? 'Diet Hub' : 'Diet • Diary';
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Diet'),
-        actions: [
-          IconButton(
-            tooltip: 'Saved recipes',
-            onPressed: _openRecipesManager,
-            icon: const Icon(Icons.menu_book_rounded),
-          ),
-          IconButton(
-            tooltip: 'Diet settings',
-            onPressed: _openDietSettings,
-            icon: const Icon(Icons.tune_rounded),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          const GlassBackground(),
-          if (vm == null && _loading)
-            const Center(child: CircularProgressIndicator())
-          else
-            RefreshIndicator(
-              onRefresh: _refresh,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 94),
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: theme.colorScheme.surface.withValues(alpha: 0.14),
-                      border: Border.all(
-                        color:
-                            theme.colorScheme.outline.withValues(alpha: 0.18),
-                      ),
-                    ),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          visualDensity: const VisualDensity(
-                            horizontal: -2,
-                            vertical: -2,
-                          ),
-                          onPressed: _goToPreviousDay,
-                          icon: const Icon(Icons.chevron_left),
-                        ),
-                        Expanded(
-                          child: InkWell(
-                            onTap: _pickDay,
-                            borderRadius: BorderRadius.circular(8),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  _relativeDayLabel(_selectedDay),
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.72),
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 1),
-                                Text(
-                                  _dayFormat.format(_selectedDay),
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        SizedBox(
-                          width: 42,
-                          child: isToday
-                              ? const SizedBox.shrink()
-                              : IconButton(
-                                  visualDensity: const VisualDensity(
-                                    horizontal: -2,
-                                    vertical: -2,
-                                  ),
-                                  onPressed: _goToNextDay,
-                                  icon: const Icon(Icons.chevron_right),
-                                ),
-                        ),
-                      ],
-                    ),
+    return PopScope<void>(
+      canPop: _selectedSection == _DietHubSection.hub,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _selectedSection != _DietHubSection.hub) {
+          _openDietSection(_DietHubSection.hub);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(title),
+          actions: [
+            if (_selectedSection != _DietHubSection.hub)
+              IconButton(
+                tooltip: 'Back to hub',
+                onPressed: () => _openDietSection(_DietHubSection.hub),
+                icon: const Icon(Icons.grid_view_rounded),
+              ),
+            IconButton(
+              tooltip: 'Saved recipes',
+              onPressed: _openRecipesManager,
+              icon: const Icon(Icons.menu_book_rounded),
+            ),
+            IconButton(
+              tooltip: 'Diet settings',
+              onPressed: _openDietSettings,
+              icon: const Icon(Icons.tune_rounded),
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            const GlassBackground(),
+            if (showInitialLoader)
+              const Center(child: CircularProgressIndicator())
+            else
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: _selectedSection == _DietHubSection.hub
+                    ? _buildDietHub(vm)
+                    : _buildDiaryView(vm, isToday, theme),
+              ),
+            if (_selectedSection == _DietHubSection.diary)
+              SafeArea(
+                minimum: const EdgeInsets.only(right: 16, bottom: 16),
+                child: Align(
+                  alignment: Alignment.bottomRight,
+                  child: FloatingActionButton(
+                    backgroundColor:
+                        theme.colorScheme.primary.withValues(alpha: 0.92),
+                    foregroundColor: theme.colorScheme.onPrimary,
+                    elevation: 2,
+                    onPressed: () => _openAddActions(),
+                    child: const Icon(Icons.add),
                   ),
-                  const SizedBox(height: 8),
-                  if (vm != null) ...[
-                    SummaryCarousel(viewModel: vm),
-                    const SizedBox(height: 8),
-                    for (final group in vm.mealGroups) ...[
-                      MealGroupSection(
-                        group: group,
-                        collapsed: _collapsedByMeal[group.mealSlot] ?? false,
-                        onAdd: () => _openAddActions(mealSlot: group.mealSlot),
-                        onEdit: _handleEntryTapEdit,
-                        onToggleCollapsed: () {
-                          setState(() {
-                            _collapsedByMeal[group.mealSlot] =
-                                !(_collapsedByMeal[group.mealSlot] ?? false);
-                          });
-                        },
-                        onEditOrCopy: _handleEntryEditOrCopy,
-                        onDelete: _handleEntryDelete,
-                        onDropEntry: (item) =>
-                            _handleEntryDrop(item, group.mealSlot),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  ],
-                  if (_loading)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 12),
-                      child: Center(child: CircularProgressIndicator()),
-                    ),
-                ],
+                ),
               ),
-            ),
-          SafeArea(
-            minimum: const EdgeInsets.only(right: 16, bottom: 16),
-            child: Align(
-              alignment: Alignment.bottomRight,
-              child: FloatingActionButton(
-                backgroundColor:
-                    theme.colorScheme.primary.withValues(alpha: 0.92),
-                foregroundColor: theme.colorScheme.onPrimary,
-                elevation: 2,
-                onPressed: () => _openAddActions(),
-                child: const Icon(Icons.add),
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
