@@ -17,6 +17,7 @@ class AppShellController {
       ValueNotifier<String>('neutral');
   final ValueNotifier<bool> orbHidden = ValueNotifier<bool>(false);
   final ValueNotifier<bool> highContrastSnackbars = ValueNotifier<bool>(true);
+  final ValueNotifier<bool> developerMode = ValueNotifier<bool>(false);
   final ValueNotifier<bool> activeSession = ValueNotifier<bool>(false);
   final ValueNotifier<bool> activeSessionIndicatorHidden =
       ValueNotifier<bool>(false);
@@ -67,6 +68,11 @@ class AppShellController {
   void setHighContrastSnackbars(bool value) {
     if (highContrastSnackbars.value == value) return;
     highContrastSnackbars.value = value;
+  }
+
+  void setDeveloperMode(bool value) {
+    if (developerMode.value == value) return;
+    developerMode.value = value;
   }
 
   void setActiveSession(bool value) {

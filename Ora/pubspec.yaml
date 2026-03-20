@@ -61,6 +61,7 @@ flutter:
   assets:
     - lib/data/seed/exercise_catalog_seed.json
     - lib/data/seed/muscle_map_seed.json
+    - lib/data/seed/exercise_science_seed.json
     - assets/vosk/vosk-model-small-en-us-0.15.zip
     - assets/branding/ora_logo_blue.png
     - assets/branding/ora.png

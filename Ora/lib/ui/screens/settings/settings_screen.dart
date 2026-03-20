@@ -44,6 +44,7 @@ class _SettingsContentState extends State<SettingsContent> {
   String _cloudProvider = 'gemini';
   bool _orbHidden = false;
   bool _snackbarHighContrast = true;
+  bool _developerMode = false;
 
   final _incrementController = TextEditingController();
   final _restController = TextEditingController();
@@ -81,6 +82,7 @@ class _SettingsContentState extends State<SettingsContent> {
     final cloudProvider = await _settingsRepo.getCloudProvider();
     final orbHidden = await _settingsRepo.getOrbHidden();
     final snackbarHighContrast = await _settingsRepo.getSnackbarHighContrast();
+    final developerMode = await _settingsRepo.getDeveloperMode();
     final fitbitClientId = await _fitbitService.getConfiguredClientId();
 
     final taskModels = <CloudModelTask, String>{};
@@ -88,6 +90,7 @@ class _SettingsContentState extends State<SettingsContent> {
       taskModels[task] = await _settingsRepo.getCloudModelForTask(task);
     }
     AppShellController.instance.setHighContrastSnackbars(snackbarHighContrast);
+    AppShellController.instance.setDeveloperMode(developerMode);
 
     if (!mounted) return;
     setState(() {
@@ -100,6 +103,7 @@ class _SettingsContentState extends State<SettingsContent> {
       _cloudProvider = cloudProvider;
       _orbHidden = orbHidden;
       _snackbarHighContrast = snackbarHighContrast;
+      _developerMode = developerMode;
       _fitbitClientIdController.text = fitbitClientId ?? '';
       _taskModels
         ..clear()
@@ -200,6 +204,22 @@ class _SettingsContentState extends State<SettingsContent> {
     if (!mounted) return;
     messenger.showSnackBar(
       const SnackBar(content: Text('Fitbit Client ID cleared.')),
+    );
+  }
+
+  Future<void> _setDeveloperMode(bool value) async {
+    setState(() => _developerMode = value);
+    await _settingsRepo.setDeveloperMode(value);
+    AppShellController.instance.setDeveloperMode(value);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          value
+              ? 'Developer mode enabled. Captured errors can be copied directly.'
+              : 'Developer mode disabled.',
+        ),
+      ),
     );
   }
 
@@ -588,11 +608,20 @@ class _SettingsContentState extends State<SettingsContent> {
             children: [
               const Text('Diagnostics'),
               const SizedBox(height: 8),
+              SwitchListTile(
+                value: _developerMode,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Developer mode'),
+                subtitle: const Text(
+                  'Show copyable dialogs for captured errors and keep full details easy to grab.',
+                ),
+                onChanged: _setDeveloperMode,
+              ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('View crash logs'),
                 subtitle: const Text(
-                  'Inspect recent startup errors and share the local log file.',
+                  'Inspect recent startup errors and share or copy the local log file.',
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {

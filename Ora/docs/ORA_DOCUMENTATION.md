@@ -34,6 +34,7 @@
 - Create structured training programs with multiple days
 - Configure exercises with detailed set plans (rep ranges, weight rules, rest periods, RPE/RIR targets)
 - Start live sessions with voice or manual logging
+- Tag individual logged sets as Warm-up, Failure, or Dropset directly from the Set/Tag chip on mobile
 - Track personal records automatically
 - View exercise history and performance trends
 - Calorie estimation based on workout volume

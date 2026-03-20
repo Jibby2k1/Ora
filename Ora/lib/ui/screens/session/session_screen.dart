@@ -3022,6 +3022,31 @@ class _SessionScreenState extends State<SessionScreen> {
             foregroundColor: effectiveForeground,
             fillColor: highlight,
             outlineColor: outline,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    _setDisplayLabel(setNumber: displayNumber, tag: tag),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: effectiveForeground,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.sell_outlined,
+                  size: 14,
+                  color: effectiveForeground.withValues(
+                    alpha: tag == WorkoutSetTag.normal ? 0.72 : 0.92,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -3410,7 +3435,7 @@ class _SessionScreenState extends State<SessionScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Row(
             children: [
-              headerCell('Set', setFlex),
+              headerCell('Set/Tag', setFlex),
               const SizedBox(width: colGap),
               headerCell('Previous', prevFlex),
               const SizedBox(width: colGap),

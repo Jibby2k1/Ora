@@ -83,6 +83,7 @@ class SettingsRepo {
   static const String keyOrbPosY = 'orb_pos_y';
   static const String keyProfileAvatarPath = 'profile_avatar_path';
   static const String keySnackbarHighContrast = 'snackbar_high_contrast';
+  static const String keyDeveloperMode = 'developer_mode';
 
   static const List<CloudModelTask> configurableCloudModelTasks = [
     CloudModelTask.programInterpretation,
@@ -402,6 +403,15 @@ class SettingsRepo {
 
   Future<void> setSnackbarHighContrast(bool value) async {
     await _set(keySnackbarHighContrast, value ? '1' : '0');
+  }
+
+  Future<bool> getDeveloperMode() async {
+    final raw = await _get(keyDeveloperMode);
+    return raw == '1';
+  }
+
+  Future<void> setDeveloperMode(bool value) async {
+    await _set(keyDeveloperMode, value ? '1' : '0');
   }
 
   Future<void> setOrbHidden(bool value) async {

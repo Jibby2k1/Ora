@@ -15,7 +15,7 @@ Project governance and planning live at the repo root:
 
 ## Features
 - Training programs with days, exercises, and set-plan blocks
-- Session logging with rest timer, undo/redo, and exercise matching
+- Session logging with visible set tagging, rest timer, undo/redo, and exercise matching
 - Voice capture pipeline (push-to-talk, optional wake word) with local NLU and optional cloud LLM parsing
 - Exercise catalog and history views with per-exercise performance history
 - Training landing screen with muscle stats grid and interactive anatomy (front/back, male/female SVGs)
