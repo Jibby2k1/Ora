@@ -1,5 +1,5 @@
 const dbName = 'ora.db';
-const dbVersion = 13;
+const dbVersion = 14;
 
 const createTableExerciseScienceInfo = '''
 CREATE TABLE exercise_science_info(
@@ -8,6 +8,8 @@ CREATE TABLE exercise_science_info(
   avoid_json TEXT NOT NULL,
   citations_json TEXT NOT NULL,
   visual_asset_paths_json TEXT NOT NULL,
+  info_sections_json TEXT NOT NULL DEFAULT '[]',
+  source_documents_json TEXT NOT NULL DEFAULT '[]',
   FOREIGN KEY(exercise_id) REFERENCES exercise(id)
 );
 ''';

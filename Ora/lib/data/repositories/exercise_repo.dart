@@ -13,7 +13,8 @@ class ExerciseRepo {
     return db.query('exercise', orderBy: 'canonical_name ASC');
   }
 
-  Future<List<Map<String, Object?>>> getMissingMuscles({int limit = 500}) async {
+  Future<List<Map<String, Object?>>> getMissingMuscles(
+      {int limit = 500}) async {
     final db = await _db.database;
     return db.query(
       'exercise',
@@ -25,29 +26,41 @@ class ExerciseRepo {
 
   Future<Map<String, Object?>?> getById(int id) async {
     final db = await _db.database;
-    final rows = await db.query('exercise', where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows =
+        await db.query('exercise', where: 'id = ?', whereArgs: [id], limit: 1);
     return rows.isEmpty ? null : rows.first;
   }
 
   Future<List<Map<String, Object?>>> findByCanonical(String normalized) async {
     final db = await _db.database;
-    return db.query('exercise', where: 'lower(canonical_name) = ?', whereArgs: [normalized]);
+    return db.query('exercise',
+        where: 'lower(canonical_name) = ?', whereArgs: [normalized]);
   }
 
   Future<List<Map<String, Object?>>> findByAlias(String normalized) async {
     final db = await _db.database;
     final rows = await db.query('exercise_alias',
-        columns: ['exercise_id'], where: 'alias_normalized = ?', whereArgs: [normalized]);
+        columns: ['exercise_id'],
+        where: 'alias_normalized = ?',
+        whereArgs: [normalized]);
     if (rows.isEmpty) return [];
     final ids = rows.map((e) => e['exercise_id'] as int).toList();
     final placeholders = List.filled(ids.length, '?').join(',');
     return db.query('exercise', where: 'id IN ($placeholders)', whereArgs: ids);
   }
 
-  Future<List<Map<String, Object?>>> findByTokenContains(List<String> tokens) async {
+  Future<List<Map<String, Object?>>> findByTokenContains(
+      List<String> tokens) async {
     if (tokens.isEmpty) return [];
     final db = await _db.database;
-    final all = await db.query('exercise', columns: ['id', 'canonical_name', 'equipment_type', 'primary_muscle', 'secondary_muscles_json', 'weight_mode_default']);
+    final all = await db.query('exercise', columns: [
+      'id',
+      'canonical_name',
+      'equipment_type',
+      'primary_muscle',
+      'secondary_muscles_json',
+      'weight_mode_default'
+    ]);
     final lowerTokens = tokens.map((t) => t.toLowerCase()).toList();
     return all.where((row) {
       final name = (row['canonical_name'] as String).toLowerCase();
@@ -100,12 +113,15 @@ class ExerciseRepo {
     );
   }
 
-  Future<List<Map<String, Object?>>> search(String query, {int limit = 50}) async {
+  Future<List<Map<String, Object?>>> search(String query,
+      {int limit = 50}) async {
     final db = await _db.database;
     final normalized = query.toLowerCase().trim();
     if (normalized.isEmpty) return [];
     final like = '%$normalized%';
-    return db.rawQuery('''\nSELECT DISTINCT e.*\nFROM exercise e\nLEFT JOIN exercise_alias a ON a.exercise_id = e.id\nWHERE lower(e.canonical_name) LIKE ? OR a.alias_normalized LIKE ?\nORDER BY e.canonical_name ASC\nLIMIT ?\n''', [like, like, limit]);
+    return db.rawQuery(
+        '''\nSELECT DISTINCT e.*\nFROM exercise e\nLEFT JOIN exercise_alias a ON a.exercise_id = e.id\nWHERE lower(e.canonical_name) LIKE ? OR a.alias_normalized LIKE ?\nORDER BY e.canonical_name ASC\nLIMIT ?\n''',
+        [like, like, limit]);
   }
 
   List<String> decodeSecondaryMuscles(String? json) {
@@ -133,8 +149,24 @@ class ExerciseRepo {
       instructions: _decodeStringList(row['instructions_json'] as String?),
       avoid: _decodeStringList(row['avoid_json'] as String?),
       citations: _decodeStringList(row['citations_json'] as String?),
-      visualAssetPaths: _decodeStringList(row['visual_asset_paths_json'] as String?),
+      visualAssetPaths:
+          _decodeStringList(row['visual_asset_paths_json'] as String?),
+      sections: ExerciseScienceSection.listFromDynamic(
+        _decodeJsonValue(row['info_sections_json'] as String?),
+      ),
+      sourceDocuments: ExerciseScienceSourceDocument.listFromDynamic(
+        _decodeJsonValue(row['source_documents_json'] as String?),
+      ),
     );
+  }
+
+  dynamic _decodeJsonValue(String? jsonString) {
+    if (jsonString == null || jsonString.isEmpty) return null;
+    try {
+      return jsonDecode(jsonString);
+    } catch (_) {
+      return null;
+    }
   }
 
   List<String> _decodeStringList(String? jsonString) {

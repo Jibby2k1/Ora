@@ -41,7 +41,7 @@ class OraApp extends StatefulWidget {
         'lib/data/seed/muscle_map_seed.json',
         fromAsset: true,
       );
-      await db.seedExerciseScienceInfoIfNeeded(
+      await db.syncExerciseScienceInfoFromSeed(
         'lib/data/seed/exercise_science_seed.json',
         fromAsset: true,
       );

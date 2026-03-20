@@ -37,6 +37,7 @@
 - Tag individual logged sets as Warm-up, Failure, or Dropset directly from the Set/Tag chip on mobile
 - Track personal records automatically
 - View exercise history and performance trends
+- Open exercise information tabs for technique, safety, effectiveness, and source documents
 - Calorie estimation based on workout volume
 
 **Benefits:**
@@ -119,7 +120,7 @@
 |------------|---------|------------|
 | **SQLite** via `sqflite` | Local persistence | Fast, reliable, zero-config embedded database |
 | **sqflite_common_ffi** | Desktop support | Enables same SQLite on Linux/Windows/macOS |
-| **7 migrations** | Schema evolution | Safe, versioned database updates |
+| **14 migrations** | Schema evolution | Safe, versioned database updates |
 
 ### Voice & Speech
 | Technology | Purpose | Why Chosen |

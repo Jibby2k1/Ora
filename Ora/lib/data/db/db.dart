@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../../domain/models/exercise_science_info.dart';
 import 'migrations/m0001_init.dart';
 import 'migrations/m0002_set_blocks.dart';
 import 'migrations/m0003_profile_settings.dart';
@@ -20,6 +21,7 @@ import 'migrations/m0010_diet_meal_types.dart';
 import 'migrations/m0011_recipes.dart';
 import 'migrations/m0012_exercise_science_info.dart';
 import 'migrations/m0013_set_tags_supersets.dart';
+import 'migrations/m0014_exercise_science_structure.dart';
 import 'schema.dart';
 
 class AppDatabase {
@@ -95,6 +97,9 @@ class AppDatabase {
     }
     if (from < 13 && to >= 13) {
       batches.add(migration0013());
+    }
+    if (from < 14 && to >= 14) {
+      batches.add(migration0014());
     }
 
     for (final statements in batches) {
@@ -268,7 +273,15 @@ class AppDatabase {
             await db.rawQuery('SELECT COUNT(*) FROM exercise_science_info;')) ??
         0;
     if (count > 0) return;
+    await syncExerciseScienceInfoFromSeed(
+      jsonAssetOrPath,
+      fromAsset: fromAsset,
+    );
+  }
 
+  Future<void> syncExerciseScienceInfoFromSeed(String jsonAssetOrPath,
+      {bool fromAsset = true}) async {
+    final db = await database;
     final source = await _loadSeed(jsonAssetOrPath, fromAsset: fromAsset);
     final List<dynamic> data = jsonDecode(source) as List<dynamic>;
 
@@ -289,20 +302,54 @@ class AppDatabase {
       final exerciseId = nameToId[canonical];
       if (exerciseId == null) continue;
 
+      final instructions = _normalizeStringList(map['instructions']);
+      final avoid = _normalizeStringList(map['avoid']);
+      final citations = _normalizeStringList(map['citations']);
+      final visualAssetPaths = _normalizeStringList(map['visual_asset_paths']);
+      final sections = ExerciseScienceSection.listFromDynamic(
+        map['information_sections'] ?? map['sections'],
+      );
+      final sourceDocuments = ExerciseScienceSourceDocument.listFromDynamic(
+        map['source_documents'],
+        fallbackCitations: citations,
+      );
+
       batch.insert(
         'exercise_science_info',
         {
           'exercise_id': exerciseId,
-          'instructions_json': jsonEncode(map['instructions'] ?? []),
-          'avoid_json': jsonEncode(map['avoid'] ?? []),
-          'citations_json': jsonEncode(map['citations'] ?? []),
-          'visual_asset_paths_json':
-              jsonEncode(map['visual_asset_paths'] ?? []),
+          'instructions_json': jsonEncode(instructions),
+          'avoid_json': jsonEncode(avoid),
+          'citations_json': jsonEncode(citations),
+          'visual_asset_paths_json': jsonEncode(visualAssetPaths),
+          'info_sections_json': jsonEncode([
+            for (final section in sections) section.toJson(),
+          ]),
+          'source_documents_json': jsonEncode([
+            for (final document in sourceDocuments) document.toJson(),
+          ]),
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     }
-    await batch.commit();
+    await batch.commit(noResult: true);
+  }
+
+  List<String> _normalizeStringList(dynamic raw) {
+    if (raw is List) {
+      return raw
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false);
+    }
+    if (raw == null) {
+      return const [];
+    }
+    final text = raw.toString().trim();
+    if (text.isEmpty) {
+      return const [];
+    }
+    return [text];
   }
 
   Future<String> _loadSeed(String jsonAssetOrPath,

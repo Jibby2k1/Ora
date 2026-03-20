@@ -18,6 +18,7 @@ Project governance and planning live at the repo root:
 - Session logging with visible set tagging, rest timer, undo/redo, and exercise matching
 - Voice capture pipeline (push-to-talk, optional wake word) with local NLU and optional cloud LLM parsing
 - Exercise catalog and history views with per-exercise performance history
+- Exercise information tabs with technique, safety, effectiveness, and source-traceable evidence notes
 - Training landing screen with muscle stats grid and interactive anatomy (front/back, male/female SVGs)
 - Diet logging with macros/micros, goals, and day/week/month summaries
 - Meal entry via manual input, speech-to-text, photo/file analysis (optional cloud)

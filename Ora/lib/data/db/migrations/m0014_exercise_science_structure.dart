@@ -1,4 +1,4 @@
-List<String> migration0013() {
+List<String> migration0014() {
   return [
     '''
 CREATE TABLE IF NOT EXISTS exercise_science_info(
@@ -12,8 +12,7 @@ CREATE TABLE IF NOT EXISTS exercise_science_info(
   FOREIGN KEY(exercise_id) REFERENCES exercise(id)
 );
 ''',
-    "ALTER TABLE set_entry ADD COLUMN set_tag TEXT NOT NULL DEFAULT 'normal';",
-    'ALTER TABLE session_exercise ADD COLUMN superset_group_id INTEGER;',
-    'ALTER TABLE program_day_exercise ADD COLUMN superset_group_id INTEGER;',
+    "ALTER TABLE exercise_science_info ADD COLUMN info_sections_json TEXT NOT NULL DEFAULT '[]';",
+    "ALTER TABLE exercise_science_info ADD COLUMN source_documents_json TEXT NOT NULL DEFAULT '[]';",
   ];
 }

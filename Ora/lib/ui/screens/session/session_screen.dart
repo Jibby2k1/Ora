@@ -5668,7 +5668,7 @@ class _SessionScreenState extends State<SessionScreen> {
                 child: IconButton(
                   onPressed: () => _openExerciseInfo(info),
                   icon: const Icon(Icons.info_outline_rounded, size: 18),
-                  tooltip: 'Exercise info',
+                  tooltip: 'Exercise information',
                   visualDensity: VisualDensity.compact,
                 ),
               ),
