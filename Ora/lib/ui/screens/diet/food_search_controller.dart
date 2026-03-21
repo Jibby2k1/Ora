@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
@@ -12,7 +11,7 @@ class FoodSearchController extends ChangeNotifier {
   FoodSearchController({
     required FoodRepository repository,
     this.debounceDuration = const Duration(milliseconds: 350),
-    this.requestTimeout = const Duration(seconds: 12),
+    this.requestTimeout = const Duration(seconds: 9),
     this.pageSize = 20,
   }) : _repository = repository;
 
@@ -21,11 +20,6 @@ class FoodSearchController extends ChangeNotifier {
   final Duration requestTimeout;
   final int pageSize;
 
-  static const int _cacheLimit = 100;
-  static const int _cacheVersion = 2;
-
-  final LinkedHashMap<String, _SearchCacheEntry> _searchCache =
-      LinkedHashMap<String, _SearchCacheEntry>();
   Timer? _debounceTimer;
   final FoodSearchRanker _ranker = const FoodSearchRanker();
 
@@ -153,26 +147,6 @@ class FoodSearchController extends ChangeNotifier {
         return;
       }
 
-      final cacheKey = _cacheKey(
-        query: requestQuery,
-        category: _category,
-        page: page,
-      );
-      final cached = _searchCache[cacheKey];
-      if (cached != null) {
-        if (requestId != _activeSearchId) {
-          return;
-        }
-        _touchCache(cacheKey, cached);
-        _results = reset
-            ? cached.results
-            : _mergeSearchResults(_results, cached.results);
-        _currentPage = page;
-        _hasMore = cached.hasMore;
-        _error = null;
-        return;
-      }
-
       final fetched = await _repository
           .searchFoods(
             query: requestQuery,
@@ -192,16 +166,6 @@ class FoodSearchController extends ChangeNotifier {
       _currentPage = page;
       _hasMore = hasMore;
       _error = null;
-
-      if (fetched.isNotEmpty) {
-        _storeCache(
-          cacheKey,
-          _SearchCacheEntry(
-            results: List<FoodSearchResult>.unmodifiable(merged),
-            hasMore: hasMore,
-          ),
-        );
-      }
     } on TimeoutException {
       if (requestId != _activeSearchId) return;
       _error = _results.isEmpty
@@ -232,29 +196,8 @@ class FoodSearchController extends ChangeNotifier {
     _loadingMore = false;
   }
 
-  void _touchCache(String key, _SearchCacheEntry value) {
-    _searchCache.remove(key);
-    _searchCache[key] = value;
-  }
-
-  void _storeCache(String key, _SearchCacheEntry value) {
-    _searchCache.remove(key);
-    _searchCache[key] = value;
-    while (_searchCache.length > _cacheLimit) {
-      _searchCache.remove(_searchCache.keys.first);
-    }
-  }
-
   String _normalizeQuery(String value) {
     return _ranker.normalizeQuery(value);
-  }
-
-  String _cacheKey({
-    required String query,
-    required FoodSearchCategory category,
-    required int page,
-  }) {
-    return 'v$_cacheVersion|${category.name}|$query|$page';
   }
 
   List<FoodSearchResult> _mergeSearchResults(
@@ -281,14 +224,4 @@ class FoodSearchController extends ChangeNotifier {
     if (query.length < 8 || query.length > 14) return false;
     return RegExp(r'^\d+$').hasMatch(query);
   }
-}
-
-class _SearchCacheEntry {
-  const _SearchCacheEntry({
-    required this.results,
-    required this.hasMore,
-  });
-
-  final List<FoodSearchResult> results;
-  final bool hasMore;
 }

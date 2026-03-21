@@ -47,6 +47,7 @@ class FoodSearchRanker {
     required String query,
     required FoodSearchCategory category,
     required Set<String> recentNames,
+    Set<String> favoriteNames = const <String>{},
   }) {
     final normalizedQuery = normalizeQuery(query);
     if (normalizedQuery.isEmpty) {
@@ -66,6 +67,7 @@ class FoodSearchRanker {
         result: item,
         category: category,
         recentNames: recentNames,
+        favoriteNames: favoriteNames,
         genericIntent: genericIntent,
       );
       final dedupeKey =
@@ -125,6 +127,7 @@ class FoodSearchRanker {
     required FoodSearchResult result,
     required FoodSearchCategory category,
     required Set<String> recentNames,
+    required Set<String> favoriteNames,
     required bool genericIntent,
   }) {
     final candidateName = normalizeQuery(result.name);
@@ -159,16 +162,16 @@ class FoodSearchRanker {
     var score = 0.0;
 
     if (phraseMatch) score += 120;
-    if (exactMatch) score += 40;
+    if (exactMatch) score += 120;
     if (prefixMatch) score += 80;
 
     if (allTokensPresent) {
       score += 60;
     } else {
       // Hard gate: missing tokens are strongly penalized.
-      score -= missingTokens * 85;
+      score -= missingTokens * 110;
       if (matchedTokens == 0 && queryTokens.isNotEmpty) {
-        score -= 180;
+        score -= 220;
       }
     }
 
@@ -190,7 +193,10 @@ class FoodSearchRanker {
     }
 
     if (recentNames.contains(candidateName)) {
-      score += 20;
+      score += 35;
+    }
+    if (favoriteNames.contains(candidateName)) {
+      score += 25;
     }
     if (result.hasRichNutrientPanel) {
       score += 8;
@@ -198,21 +204,21 @@ class FoodSearchRanker {
     final normalizedDataType = (result.dataType ?? '').toLowerCase().trim();
     if (result.source == FoodSource.usdaFdc) {
       if (normalizedDataType.contains('foundation')) {
-        score += 60;
+        score += 35;
       } else if (normalizedDataType.contains('sr legacy')) {
-        score += 45;
+        score += 30;
       } else if (normalizedDataType.contains('survey') ||
           normalizedDataType.contains('fndds')) {
-        score += 24;
+        score += 14;
       } else if (normalizedDataType.contains('branded')) {
-        score += 10;
+        score += 8;
       } else {
-        score += 18;
+        score += 12;
       }
 
       if (category == FoodSearchCategory.commonFoods &&
           !normalizedDataType.contains('branded')) {
-        score += 15;
+        score += 20;
       }
       if (category == FoodSearchCategory.all &&
           genericIntent &&
@@ -239,13 +245,13 @@ class FoodSearchRanker {
     switch (result.resultType) {
       case FoodResultType.generic:
         if (genericIntent || category == FoodSearchCategory.commonFoods) {
-          score += 35;
+          score += 20;
         } else {
           score += 8;
         }
         break;
       case FoodResultType.custom:
-        score += 10;
+        score += 20;
         if (category == FoodSearchCategory.custom) {
           score += 20;
         }
@@ -254,7 +260,7 @@ class FoodSearchRanker {
         if ((genericIntent || category == FoodSearchCategory.commonFoods) &&
             !explicitBrandHit &&
             !brandedIntent) {
-          score -= 30;
+          score -= 15;
         } else if (explicitBrandHit || brandedIntent) {
           score += 16;
         }

@@ -7,7 +7,8 @@ import 'food_provider_interfaces.dart';
 /// - Do not ingest proprietary nutrition datasets without a valid license.
 /// - Implementors should provide authenticated APIs or data feeds approved by
 ///   the dataset owner before wiring into the repository.
-abstract class LicensedFoodProvider implements FoodProvider {
+abstract class LicensedFoodProvider
+    implements FoodProvider, CommonFoodProvider {
   bool get isLicensed;
 
   @override
