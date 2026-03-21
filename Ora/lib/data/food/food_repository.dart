@@ -5,12 +5,14 @@ import '../../core/config/food_api_config.dart';
 import '../../data/db/db.dart';
 import '../../diagnostics/diagnostics_log.dart';
 import '../../domain/models/food_models.dart';
+import '../../domain/services/food_provider_interfaces.dart';
 import 'custom_food_provider.dart';
 import 'food_cache_store.dart';
 import 'nutritionix_provider.dart';
 import 'open_food_facts_provider.dart';
-import 'usda_fdc_provider.dart';
 import 'search_ranker.dart';
+import 'search_lru_cache.dart';
+import 'usda_fdc_provider.dart';
 import '../repositories/diet_repo.dart';
 
 class FoodRepository {
@@ -36,9 +38,31 @@ class FoodRepository {
         _customProvider = customProvider ?? CustomFoodProvider(dietRepo),
         _dietRepo = dietRepo,
         _searchCacheTtl = searchCacheTtl,
-        _detailCacheTtl = detailCacheTtl;
+        _detailCacheTtl = detailCacheTtl,
+        _memorySearchCache = SearchLruCache<String, List<FoodSearchResult>>(
+          maxEntries: 100,
+          ttl: searchCacheTtl,
+        ),
+        _memoryDetailCache = SearchLruCache<String, FoodItem>(
+          maxEntries: 300,
+          ttl: detailCacheTtl,
+        ) {
+    _commonFoodProviders = <CommonFoodProvider>[
+      _UsdaCommonFoodProvider(_usdaProvider),
+      if (_nutritionixProvider.isEnabled)
+        _NutritionixCommonFoodProvider(_nutritionixProvider),
+    ];
+    _brandedFoodProviders = <BrandedFoodProvider>[
+      _UsdaBrandedFoodProvider(_usdaProvider),
+      if (_nutritionixProvider.isEnabled)
+        _NutritionixBrandedFoodProvider(_nutritionixProvider),
+    ];
+    _localFoodProviders = <LocalFoodProvider>[
+      _CustomLocalFoodProvider(_customProvider),
+    ];
+  }
 
-  static const int _cacheSchemaVersion = 8;
+  static const int _cacheSchemaVersion = 9;
   static const Set<String> _searchStopWords = {'a', 'an', 'and', 'the', 'of'};
 
   final FoodCacheStore _cache;
@@ -49,13 +73,19 @@ class FoodRepository {
   final DietRepo _dietRepo;
   final Duration _searchCacheTtl;
   final Duration _detailCacheTtl;
+  final SearchLruCache<String, List<FoodSearchResult>> _memorySearchCache;
+  final SearchLruCache<String, FoodItem> _memoryDetailCache;
   final FoodSearchRanker _searchRanker = const FoodSearchRanker();
+  late final List<CommonFoodProvider> _commonFoodProviders;
+  late final List<BrandedFoodProvider> _brandedFoodProviders;
+  late final List<LocalFoodProvider> _localFoodProviders;
   DateTime? _recentNameCacheAt;
   Set<String> _recentNameCache = const {};
+  DateTime? _favoriteNameCacheAt;
+  Set<String> _favoriteNameCache = const {};
 
   bool get isNutritionixEnabled => _nutritionixProvider.isEnabled;
   bool get isUsdaEnabled => _usdaProvider.isEnabled;
-  bool get _preferOffSearch => FoodApiConfig.isUsingDemoUsdaKey;
 
   Future<List<FoodSearchResult>> searchFoods({
     required String query,
@@ -107,6 +137,11 @@ class FoodRepository {
         pageSize: normalizedPageSize,
         filters: filters,
       );
+      final memoryCached = _memorySearchCache.get(cacheKey);
+      if (memoryCached != null) {
+        return memoryCached;
+      }
+
       final cached = await _cache.getJson(
         cacheKey,
         expectedSchemaVersion: _cacheSchemaVersion,
@@ -116,6 +151,7 @@ class FoodRepository {
         if (list is List) {
           final cachedResults = _decodeSearchResults(list);
           if (cachedResults.isNotEmpty) {
+            _memorySearchCache.set(cacheKey, cachedResults);
             return cachedResults;
           }
           await _cache.delete(cacheKey);
@@ -126,7 +162,12 @@ class FoodRepository {
       switch (filters.category) {
         case FoodSearchCategory.all:
           final groupedResults = await Future.wait<List<FoodSearchResult>>([
-            _searchGenericFoods(
+            _searchLocalFoods(
+              pageIndex: pageIndex,
+              pageSize: normalizedPageSize,
+              normalizedQuery: effectiveQuery,
+            ),
+            _searchCommonFoods(
               pageIndex: pageIndex,
               pageSize: normalizedPageSize,
               normalizedQuery: effectiveQuery,
@@ -138,18 +179,13 @@ class FoodRepository {
               normalizedQuery: effectiveQuery,
               usdaSearchQueries: usdaSearchQueries,
             ),
-            _searchCustomFoods(
-              pageIndex: pageIndex,
-              pageSize: normalizedPageSize,
-              normalizedQuery: effectiveQuery,
-            ),
           ]);
           for (final group in groupedResults) {
             results.addAll(group);
           }
           break;
         case FoodSearchCategory.commonFoods:
-          results.addAll(await _searchGenericFoods(
+          results.addAll(await _searchCommonFoods(
             pageIndex: pageIndex,
             pageSize: normalizedPageSize,
             normalizedQuery: effectiveQuery,
@@ -165,7 +201,7 @@ class FoodRepository {
           ));
           break;
         case FoodSearchCategory.custom:
-          results.addAll(await _searchCustomFoods(
+          results.addAll(await _searchLocalFoods(
             pageIndex: pageIndex,
             pageSize: normalizedPageSize,
             normalizedQuery: effectiveQuery,
@@ -191,11 +227,13 @@ class FoodRepository {
       );
       final deduped = _dedupeSearchResults(rankedInput);
       final recentNames = await _loadRecentFoodNames();
+      final favoriteNames = await _loadFavoriteFoodNames();
       final ranked = _searchRanker.rankResults(
         input: deduped,
         query: effectiveQuery,
         category: filters.category,
         recentNames: recentNames,
+        favoriteNames: favoriteNames,
       );
       final prioritized = _prioritizeFoundationGenericResults(
         input: ranked,
@@ -204,6 +242,7 @@ class FoodRepository {
       );
 
       if (prioritized.isNotEmpty) {
+        _memorySearchCache.set(cacheKey, prioritized);
         await _cache.setJson(
           cacheKey,
           {
@@ -257,40 +296,67 @@ class FoodRepository {
     final results = <FoodSearchResult>[];
     switch (filters.category) {
       case FoodSearchCategory.all:
-        results.addAll(await _safeSearchFoods(
-          () => _openFoodFactsProvider.searchFoods(
-            query: normalized,
-            page: normalizedPage,
-            pageSize: normalizedPageSize,
-            filters: const FoodSearchFilters(
-              category: FoodSearchCategory.commonFoods,
+        results.addAll(await _searchLocalFoods(
+          pageIndex: normalizedPage,
+          pageSize: normalizedPageSize,
+          normalizedQuery: normalized,
+        ));
+        results.addAll(await _searchCommonFoods(
+          pageIndex: normalizedPage,
+          pageSize: normalizedPageSize,
+          normalizedQuery: normalized,
+          usdaSearchQueries: _dedupeQueries(
+            _buildQueryVariants(
+              normalized,
+              mode: _SearchQueryStrategy.usda,
             ),
           ),
         ));
-        results.addAll(await _safeSearchFoods(
-          () => _openFoodFactsProvider.searchFoods(
-            query: normalized,
-            page: normalizedPage,
-            pageSize: normalizedPageSize,
-            filters: const FoodSearchFilters(
-              category: FoodSearchCategory.branded,
+        results.addAll(await _searchBrandedFoods(
+          pageIndex: normalizedPage,
+          pageSize: normalizedPageSize,
+          normalizedQuery: normalized,
+          usdaSearchQueries: _dedupeQueries(
+            _buildQueryVariants(
+              normalized,
+              mode: _SearchQueryStrategy.usda,
             ),
           ),
         ));
         break;
       case FoodSearchCategory.commonFoods:
+        results.addAll(await _searchCommonFoods(
+          pageIndex: normalizedPage,
+          pageSize: normalizedPageSize,
+          normalizedQuery: normalized,
+          usdaSearchQueries: _dedupeQueries(
+            _buildQueryVariants(
+              normalized,
+              mode: _SearchQueryStrategy.usda,
+            ),
+          ),
+        ));
+        break;
       case FoodSearchCategory.branded:
-        results.addAll(await _safeSearchFoods(
-          () => _openFoodFactsProvider.searchFoods(
-            query: normalized,
-            page: normalizedPage,
-            pageSize: normalizedPageSize,
-            filters: FoodSearchFilters(category: filters.category),
+        results.addAll(await _searchBrandedFoods(
+          pageIndex: normalizedPage,
+          pageSize: normalizedPageSize,
+          normalizedQuery: normalized,
+          usdaSearchQueries: _dedupeQueries(
+            _buildQueryVariants(
+              normalized,
+              mode: _SearchQueryStrategy.usda,
+            ),
           ),
         ));
         break;
       case FoodSearchCategory.custom:
-        return const [];
+        results.addAll(await _searchLocalFoods(
+          pageIndex: normalizedPage,
+          pageSize: normalizedPageSize,
+          normalizedQuery: normalized,
+        ));
+        break;
     }
 
     final categoryFiltered = _filterResultsByCategory(
@@ -308,6 +374,7 @@ class FoodRepository {
       query: normalized,
       category: filters.category,
       recentNames: const {},
+      favoriteNames: const {},
     );
   }
 
@@ -321,87 +388,40 @@ class FoodRepository {
     }
   }
 
-  Future<List<FoodSearchResult>> _searchGenericFoods({
+  Future<List<FoodSearchResult>> _searchCommonFoods({
     required int pageIndex,
     required int pageSize,
     required String normalizedQuery,
     required List<String> usdaSearchQueries,
   }) async {
     final results = <FoodSearchResult>[];
-    if (isUsdaEnabled) {
-      results.addAll(await _searchWithFallbackQueries(
-        queries: usdaSearchQueries,
-        maxAttempts: 2,
-        search: (searchQueryCandidate) => _safeSearchFoods(
-          () => _usdaProvider.searchFoods(
-            query: searchQueryCandidate,
-            page: pageIndex,
-            pageSize: pageSize,
-            filters: const FoodSearchFilters(
-              category: FoodSearchCategory.commonFoods,
-            ),
-          ),
-        ),
-      ));
-    }
-    if (_preferOffSearch && results.isEmpty) {
-      results.addAll(await _safeSearchFoods(
-        () => _openFoodFactsProvider.searchFoods(
-          query: normalizedQuery,
-          page: pageIndex,
-          pageSize: pageSize,
-          filters: const FoodSearchFilters(
-            category: FoodSearchCategory.commonFoods,
-          ),
-        ),
-      ));
-      if (results.isEmpty) {
-        final brandedFallback = await _safeSearchFoods(
-          () => _openFoodFactsProvider.searchFoods(
-            query: normalizedQuery,
-            page: pageIndex,
-            pageSize: pageSize,
-            filters: const FoodSearchFilters(
-              category: FoodSearchCategory.branded,
+    for (final provider in _commonFoodProviders) {
+      if (!provider.isEnabled) continue;
+      if (provider.providerName == _UsdaCommonFoodProvider.providerNameValue) {
+        results.addAll(
+          await _searchWithQueryVariants(
+            queries: usdaSearchQueries,
+            maxAttempts: 2,
+            search: (searchQueryCandidate) => _safeSearchFoods(
+              () => provider.searchCommonFoods(
+                query: searchQueryCandidate,
+                page: pageIndex,
+                pageSize: pageSize,
+              ),
             ),
           ),
         );
-        if (brandedFallback.isNotEmpty) {
-          DiagnosticsLog.instance.record(
-            'Generic fallback using OFF branded candidates: ${brandedFallback.length}',
-          );
-          results.addAll(
-            _deriveGenericFallbackFromBranded(
-              branded: brandedFallback,
-              limit: pageSize,
+      } else {
+        results.addAll(
+          await _safeSearchFoods(
+            () => provider.searchCommonFoods(
+              query: normalizedQuery,
+              page: pageIndex,
+              pageSize: pageSize,
             ),
-          );
-        }
+          ),
+        );
       }
-    }
-    if (isNutritionixEnabled && results.isEmpty) {
-      results.addAll(await _safeSearchFoods(
-        () => _nutritionixProvider.searchFoods(
-          query: normalizedQuery,
-          page: pageIndex,
-          pageSize: pageSize,
-          filters: const FoodSearchFilters(
-            category: FoodSearchCategory.commonFoods,
-          ),
-        ),
-      ));
-    }
-    if (results.isEmpty) {
-      results.addAll(await _safeSearchFoods(
-        () => _openFoodFactsProvider.searchFoods(
-          query: normalizedQuery,
-          page: pageIndex,
-          pageSize: pageSize,
-          filters: const FoodSearchFilters(
-            category: FoodSearchCategory.commonFoods,
-          ),
-        ),
-      ));
     }
     return results;
   }
@@ -413,134 +433,93 @@ class FoodRepository {
     required List<String> usdaSearchQueries,
   }) async {
     final results = <FoodSearchResult>[];
-    if (_preferOffSearch) {
-      results.addAll(await _safeSearchFoods(
-        () => _openFoodFactsProvider.searchFoods(
-          query: normalizedQuery,
-          page: pageIndex,
-          pageSize: pageSize,
-          filters: const FoodSearchFilters(
-            category: FoodSearchCategory.branded,
-          ),
-        ),
-      ));
-    }
-    if (isNutritionixEnabled) {
-      results.addAll(await _safeSearchFoods(
-        () => _nutritionixProvider.searchFoods(
-          query: normalizedQuery,
-          page: pageIndex,
-          pageSize: pageSize,
-          filters: const FoodSearchFilters(
-            category: FoodSearchCategory.branded,
-          ),
-        ),
-      ));
-    }
-    if (isUsdaEnabled && results.isEmpty) {
-      results.addAll(await _searchWithFallbackQueries(
-        queries: usdaSearchQueries,
-        maxAttempts: 3,
-        search: (searchQueryCandidate) => _safeSearchFoods(
-          () => _usdaProvider.searchFoods(
-            query: searchQueryCandidate,
-            page: pageIndex,
-            pageSize: pageSize,
-            filters: const FoodSearchFilters(
-              category: FoodSearchCategory.branded,
+    for (final provider in _brandedFoodProviders) {
+      if (!provider.isEnabled) continue;
+      if (provider.providerName == _UsdaBrandedFoodProvider.providerNameValue) {
+        results.addAll(
+          await _searchWithQueryVariants(
+            queries: usdaSearchQueries,
+            maxAttempts: 2,
+            search: (searchQueryCandidate) => _safeSearchFoods(
+              () => provider.searchBrandedFoods(
+                query: searchQueryCandidate,
+                page: pageIndex,
+                pageSize: pageSize,
+              ),
             ),
           ),
-        ),
-      ));
-    }
-    if (results.isEmpty) {
-      results.addAll(await _safeSearchFoods(
-        () => _openFoodFactsProvider.searchFoods(
-          query: normalizedQuery,
-          page: pageIndex,
-          pageSize: pageSize,
-          filters: const FoodSearchFilters(
-            category: FoodSearchCategory.branded,
+        );
+      } else {
+        results.addAll(
+          await _safeSearchFoods(
+            () => provider.searchBrandedFoods(
+              query: normalizedQuery,
+              page: pageIndex,
+              pageSize: pageSize,
+            ),
           ),
-        ),
-      ));
+        );
+      }
     }
     return results;
   }
 
-  Future<List<FoodSearchResult>> _searchCustomFoods({
+  Future<List<FoodSearchResult>> _searchLocalFoods({
     required int pageIndex,
     required int pageSize,
     required String normalizedQuery,
-  }) {
-    return _safeSearchFoods(
-      () => _customProvider.searchFoods(
-        query: normalizedQuery,
-        page: pageIndex,
-        pageSize: pageSize,
-        filters: const FoodSearchFilters(
-          category: FoodSearchCategory.custom,
-        ),
-      ),
-    );
-  }
-
-  List<FoodSearchResult> _deriveGenericFallbackFromBranded({
-    required List<FoodSearchResult> branded,
-    required int limit,
-  }) {
+  }) async {
     final output = <FoodSearchResult>[];
-    final seen = <String>{};
-    for (final item in branded) {
-      if (item.resultType != FoodResultType.branded) continue;
-      final dedupeKey =
-          '${_normalizeText(item.name)}|${_normalizeText(item.brand ?? '')}';
-      if (!seen.add(dedupeKey)) continue;
-      output.add(
-        FoodSearchResult(
-          id: item.id,
-          source: item.source,
-          name: item.name,
-          brand: item.brand,
-          barcode: item.barcode,
-          subtitle: item.subtitle,
-          dataType: 'derived_generic',
-          isBranded: false,
-          hasRichNutrientPanel: item.hasRichNutrientPanel,
+    for (final provider in _localFoodProviders) {
+      output.addAll(
+        await _safeSearchFoods(
+          () => provider.searchLocalFoods(
+            query: normalizedQuery,
+            page: pageIndex,
+            pageSize: pageSize,
+          ),
         ),
       );
-      if (output.length >= limit) break;
     }
     return output;
   }
 
-  Future<List<FoodSearchResult>> _searchWithFallbackQueries({
+  Future<List<FoodSearchResult>> _searchWithQueryVariants({
     required List<String> queries,
     required int maxAttempts,
     required Future<List<FoodSearchResult>> Function(String) search,
   }) async {
-    var attempts = 0;
-    for (final queryCandidate in queries) {
-      if (attempts >= maxAttempts) break;
-      final trimmed = queryCandidate.trim();
-      if (trimmed.isEmpty) continue;
-      attempts += 1;
-      final found = await search(trimmed);
-      if (found.isNotEmpty) {
-        return found;
-      }
+    final selectedQueries = queries
+        .where((value) => value.trim().isNotEmpty)
+        .take(maxAttempts)
+        .toList(growable: false);
+    if (selectedQueries.isEmpty) return const [];
+
+    final batches = await Future.wait<List<FoodSearchResult>>(
+      selectedQueries.map(search),
+    );
+    final merged = <FoodSearchResult>[];
+    for (final batch in batches) {
+      merged.addAll(batch);
     }
-    return const [];
+    return _dedupeSearchResults(merged);
   }
 
   Future<FoodItem?> fetchFoodDetail(FoodSearchResult result) async {
     final cacheKey = _detailCacheKey(result.source, result.id);
+    final memoryCached = _memoryDetailCache.get(cacheKey);
+    if (memoryCached != null) {
+      return memoryCached;
+    }
+
     final cached = await _cache.getJson(
       cacheKey,
       expectedSchemaVersion: _cacheSchemaVersion,
     );
     if (cached != null) {
-      return FoodItem.fromJson(cached);
+      final decoded = FoodItem.fromJson(cached);
+      _memoryDetailCache.set(cacheKey, decoded);
+      return decoded;
     }
 
     final resolved = await _fetchFoodDetailFromProvider(
@@ -555,6 +534,7 @@ class FoodRepository {
       ttl: _detailCacheTtl,
       schemaVersion: _cacheSchemaVersion,
     );
+    _memoryDetailCache.set(cacheKey, resolved);
 
     return resolved;
   }
@@ -573,13 +553,10 @@ class FoodRepository {
     }
 
     FoodItem? result;
-    if (isUsdaEnabled && !_preferOffSearch) {
-      result ??= await _usdaProvider.lookupByBarcode(trimmed);
-    }
-    result ??= await _openFoodFactsProvider.lookupByBarcode(trimmed);
-    if (result == null && isUsdaEnabled && _preferOffSearch) {
+    if (isUsdaEnabled) {
       result = await _usdaProvider.lookupByBarcode(trimmed);
     }
+    result ??= await _openFoodFactsProvider.lookupByBarcode(trimmed);
     result ??= isNutritionixEnabled
         ? await _nutritionixProvider.lookupByBarcode(trimmed)
         : null;
@@ -598,6 +575,7 @@ class FoodRepository {
         ttl: _detailCacheTtl,
         schemaVersion: _cacheSchemaVersion,
       );
+      _memoryDetailCache.set(_detailCacheKey(result.source, result.id), result);
     }
 
     return result;
@@ -608,6 +586,7 @@ class FoodRepository {
   Future<void> _prefetchTopDetails(Iterable<FoodSearchResult> results) async {
     for (final result in results) {
       final detailKey = _detailCacheKey(result.source, result.id);
+      if (_memoryDetailCache.get(detailKey) != null) continue;
       final cached = await _cache.getJson(
         detailKey,
         expectedSchemaVersion: _cacheSchemaVersion,
@@ -625,6 +604,7 @@ class FoodRepository {
           ttl: _detailCacheTtl,
           schemaVersion: _cacheSchemaVersion,
         );
+        _memoryDetailCache.set(detailKey, detail);
       } catch (_) {
         // Intentionally ignore prefetch failures.
       }
@@ -681,6 +661,22 @@ class FoodRepository {
     return names;
   }
 
+  Future<Set<String>> _loadFavoriteFoodNames() async {
+    final now = DateTime.now();
+    final cachedAt = _favoriteNameCacheAt;
+    if (cachedAt != null &&
+        now.difference(cachedAt) < const Duration(minutes: 5)) {
+      return _favoriteNameCache;
+    }
+
+    // Favorites support is optional and can be wired to a dedicated table later.
+    // Keep this method in place so ranking logic can consume favorites immediately
+    // once persistence is enabled.
+    _favoriteNameCacheAt = now;
+    _favoriteNameCache = const <String>{};
+    return _favoriteNameCache;
+  }
+
   String _searchCacheKey({
     required String query,
     required int page,
@@ -723,7 +719,10 @@ class FoodRepository {
     final deduped = <String>[];
     final seen = <String>{};
     for (final variant in variants) {
-      final normalized = _normalizeQuery(variant);
+      final normalized = _normalizeVariantQuery(
+        variant,
+        preserveRequiredTokens: mode == _SearchQueryStrategy.usda,
+      );
       if (normalized.isNotEmpty && seen.add(normalized)) {
         deduped.add(normalized);
       }
@@ -735,11 +734,29 @@ class FoodRepository {
     final output = <String>[];
     final seen = <String>{};
     for (final query in queries) {
-      final normalized = _normalizeQuery(query);
+      final normalized = _normalizeVariantQuery(
+        query,
+        preserveRequiredTokens: true,
+      );
       if (normalized.isEmpty || !seen.add(normalized)) continue;
       output.add(normalized);
     }
     return output;
+  }
+
+  String _normalizeVariantQuery(
+    String value, {
+    required bool preserveRequiredTokens,
+  }) {
+    final pattern =
+        preserveRequiredTokens ? r'[^a-z0-9\s\"\+]' : r'[^a-z0-9\s\"]';
+    return value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\u0000-\u001f]'), ' ')
+        .replaceAll(RegExp(pattern), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   List<String> _queryTokens(String query) {
@@ -944,4 +961,175 @@ class FoodRepository {
 
 enum _SearchQueryStrategy {
   usda,
+}
+
+class _UsdaCommonFoodProvider implements CommonFoodProvider {
+  _UsdaCommonFoodProvider(this._provider);
+
+  static const String providerNameValue = 'usda_common';
+  final UsdaFdcProvider _provider;
+
+  @override
+  String get providerName => providerNameValue;
+
+  @override
+  bool get isEnabled => _provider.isEnabled;
+
+  @override
+  Future<List<FoodSearchResult>> searchCommonFoods({
+    required String query,
+    required int page,
+    required int pageSize,
+  }) {
+    return _provider.searchFoods(
+      query: query,
+      page: page,
+      pageSize: pageSize,
+      filters:
+          const FoodSearchFilters(category: FoodSearchCategory.commonFoods),
+    );
+  }
+
+  @override
+  Future<FoodItem?> fetchFoodDetailById(String id) {
+    return _provider.fetchFoodDetailById(id);
+  }
+}
+
+class _UsdaBrandedFoodProvider implements BrandedFoodProvider {
+  _UsdaBrandedFoodProvider(this._provider);
+
+  static const String providerNameValue = 'usda_branded';
+  final UsdaFdcProvider _provider;
+
+  @override
+  String get providerName => providerNameValue;
+
+  @override
+  bool get isEnabled => _provider.isEnabled;
+
+  @override
+  Future<List<FoodSearchResult>> searchBrandedFoods({
+    required String query,
+    required int page,
+    required int pageSize,
+  }) {
+    return _provider.searchFoods(
+      query: query,
+      page: page,
+      pageSize: pageSize,
+      filters: const FoodSearchFilters(category: FoodSearchCategory.branded),
+    );
+  }
+
+  @override
+  Future<FoodItem?> fetchFoodDetailById(String id) {
+    return _provider.fetchFoodDetailById(id);
+  }
+
+  @override
+  Future<FoodItem?> lookupByBarcode(String barcode) {
+    return _provider.lookupByBarcode(barcode);
+  }
+}
+
+class _NutritionixCommonFoodProvider implements CommonFoodProvider {
+  _NutritionixCommonFoodProvider(this._provider);
+
+  final NutritionixProvider _provider;
+
+  @override
+  String get providerName => 'nutritionix_common';
+
+  @override
+  bool get isEnabled => _provider.isEnabled;
+
+  @override
+  Future<List<FoodSearchResult>> searchCommonFoods({
+    required String query,
+    required int page,
+    required int pageSize,
+  }) {
+    return _provider.searchFoods(
+      query: query,
+      page: page,
+      pageSize: pageSize,
+      filters:
+          const FoodSearchFilters(category: FoodSearchCategory.commonFoods),
+    );
+  }
+
+  @override
+  Future<FoodItem?> fetchFoodDetailById(String id) {
+    return _provider.fetchFoodDetailById(id);
+  }
+}
+
+class _NutritionixBrandedFoodProvider implements BrandedFoodProvider {
+  _NutritionixBrandedFoodProvider(this._provider);
+
+  final NutritionixProvider _provider;
+
+  @override
+  String get providerName => 'nutritionix_branded';
+
+  @override
+  bool get isEnabled => _provider.isEnabled;
+
+  @override
+  Future<List<FoodSearchResult>> searchBrandedFoods({
+    required String query,
+    required int page,
+    required int pageSize,
+  }) {
+    return _provider.searchFoods(
+      query: query,
+      page: page,
+      pageSize: pageSize,
+      filters: const FoodSearchFilters(category: FoodSearchCategory.branded),
+    );
+  }
+
+  @override
+  Future<FoodItem?> fetchFoodDetailById(String id) {
+    return _provider.fetchFoodDetailById(id);
+  }
+
+  @override
+  Future<FoodItem?> lookupByBarcode(String barcode) {
+    return _provider.lookupByBarcode(barcode);
+  }
+}
+
+class _CustomLocalFoodProvider implements LocalFoodProvider {
+  _CustomLocalFoodProvider(this._provider);
+
+  final CustomFoodProvider _provider;
+
+  @override
+  String get providerName => 'custom_local';
+
+  @override
+  Future<List<FoodSearchResult>> searchLocalFoods({
+    required String query,
+    required int page,
+    required int pageSize,
+  }) {
+    return _provider.searchFoods(
+      query: query,
+      page: page,
+      pageSize: pageSize,
+      filters: const FoodSearchFilters(category: FoodSearchCategory.custom),
+    );
+  }
+
+  @override
+  Future<FoodItem?> fetchFoodDetailById(String id) {
+    return _provider.fetchFoodDetailById(id);
+  }
+
+  @override
+  Future<FoodItem?> lookupByBarcode(String barcode) {
+    return _provider.lookupByBarcode(barcode);
+  }
 }

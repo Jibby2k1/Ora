@@ -360,12 +360,7 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
             autofocus: true,
             textInputAction: TextInputAction.search,
             onSubmitted: (_) async {
-              final text = _searchController.text;
               FocusScope.of(context).unfocus();
-              final normalized = text.trim();
-              if (normalized.isNotEmpty) {
-                _searchState.onQueryChanged(text);
-              }
             },
             decoration: InputDecoration(
               hintText: 'Search foods',
@@ -439,13 +434,44 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
   Widget _buildResultsList(BuildContext context) {
     final theme = Theme.of(context);
     final results = _searchState.results;
+    const loadingSkeletonCount = 3;
+    final showRefreshSkeletons =
+        _searchState.loading && results.isNotEmpty && !_searchState.loadingMore;
     return ListView.separated(
       controller: _resultsScrollController,
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
-      itemCount: results.length + (_searchState.loadingMore ? 1 : 0),
+      itemCount: results.length +
+          (_searchState.loadingMore ? 1 : 0) +
+          (showRefreshSkeletons ? loadingSkeletonCount : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 7),
       itemBuilder: (context, index) {
         if (index >= results.length) {
+          if (showRefreshSkeletons) {
+            final skeletonStart = results.length;
+            final skeletonEnd = skeletonStart + loadingSkeletonCount;
+            if (index >= skeletonStart && index < skeletonEnd) {
+              return GlassCard(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                radius: 14,
+                child: Row(
+                  children: const [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _SkeletonLine(width: 170, height: 13),
+                          SizedBox(height: 6),
+                          _SkeletonLine(width: 120, height: 10),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    _SkeletonLine(width: 44, height: 24),
+                  ],
+                ),
+              );
+            }
+          }
           return const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Center(
@@ -485,8 +511,6 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -584,8 +608,6 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
                               style: theme.textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w700,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
                             Text(
                               item.food.brand?.trim().isNotEmpty == true
