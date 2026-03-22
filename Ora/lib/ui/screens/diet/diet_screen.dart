@@ -1,13 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../data/db/db.dart';
 import '../../../data/food/food_repository.dart';
 import '../../../data/repositories/diet_repo.dart';
+import '../../../data/repositories/settings_repo.dart';
 import '../../../domain/models/diet_diary_models.dart';
 import '../../../domain/models/diet_entry.dart';
 import '../../../domain/services/diet_diary_service.dart';
+import '../../../domain/services/steps_service.dart';
 import '../../widgets/diet/add_action_sheet.dart';
+import '../../widgets/diet/calorie_burned_toggle_card.dart';
 import '../../widgets/diet/meal_group_section.dart';
 import '../../widgets/diet/summary_carousel.dart';
 import '../../widgets/glass/glass_background.dart';
@@ -25,15 +30,22 @@ class DietScreen extends StatefulWidget {
   State<DietScreen> createState() => _DietScreenState();
 }
 
-class _DietScreenState extends State<DietScreen> {
+class _DietScreenState extends State<DietScreen> with WidgetsBindingObserver {
+  static const String _includeBurnedCaloriesKey =
+      'diet_include_burned_calories.v1';
+
   late final DietRepo _dietRepo;
+  late final SettingsRepo _settingsRepo;
   late final FoodRepository _foodRepository;
   late final DietDiaryService _diaryService;
+  late final StepsService _stepsService;
 
   final DateFormat _dayFormat = DateFormat('EEE, MMM d, y');
   bool _loading = true;
   DateTime _selectedDay = _normalizeDay(DateTime.now());
   DietDiaryViewModel? _viewModel;
+  bool _includeBurnedCaloriesInDiet = false;
+  double _burnedCaloriesForSelectedDay = 0;
   final Map<String, bool> _collapsedByMeal = {
     for (final slot in DietDiaryService.mealSlots) slot: false,
   };
@@ -41,11 +53,48 @@ class _DietScreenState extends State<DietScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final db = AppDatabase.instance;
     _dietRepo = DietRepo(db);
+    _settingsRepo = SettingsRepo(db);
     _foodRepository = FoodRepository(db: db, dietRepo: _dietRepo);
     _diaryService = DietDiaryService(db);
-    _loadDay(_selectedDay);
+    _stepsService = StepsService(db)..addListener(_handleStepsServiceChanged);
+    unawaited(_initializeScreen());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stepsService
+      ..removeListener(_handleStepsServiceChanged)
+      ..pauseLiveTracking();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_stepsService.isInitialized) {
+        unawaited(_stepsService.refresh());
+      }
+      return;
+    }
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _stepsService.pauseLiveTracking();
+    }
+  }
+
+  Future<void> _initializeScreen() async {
+    final includeBurned = await _loadIncludeBurnedCaloriesSetting();
+    await _stepsService.initialize();
+    if (!mounted) return;
+    setState(() {
+      _includeBurnedCaloriesInDiet = includeBurned;
+    });
+    await _loadDay(_selectedDay);
   }
 
   static DateTime _normalizeDay(DateTime value) {
@@ -66,15 +115,58 @@ class _DietScreenState extends State<DietScreen> {
     });
 
     final viewModel = await _diaryService.loadDay(normalized);
+    final burnedCalories = await _loadBurnedCaloriesForDay(normalized);
     if (!mounted) return;
 
     setState(() {
       _viewModel = viewModel;
+      _burnedCaloriesForSelectedDay = burnedCalories;
       _loading = false;
     });
   }
 
   Future<void> _refresh() => _loadDay(_selectedDay);
+
+  Future<bool> _loadIncludeBurnedCaloriesSetting() async {
+    final raw = await _settingsRepo.getValue(_includeBurnedCaloriesKey);
+    return raw == '1';
+  }
+
+  Future<void> _setIncludeBurnedCalories(bool value) async {
+    if (_includeBurnedCaloriesInDiet == value) return;
+    setState(() {
+      _includeBurnedCaloriesInDiet = value;
+    });
+    await _settingsRepo.setValue(_includeBurnedCaloriesKey, value ? '1' : '0');
+  }
+
+  Future<double> _loadBurnedCaloriesForDay(DateTime day) async {
+    if (!_stepsService.isInitialized) {
+      return 0;
+    }
+    final normalized = _normalizeDay(day);
+    if (_isSameDay(normalized, DateTime.now())) {
+      return _sanitizeCalories(_stepsService.totalEstimatedCalories);
+    }
+    final stepsDayView = await _stepsService.loadDay(normalized);
+    return _sanitizeCalories(stepsDayView.totalEstimatedCalories);
+  }
+
+  double _sanitizeCalories(double value) {
+    if (!value.isFinite) return 0;
+    if (value < 0) return 0;
+    return value;
+  }
+
+  void _handleStepsServiceChanged() {
+    if (!mounted) return;
+    if (!_isSameDay(_selectedDay, DateTime.now())) return;
+    final next = _sanitizeCalories(_stepsService.totalEstimatedCalories);
+    if ((next - _burnedCaloriesForSelectedDay).abs() < 0.1) return;
+    setState(() {
+      _burnedCaloriesForSelectedDay = next;
+    });
+  }
 
   Future<void> _openDietSettings() async {
     final changed = await DietGoalsSettingsPage.show(context);
@@ -765,7 +857,16 @@ class _DietScreenState extends State<DietScreen> {
           ),
           const SizedBox(height: 8),
           if (vm != null) ...[
-            SummaryCarousel(viewModel: vm),
+            CalorieBurnedToggleCard(
+              value: _includeBurnedCaloriesInDiet,
+              onChanged: _setIncludeBurnedCalories,
+            ),
+            const SizedBox(height: 8),
+            SummaryCarousel(
+              viewModel: vm,
+              includeBurnedCalories: _includeBurnedCaloriesInDiet,
+              burnedCalories: _burnedCaloriesForSelectedDay,
+            ),
             const SizedBox(height: 8),
             for (final group in vm.mealGroups) ...[
               MealGroupSection(

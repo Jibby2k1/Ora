@@ -1,32 +1,104 @@
 import 'package:flutter/material.dart';
 
 import '../../../domain/models/diet_diary_models.dart';
+import 'calorie_budget_progress_bar.dart';
 
 class MacroBreakdownCard extends StatelessWidget {
   const MacroBreakdownCard({
     super.key,
     required this.totals,
     required this.targets,
+    required this.summary,
   });
 
   final DietMacroTotals totals;
   final DietMacroTargets targets;
+  final DietSummaryComputedData summary;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final consumed = summary.consumedCalories;
+    final baseGoal = summary.calorieGoal;
+    final burned = summary.burnedCalories;
+    final consumedText = consumed.toStringAsFixed(0);
+    final baseText = baseGoal.toStringAsFixed(0);
+    final burnedText = burned.toStringAsFixed(0);
+    final showBurnedBonus = summary.includeBurnedCalories && burned > 0;
+    final safeBudget = summary.includeBurnedCalories
+        ? summary.effectiveCalorieBudget
+        : summary.calorieGoal;
+    final caloriePercent =
+        ((summary.consumedCalories / (safeBudget <= 0 ? 1.0 : safeBudget))
+                .clamp(0.0, 1.0) *
+            100)
+            .round();
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _ProgressBarRow(
-          label: 'Calories',
-          icon: Icons.local_fire_department,
-          consumed: totals.calories,
-          goal: targets.calories,
-          unit: 'kcal',
-          color: Colors.white,
-          consumedDecimals: 0,
-          goalDecimals: 0,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.local_fire_department,
+                  size: 16,
+                  color: Colors.white.withValues(alpha: 0.9),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Calories',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Flexible(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: RichText(
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      text: TextSpan(
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.76,
+                          ),
+                          fontWeight: FontWeight.w600,
+                        ),
+                        children: [
+                          TextSpan(text: '$consumedText / $baseText kcal'),
+                          if (showBurnedBonus)
+                            TextSpan(
+                              text: ' (+$burnedText kcal)',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: const Color(0xFFFFB25E),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          TextSpan(text: ' ($caloriePercent%)'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            CalorieBudgetProgressBar(
+              summary: summary,
+              baseColor: Colors.white,
+              baseTrackColor: theme.colorScheme.onSurface.withValues(alpha: 0.16),
+              extensionColor: theme.colorScheme.primary.withValues(alpha: 0.65),
+              extensionTrackColor:
+                  theme.colorScheme.primary.withValues(alpha: 0.18),
+              overflowColor: Colors.redAccent,
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         _ProgressBarRow(

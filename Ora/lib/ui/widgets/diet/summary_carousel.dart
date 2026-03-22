@@ -8,9 +8,13 @@ class SummaryCarousel extends StatefulWidget {
   const SummaryCarousel({
     super.key,
     required this.viewModel,
+    required this.includeBurnedCalories,
+    required this.burnedCalories,
   });
 
   final DietDiaryViewModel viewModel;
+  final bool includeBurnedCalories;
+  final double burnedCalories;
 
   @override
   State<SummaryCarousel> createState() => _SummaryCarouselState();
@@ -35,12 +39,18 @@ class _SummaryCarouselState extends State<SummaryCarousel> {
   @override
   Widget build(BuildContext context) {
     final vm = widget.viewModel;
+    final summary = DietSummaryComputedData.build(
+      calorieGoal: vm.targets.calories,
+      consumedCalories: vm.dailyTotals.calories,
+      burnedCalories: widget.burnedCalories,
+      includeBurnedCalories: widget.includeBurnedCalories,
+    );
     return GlassCard(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
       child: Column(
         children: [
           SizedBox(
-            height: 230,
+            height: 236,
             child: PageView(
               controller: _controller,
               onPageChanged: (index) {
@@ -57,6 +67,7 @@ class _SummaryCarouselState extends State<SummaryCarousel> {
                       child: MacroBreakdownCard(
                         totals: vm.dailyTotals,
                         targets: vm.targets,
+                        summary: summary,
                       ),
                     ),
                   ),
