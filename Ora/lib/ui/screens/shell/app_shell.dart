@@ -41,7 +41,8 @@ class _AppShellState extends State<AppShell> {
     if (_index > maxIndex) {
       _index = maxIndex;
     }
-    final navHeight = _BottomNavBar.navHeight + MediaQuery.of(context).padding.bottom;
+    final navHeight =
+        _BottomNavBar.navHeight + MediaQuery.of(context).padding.bottom;
     return Scaffold(
       body: Stack(
         children: [
@@ -89,13 +90,15 @@ class _AppShellState extends State<AppShell> {
     _loadAppearanceAccess();
     _loadActiveSession();
     AppShellController.instance.tabIndex.addListener(_handleTabChange);
-    AppShellController.instance.appearanceEnabled.addListener(_handleAppearanceToggle);
+    AppShellController.instance.appearanceEnabled
+        .addListener(_handleAppearanceToggle);
   }
 
   @override
   void dispose() {
     AppShellController.instance.tabIndex.removeListener(_handleTabChange);
-    AppShellController.instance.appearanceEnabled.removeListener(_handleAppearanceToggle);
+    AppShellController.instance.appearanceEnabled
+        .removeListener(_handleAppearanceToggle);
     super.dispose();
   }
 
@@ -140,7 +143,8 @@ class _AppShellState extends State<AppShell> {
     final contextData = await _sessionService.resumeActiveSession();
     if (contextData == null || !mounted) return;
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => SessionScreen(contextData: contextData)),
+      MaterialPageRoute(
+          builder: (_) => SessionScreen(contextData: contextData)),
     );
   }
 }
@@ -164,74 +168,72 @@ class _BottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
     final items = _buildItems();
-    final baseContainer = Container(
-      height: navHeight + MediaQuery.of(context).padding.bottom,
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
-      decoration: BoxDecoration(
-        color: scheme.surface.withOpacity(0.86),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.28),
-            blurRadius: 24,
-            offset: const Offset(0, -8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          for (final item in items)
-            _NavItem(
-              icon: item.icon,
-              label: item.label,
-              selected: currentIndex == item.index,
-              onTap: () => onTap(item.index),
-            ),
-        ],
-      ),
-    );
-    if (orbHidden) {
-      return baseContainer;
-    }
 
-    final left = items.take(2).toList();
-    final right = items.skip(2).toList();
-
-    return ClipPath(
-      clipper: const _BottomNavClipper(),
-      child: Container(
-        height: navHeight + MediaQuery.of(context).padding.bottom,
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
+    Widget buildBar(List<_NavItemData> leading,
+        [List<_NavItemData>? trailing]) {
+      return Container(
+        height: navHeight + bottomPadding,
+        padding: EdgeInsets.fromLTRB(
+          10,
+          8,
+          10,
+          bottomPadding > 0 ? bottomPadding + 6 : 14,
+        ),
         decoration: BoxDecoration(
-          color: scheme.surface.withOpacity(0.86),
+          gradient: LinearGradient(
+            colors: [
+              scheme.surface.withValues(alpha: 0.86),
+              scheme.surfaceContainerHighest.withValues(alpha: 0.74),
+              scheme.surface.withValues(alpha: 0.82),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border(
+            top: BorderSide(color: scheme.outline.withValues(alpha: 0.22)),
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.28),
-              blurRadius: 24,
-              offset: const Offset(0, -8),
+              color: Colors.black.withValues(alpha: 0.30),
+              blurRadius: 28,
+              offset: const Offset(0, -10),
             ),
           ],
         ),
         child: Row(
           children: [
-            for (final item in left)
+            for (final item in leading)
               _NavItem(
                 icon: item.icon,
                 label: item.label,
                 selected: currentIndex == item.index,
                 onTap: () => onTap(item.index),
               ),
-            const SizedBox(width: _orbSlotWidth),
-            for (final item in right)
-              _NavItem(
-                icon: item.icon,
-                label: item.label,
-                selected: currentIndex == item.index,
-                onTap: () => onTap(item.index),
-              ),
+            if (trailing != null) const SizedBox(width: _orbSlotWidth),
+            if (trailing != null)
+              for (final item in trailing)
+                _NavItem(
+                  icon: item.icon,
+                  label: item.label,
+                  selected: currentIndex == item.index,
+                  onTap: () => onTap(item.index),
+                ),
           ],
         ),
-      ),
+      );
+    }
+
+    if (orbHidden) {
+      return buildBar(items);
+    }
+
+    final left = items.take(2).toList();
+    final right = items.skip(2).toList();
+    return ClipPath(
+      clipper: const _BottomNavClipper(),
+      child: buildBar(left, right),
     );
   }
 
@@ -241,7 +243,8 @@ class _BottomNavBar extends StatelessWidget {
       _NavItemData(index: 1, icon: Icons.restaurant, label: 'Diet'),
     ];
     if (appearanceEnabled) {
-      items.add(_NavItemData(index: 2, icon: Icons.face_retouching_natural, label: 'Appearance'));
+      items.add(_NavItemData(
+          index: 2, icon: Icons.face_retouching_natural, label: 'Appearance'));
       items.add(_NavItemData(index: 3, icon: Icons.person, label: 'Profile'));
     } else {
       items.add(_NavItemData(index: 2, icon: Icons.person, label: 'Profile'));
@@ -278,26 +281,50 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final color = selected ? scheme.primary : scheme.onSurface.withOpacity(0.7);
+    final foreground =
+        selected ? scheme.onPrimary : scheme.onSurface.withValues(alpha: 0.74);
+    final background = selected
+        ? scheme.primary.withValues(alpha: 0.96)
+        : scheme.surface.withValues(alpha: 0.10);
+    final borderColor = selected
+        ? scheme.primary.withValues(alpha: 0.42)
+        : scheme.outline.withValues(alpha: 0.10);
+
     return Expanded(
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: color,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: foreground, size: 18),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  style: TextStyle(
+                    fontSize: 10,
+                    height: 1,
+                    color: foreground,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -316,7 +343,8 @@ class _BottomNavClipper extends CustomClipper<Path> {
     final path = Path();
     path.moveTo(0, 0);
     path.lineTo(mid - notchRadius, 0);
-    path.quadraticBezierTo(mid - notchRadius * 0.6, 0, mid - notchRadius * 0.6, notchDepth * 0.5);
+    path.quadraticBezierTo(
+        mid - notchRadius * 0.6, 0, mid - notchRadius * 0.6, notchDepth * 0.5);
     path.arcToPoint(
       Offset(mid + notchRadius * 0.6, notchDepth * 0.5),
       radius: const Radius.circular(notchRadius),

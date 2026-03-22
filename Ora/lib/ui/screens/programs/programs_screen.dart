@@ -41,8 +41,6 @@ class _ProgramDayMatch {
 
 enum _VoiceDayChoiceType { freeStyle, programDay }
 
-enum _TrainingHubSection { hub, dashboard }
-
 class _VoiceDayChoice {
   const _VoiceDayChoice.freeStyle()
       : type = _VoiceDayChoiceType.freeStyle,
@@ -79,7 +77,6 @@ class _ProgramsScreenState extends State<ProgramsScreen>
   String _appearanceSex = 'neutral';
   String? _selectedStatsMuscle;
   bool _handlingInput = false;
-  _TrainingHubSection _selectedSection = _TrainingHubSection.hub;
 
   @override
   void initState() {
@@ -1021,237 +1018,21 @@ class _ProgramsScreenState extends State<ProgramsScreen>
   }
 
   Widget _buildStatsPlaceholder() {
+    final theme = Theme.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.35)),
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.2),
+          color: theme.colorScheme.outline.withValues(alpha: 0.28),
+        ),
+        color: theme.colorScheme.surface.withValues(alpha: 0.18),
       ),
       child: Text(
         'Select a muscle group to view stats.',
-        style: Theme.of(context).textTheme.bodySmall,
+        style: theme.textTheme.bodySmall,
       ),
-    );
-  }
-
-  void _openTrainingSection(_TrainingHubSection section) {
-    if (_selectedSection == section) return;
-    setState(() => _selectedSection = section);
-  }
-
-  void _showTrainingSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
-  Future<void> _openSelectedProgramDayPicker() async {
-    if (_selectedProgramId == null) {
-      _showTrainingSnack('Select or create a program first.');
-      return;
-    }
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => DayPickerScreen(programId: _selectedProgramId!),
-      ),
-    );
-    await _syncActiveSessionBanner();
-    if (!mounted) return;
-    setState(() {
-      _selectedSection = _TrainingHubSection.dashboard;
-    });
-  }
-
-  Widget _buildTrainingHub(List<Map<String, Object?>> programs) {
-    final theme = Theme.of(context);
-    final activeSession = AppShellController.instance.activeSession.value;
-    final selectedProgram =
-        _selectedProgramName ?? (programs.isEmpty ? 'None selected' : 'Loaded');
-
-    Future<void> openDashboardAfter(Future<void> Function() action) async {
-      await action();
-      if (!mounted) return;
-      _openTrainingSection(_TrainingHubSection.dashboard);
-    }
-
-    return ListView(
-      key: const ValueKey('training-hub'),
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-      children: [
-        GlassCard(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Icon(
-                      Icons.fitness_center_rounded,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Training Hub',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Programs ${programs.length} • Session ${activeSession ? 'active' : 'idle'} • Selected $selectedProgram',
-                          style: theme.textTheme.bodySmall,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  FilledButton(
-                    onPressed: () =>
-                        _openTrainingSection(_TrainingHubSection.dashboard),
-                    child: const Text('Dashboard'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _buildTrainingMetric('Programs', programs.length.toString()),
-                  _buildTrainingMetric(
-                      'Session', activeSession ? 'Active' : 'Idle'),
-                  _buildTrainingMetric(
-                      'Stats', _selectedStatsMuscle ?? 'Unset'),
-                  _buildTrainingMetric(
-                      'Selected', _selectedProgramName ?? 'None'),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 1100
-                ? 4
-                : constraints.maxWidth >= 760
-                    ? 3
-                    : 2;
-            final cardWidth =
-                (constraints.maxWidth - ((columns - 1) * 12)) / columns;
-            return Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                SizedBox(
-                  width: cardWidth,
-                  child: _buildTrainingActionCard(
-                    icon: Icons.dashboard_customize_rounded,
-                    title: 'Dashboard',
-                    description: 'Steps, quick start, programs, stats',
-                    meta: programs.isEmpty
-                        ? 'No programs loaded'
-                        : '${programs.length} loaded',
-                    accent: theme.colorScheme.primary,
-                    onTap: () =>
-                        _openTrainingSection(_TrainingHubSection.dashboard),
-                  ),
-                ),
-                SizedBox(
-                  width: cardWidth,
-                  child: _buildTrainingActionCard(
-                    icon: Icons.play_circle_outline_rounded,
-                    title: 'Start Workout',
-                    description: 'Launch a free-style session',
-                    meta: 'Fastest workout entry',
-                    accent: Colors.greenAccent.shade400,
-                    onTap: _startFreeStyleSession,
-                  ),
-                ),
-                SizedBox(
-                  width: cardWidth,
-                  child: _buildTrainingActionCard(
-                    icon: Icons.calendar_view_week_rounded,
-                    title: 'Program Day',
-                    description: 'Open the selected program day',
-                    meta: _selectedProgramName ?? 'Needs a selected program',
-                    accent: Colors.orangeAccent,
-                    onTap: _openSelectedProgramDayPicker,
-                  ),
-                ),
-                SizedBox(
-                  width: cardWidth,
-                  child: _buildTrainingActionCard(
-                    icon: Icons.add_box_outlined,
-                    title: 'Create Program',
-                    description: 'Start a new program',
-                    meta: 'Opens the editor',
-                    accent: Colors.lightBlueAccent,
-                    onTap: () => openDashboardAfter(_createProgram),
-                  ),
-                ),
-                SizedBox(
-                  width: cardWidth,
-                  child: _buildTrainingActionCard(
-                    icon: Icons.upload_file_rounded,
-                    title: 'Upload Program',
-                    description: 'Import from file',
-                    meta: 'Workbook import path',
-                    accent: Colors.purpleAccent,
-                    onTap: () => openDashboardAfter(_uploadProgram),
-                  ),
-                ),
-                SizedBox(
-                  width: cardWidth,
-                  child: _buildTrainingActionCard(
-                    icon: Icons.menu_book_rounded,
-                    title: 'Exercise Catalog',
-                    description: 'Browse the exercise library',
-                    meta: 'Reference without dashboard',
-                    accent: Colors.tealAccent.shade400,
-                    onTap: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ExerciseCatalogScreen(),
-                        ),
-                      );
-                      if (!mounted) return;
-                      setState(() {});
-                    },
-                  ),
-                ),
-                SizedBox(
-                  width: cardWidth,
-                  child: _buildTrainingActionCard(
-                    icon: Icons.directions_walk_rounded,
-                    title: 'Step Details',
-                    description: 'Inspect live steps and activity',
-                    meta: 'Uses the existing steps flow',
-                    accent: Colors.amberAccent.shade400,
-                    onTap: _openStepsDetails,
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ],
     );
   }
 
@@ -1285,134 +1066,90 @@ class _ProgramsScreenState extends State<ProgramsScreen>
     );
   }
 
-  Widget _buildTrainingActionCard({
-    required IconData icon,
-    required String title,
-    required String description,
-    required String meta,
-    required Color accent,
-    required VoidCallback onTap,
-  }) {
-    final theme = Theme.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: GlassCard(
-        padding: EdgeInsets.zero,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 156),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                accent.withValues(alpha: 0.10),
-                theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.30),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface.withValues(alpha: 0.72),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(icon, size: 18, color: accent),
-                  ),
-                  const Spacer(),
-                  Icon(Icons.arrow_outward_rounded, size: 18, color: accent),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                meta,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: accent,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                description,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildTrainingDashboard(List<Map<String, Object?>> programs) {
     final theme = Theme.of(context);
     final muscleOptions = _muscleOrder;
+    final activeSession = AppShellController.instance.activeSession.value;
     return ListView(
       key: const ValueKey('training-dashboard'),
       padding: const EdgeInsets.all(16),
       children: [
         GlassCard(
           padding: const EdgeInsets.all(16),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(
-                  Icons.dashboard_customize_rounded,
-                  color: theme.colorScheme.primary,
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(
+                      Icons.fitness_center_rounded,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Training',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Programs, sessions, and performance stats stay in one direct workspace.',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _selectedProgramName ?? 'No program selected',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Dashboard',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'This is the full training workspace with steps, quick start, programs, and stats.',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _selectedProgramName ?? 'No program selected',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
-                ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _buildTrainingMetric('Programs', programs.length.toString()),
+                  _buildTrainingMetric(
+                    'Session',
+                    activeSession ? 'Active' : 'Idle',
+                  ),
+                  _buildTrainingMetric(
+                    'Selected',
+                    _selectedProgramName ?? 'None',
+                  ),
+                  _buildTrainingMetric(
+                    'Stats',
+                    _selectedStatsMuscle ?? 'Unset',
+                  ),
+                ],
               ),
-              TextButton.icon(
-                onPressed: () => _openTrainingSection(_TrainingHubSection.hub),
-                icon: const Icon(Icons.grid_view_rounded),
-                label: const Text('Hub'),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _startFreeStyleSession,
+                  icon: const Icon(Icons.play_circle_outline_rounded, size: 18),
+                  label: const Text('Start Workout'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(56),
+                  ),
+                ),
               ),
             ],
           ),
@@ -1422,35 +1159,6 @@ class _ProgramsScreenState extends State<ProgramsScreen>
           stepsService: _ensureStepsService(),
           onOpenDetails: _openStepsDetails,
           onRequestAccess: _handleStepsAccessAction,
-        ),
-        const SizedBox(height: 12),
-        GlassCard(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Quick Start'),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => _startFreeStyleSession(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.colorScheme.primary,
-                    foregroundColor: theme.colorScheme.surface,
-                    minimumSize: const Size.fromHeight(64),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    textStyle: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  child: const Text('Start Workout'),
-                ),
-              ),
-            ],
-          ),
         ),
         const SizedBox(height: 16),
         GlassCard(
@@ -1472,11 +1180,6 @@ class _ProgramsScreenState extends State<ProgramsScreen>
                       },
                       icon: const Icon(Icons.add, size: 18),
                       label: const Text('Create New Program'),
-                      style: ElevatedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -1490,11 +1193,6 @@ class _ProgramsScreenState extends State<ProgramsScreen>
                       },
                       icon: const Icon(Icons.upload_file, size: 18),
                       label: const Text('Upload Program'),
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
                     ),
                   ),
                 ],
@@ -1506,118 +1204,106 @@ class _ProgramsScreenState extends State<ProgramsScreen>
                   style: theme.textTheme.bodySmall,
                 )
               else
-                Builder(
-                  builder: (context) {
-                    final listHeight = ((programs.length * 86.0) + 8)
-                        .clamp(150.0, 360.0)
-                        .toDouble();
-                    return SizedBox(
-                      height: listHeight,
-                      child: ListView.separated(
-                        primary: false,
-                        padding: EdgeInsets.zero,
-                        itemCount: programs.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          final program = programs[index];
-                          final id = program['id'] as int;
-                          final colorScheme = theme.colorScheme;
-                          return Material(
-                            color: colorScheme.primary,
-                            borderRadius: BorderRadius.circular(12),
-                            child: ListTile(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              title: Text(
-                                program['name'] as String,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  color: colorScheme.surface,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              subtitle: Text(
-                                'Tap to start or edit days',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.surface
-                                      .withValues(alpha: 0.86),
-                                  fontSize: 12,
-                                ),
-                              ),
-                              onTap: () async {
-                                await Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        DayPickerScreen(programId: id),
-                                  ),
-                                );
-                                await _syncActiveSessionBanner();
-                                if (!mounted) return;
-                                setState(() {});
-                              },
-                              trailing: PopupMenuButton<String>(
-                                iconColor: colorScheme.surface,
-                                onSelected: (value) async {
-                                  if (value == 'edit') {
-                                    final saved =
-                                        await Navigator.of(context).push<bool>(
-                                      MaterialPageRoute(
-                                        builder: (_) => ProgramEditorScreen(
-                                          programId: id,
-                                        ),
-                                      ),
-                                    );
-                                    if (!mounted) return;
-                                    setState(() {});
-                                    if (saved == true) {
-                                      await _showProgramSavedAlert();
-                                    }
-                                  } else if (value == 'delete') {
-                                    final confirm = await showDialog<bool>(
-                                      context: context,
-                                      builder: (context) {
-                                        return AlertDialog(
-                                          title: const Text('Delete program?'),
-                                          content: const Text(
-                                            'This removes the program and its days. Sessions remain in history.',
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () =>
-                                                  Navigator.of(context)
-                                                      .pop(false),
-                                              child: const Text('Cancel'),
-                                            ),
-                                            ElevatedButton(
-                                              onPressed: () =>
-                                                  Navigator.of(context)
-                                                      .pop(true),
-                                              child: const Text('Delete'),
-                                            ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                    if (confirm == true) {
-                                      await _programRepo.deleteProgram(id);
-                                      setState(() {});
-                                    }
-                                  }
-                                },
-                                itemBuilder: (_) => const [
-                                  PopupMenuItem(
-                                    value: 'edit',
-                                    child: Text('Edit'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'delete',
-                                    child: Text('Delete'),
-                                  ),
-                                ],
-                              ),
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
+                  itemCount: programs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final program = programs[index];
+                    final id = program['id'] as int;
+                    final colorScheme = theme.colorScheme;
+                    return Material(
+                      color: colorScheme.primary.withValues(alpha: 0.90),
+                      borderRadius: BorderRadius.circular(14),
+                      child: ListTile(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        title: Text(
+                          program['name'] as String,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: colorScheme.onPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Tap to start or edit days',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color:
+                                colorScheme.onPrimary.withValues(alpha: 0.82),
+                            fontSize: 12,
+                          ),
+                        ),
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => DayPickerScreen(programId: id),
                             ),
                           );
+                          await _syncActiveSessionBanner();
+                          if (!mounted) return;
+                          setState(() {});
                         },
+                        trailing: PopupMenuButton<String>(
+                          iconColor: colorScheme.onPrimary,
+                          onSelected: (value) async {
+                            if (value == 'edit') {
+                              final saved =
+                                  await Navigator.of(context).push<bool>(
+                                MaterialPageRoute(
+                                  builder: (_) => ProgramEditorScreen(
+                                    programId: id,
+                                  ),
+                                ),
+                              );
+                              if (!mounted) return;
+                              setState(() {});
+                              if (saved == true) {
+                                await _showProgramSavedAlert();
+                              }
+                            } else if (value == 'delete') {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (context) {
+                                  return AlertDialog(
+                                    title: const Text('Delete program?'),
+                                    content: const Text(
+                                      'This removes the program and its days. Sessions remain in history.',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(true),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
+                              if (confirm == true) {
+                                await _programRepo.deleteProgram(id);
+                                setState(() {});
+                              }
+                            }
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: 'edit',
+                              child: Text('Edit'),
+                            ),
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Text('Delete'),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -1671,77 +1357,52 @@ class _ProgramsScreenState extends State<ProgramsScreen>
 
   @override
   Widget build(BuildContext context) {
-    return PopScope<void>(
-      canPop: _selectedSection == _TrainingHubSection.hub,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _selectedSection != _TrainingHubSection.hub) {
-          _openTrainingSection(_TrainingHubSection.hub);
-        }
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            _selectedSection == _TrainingHubSection.hub
-                ? 'Training Hub'
-                : 'Training • Dashboard',
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Training'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.list),
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ExerciseCatalogScreen(),
+                ),
+              );
+              if (!mounted) return;
+              setState(() {});
+            },
           ),
-          actions: [
-            if (_selectedSection != _TrainingHubSection.hub)
-              IconButton(
-                tooltip: 'Back to hub',
-                onPressed: () => _openTrainingSection(_TrainingHubSection.hub),
-                icon: const Icon(Icons.grid_view_rounded),
-              ),
-            IconButton(
-              icon: const Icon(Icons.list),
-              onPressed: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ExerciseCatalogScreen(),
-                  ),
-                );
-                if (!mounted) return;
-                setState(() {});
-              },
-            ),
-          ],
-        ),
-        body: Stack(
-          children: [
-            const GlassBackground(),
-            FutureBuilder<List<Map<String, Object?>>>(
-              future: _programRepo.getPrograms(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
+        ],
+      ),
+      body: Stack(
+        children: [
+          const GlassBackground(),
+          FutureBuilder<List<Map<String, Object?>>>(
+            future: _programRepo.getPrograms(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final programs = snapshot.data ?? [];
+              if (programs.isEmpty) {
+                _selectedProgramId = null;
+                _selectedProgramName = null;
+              } else {
+                final selectedExists = _selectedProgramId != null &&
+                    programs.any(
+                      (program) => program['id'] == _selectedProgramId,
+                    );
+                if (!selectedExists) {
+                  final first = programs.first;
+                  _selectedProgramId = first['id'] as int;
+                  _selectedProgramName = first['name'] as String;
                 }
-                final programs = snapshot.data ?? [];
-                if (programs.isEmpty) {
-                  _selectedProgramId = null;
-                  _selectedProgramName = null;
-                } else {
-                  final selectedExists = _selectedProgramId != null &&
-                      programs.any(
-                        (program) => program['id'] == _selectedProgramId,
-                      );
-                  if (!selectedExists) {
-                    final first = programs.first;
-                    _selectedProgramId = first['id'] as int;
-                    _selectedProgramName = first['name'] as String;
-                  }
-                }
-                return AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 240),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  child: _selectedSection == _TrainingHubSection.hub
-                      ? _buildTrainingHub(programs)
-                      : _buildTrainingDashboard(programs),
-                );
-              },
-            ),
-          ],
-        ),
+              }
+              return _buildTrainingDashboard(programs);
+            },
+          ),
+        ],
       ),
     );
   }
