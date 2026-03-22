@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'diet_entry.dart';
 
 class DietMacroTargets {
@@ -149,5 +151,82 @@ class DietDiaryViewModel {
 
   bool get shouldShowMicronutrientCoverageHint {
     return totalEntries >= 3 && micronutrientCoverage < 0.5;
+  }
+}
+
+class DietSummaryComputedData {
+  const DietSummaryComputedData({
+    required this.calorieGoal,
+    required this.consumedCalories,
+    required this.burnedCalories,
+    required this.includeBurnedCalories,
+    required this.effectiveCalorieBudget,
+    required this.remainingCalories,
+    required this.baseCalorieProgress,
+    required this.burnedExtensionVisualRatio,
+    required this.consumedBeyondBaseProgress,
+    required this.consumedBeyondAdjustedProgress,
+    required this.isOverAdjustedGoal,
+  });
+
+  static const double maxBurnedVisualRatio = 0.5;
+
+  final double calorieGoal;
+  final double consumedCalories;
+  final double burnedCalories;
+  final bool includeBurnedCalories;
+  final double effectiveCalorieBudget;
+  final double remainingCalories;
+  final double baseCalorieProgress;
+  final double burnedExtensionVisualRatio;
+  final double consumedBeyondBaseProgress;
+  final double consumedBeyondAdjustedProgress;
+  final bool isOverAdjustedGoal;
+
+  int get effectivePercent {
+    final safeBudget = effectiveCalorieBudget <= 0 ? 1.0 : effectiveCalorieBudget;
+    return ((consumedCalories / safeBudget).clamp(0.0, 1.0) * 100).round();
+  }
+
+  factory DietSummaryComputedData.build({
+    required double calorieGoal,
+    required double consumedCalories,
+    required double burnedCalories,
+    required bool includeBurnedCalories,
+  }) {
+    final safeGoal = calorieGoal > 0 ? calorieGoal : 1.0;
+    final normalizedConsumed = math.max(0.0, consumedCalories);
+    final normalizedBurned =
+        includeBurnedCalories ? math.max(0.0, burnedCalories) : 0.0;
+    final effectiveBudget = safeGoal + normalizedBurned;
+    final remaining = effectiveBudget - normalizedConsumed;
+    final baseProgress = (normalizedConsumed / safeGoal).clamp(0.0, 1.0);
+    final consumedBeyondBase = math.max(0.0, normalizedConsumed - safeGoal);
+    final consumedWithinBurned = normalizedBurned <= 0
+        ? 0.0
+        : math.min(consumedBeyondBase, normalizedBurned);
+    final consumedBeyondAdjusted =
+        math.max(0.0, normalizedConsumed - effectiveBudget);
+    final burnedVisualRatio = normalizedBurned <= 0
+        ? 0.0
+        : (normalizedBurned / safeGoal).clamp(0.0, maxBurnedVisualRatio);
+
+    return DietSummaryComputedData(
+      calorieGoal: safeGoal,
+      consumedCalories: normalizedConsumed,
+      burnedCalories: normalizedBurned,
+      includeBurnedCalories: includeBurnedCalories,
+      effectiveCalorieBudget: effectiveBudget,
+      remainingCalories: remaining,
+      baseCalorieProgress: baseProgress,
+      burnedExtensionVisualRatio: burnedVisualRatio,
+      consumedBeyondBaseProgress: normalizedBurned <= 0
+          ? 0.0
+          : (consumedWithinBurned / normalizedBurned).clamp(0.0, 1.0),
+      consumedBeyondAdjustedProgress: (consumedBeyondAdjusted /
+              (effectiveBudget <= 0 ? 1.0 : effectiveBudget))
+          .clamp(0.0, 1.0),
+      isOverAdjustedGoal: consumedBeyondAdjusted > 0,
+    );
   }
 }
